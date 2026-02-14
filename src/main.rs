@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
         }
         None => {
             // Mode par défaut : lance la TUI interactive.
-            let mut app = App::new(repo)?;
+            let mut app = App::new(repo, cli.path)?;
             app.run()?;
         }
     }

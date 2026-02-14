@@ -2,6 +2,8 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Structure contenant toutes les zones de layout.
 pub struct LayoutChunks {
+    /// Zone de la status bar (1 ligne en haut).
+    pub status_bar: Rect,
     /// Zone du graphe (partie supérieure).
     pub graph: Rect,
     /// Zone du panneau bas-gauche (fichiers/status).
@@ -16,24 +18,30 @@ pub struct LayoutChunks {
 ///
 /// Disposition :
 /// ┌───────────────────────────┐
+/// │    Status Bar (1 ligne)   │
+/// ├───────────────────────────┤
 /// │       Graph (60%)         │
 /// ├──────────────┬────────────┤
-/// │ Status (50%) │Detail (50%)│
+/// │ Files (50%)  │Detail (50%)│
 /// ├──────────────┴────────────┤
 /// │       Help Bar (1 ligne)  │
 /// └───────────────────────────┘
 pub fn build_layout(area: Rect) -> LayoutChunks {
-    // Split vertical : contenu principal + help bar.
+    // Split vertical : status bar + contenu principal + help bar.
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1), // Status bar
+            Constraint::Min(0),    // Contenu principal
+            Constraint::Length(1), // Help bar
+        ])
         .split(area);
 
     // Split du contenu principal : graphe (60%) + bas (40%).
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(outer[0]);
+        .split(outer[1]);
 
     // Split de la partie basse : gauche (50%) + droite (50%).
     let bottom_chunks = Layout::default()
@@ -42,9 +50,10 @@ pub fn build_layout(area: Rect) -> LayoutChunks {
         .split(main_chunks[1]);
 
     LayoutChunks {
+        status_bar: outer[0],
         graph: main_chunks[0],
         bottom_left: bottom_chunks[0],
         bottom_right: bottom_chunks[1],
-        help_bar: outer[1],
+        help_bar: outer[2],
     }
 }

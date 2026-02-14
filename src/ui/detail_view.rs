@@ -10,7 +10,13 @@ use crate::git::graph::GraphRow;
 use chrono::{DateTime, Local, TimeZone};
 
 /// Rend le panneau de détail du commit sélectionné.
-pub fn render(frame: &mut Frame, graph: &[GraphRow], selected_index: usize, area: Rect) {
+pub fn render(
+    frame: &mut Frame,
+    graph: &[GraphRow],
+    selected_index: usize,
+    area: Rect,
+    is_focused: bool,
+) {
     let content: Vec<Line<'static>> = if let Some(row) = graph.get(selected_index) {
         let node = &row.node;
         let datetime: DateTime<Local> = Local
@@ -71,8 +77,18 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], selected_index: usize, area
         vec![Line::from("Aucun commit sélectionné")]
     };
 
-    let paragraph =
-        Paragraph::new(content).block(Block::default().title(" Détail ").borders(Borders::ALL));
+    let border_style = if is_focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+
+    let paragraph = Paragraph::new(content).block(
+        Block::default()
+            .title(" Détail ")
+            .borders(Borders::ALL)
+            .border_style(border_style),
+    );
 
     frame.render_widget(paragraph, area);
 }

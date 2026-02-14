@@ -21,6 +21,7 @@ pub fn render(
     selected_commit_hash: Option<String>,
     mode: BottomLeftMode,
     area: Rect,
+    is_focused: bool,
 ) {
     let (items, title) = match mode {
         BottomLeftMode::CommitFiles => {
@@ -36,7 +37,18 @@ pub fn render(
         }
     };
 
-    let list = List::new(items).block(Block::default().title(title).borders(Borders::ALL));
+    let border_style = if is_focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+
+    let list = List::new(items).block(
+        Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(border_style),
+    );
 
     frame.render_widget(list, area);
 }

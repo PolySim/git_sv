@@ -4,6 +4,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 use std::io::{self, Stdout};
+use std::time::{Duration, Instant};
 
 use crate::error::Result;
 use crate::git::branch::BranchInfo;
@@ -21,6 +22,10 @@ pub enum AppAction {
     Quit,
     MoveUp,
     MoveDown,
+    PageUp,
+    PageDown,
+    GoTop,
+    GoBottom,
     Select,
     CommitPrompt,
     StashPrompt,
@@ -49,9 +54,18 @@ pub enum BottomLeftMode {
     WorkingDir,
 }
 
+/// Panneau actuellement focalisé.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FocusPanel {
+    Graph,
+    Files,
+    Detail,
+}
+
 /// État principal de l'application.
 pub struct App {
     pub repo: GitRepo,
+    pub repo_path: String,
     pub graph: Vec<GraphRow>,
     pub status_entries: Vec<StatusEntry>,
     pub commit_files: Vec<DiffFile>,
@@ -61,19 +75,22 @@ pub struct App {
     pub graph_state: ListState,
     pub view_mode: ViewMode,
     pub bottom_left_mode: BottomLeftMode,
+    pub focus: FocusPanel,
     pub show_branch_panel: bool,
     pub branch_selected: usize,
+    pub flash_message: Option<(String, Instant)>,
     pub should_quit: bool,
 }
 
 impl App {
     /// Crée une nouvelle instance de l'application.
-    pub fn new(repo: GitRepo) -> Result<Self> {
+    pub fn new(repo: GitRepo, repo_path: String) -> Result<Self> {
         let mut graph_state = ListState::default();
         graph_state.select(Some(0));
 
         let mut app = Self {
             repo,
+            repo_path,
             graph: Vec::new(),
             status_entries: Vec::new(),
             commit_files: Vec::new(),
@@ -83,8 +100,10 @@ impl App {
             graph_state,
             view_mode: ViewMode::Graph,
             bottom_left_mode: BottomLeftMode::CommitFiles,
+            focus: FocusPanel::Graph,
             show_branch_panel: false,
             branch_selected: 0,
+            flash_message: None,
             should_quit: false,
         };
         app.refresh()?;
@@ -114,6 +133,20 @@ impl App {
             self.commit_files = self.repo.commit_diff(row.node.oid).unwrap_or_default();
         } else {
             self.commit_files.clear();
+        }
+    }
+
+    /// Définit un message flash qui s'affichera pendant 3 secondes.
+    pub fn set_flash_message(&mut self, message: String) {
+        self.flash_message = Some((message, Instant::now()));
+    }
+
+    /// Vérifie si le message flash a expiré et le supprime le cas échéant.
+    pub fn check_flash_expired(&mut self) {
+        if let Some((_, timestamp)) = &self.flash_message {
+            if timestamp.elapsed() > Duration::from_secs(3) {
+                self.flash_message = None;
+            }
         }
     }
 
@@ -150,6 +183,37 @@ impl App {
                     self.update_commit_files();
                 }
             }
+            AppAction::PageUp => {
+                if !self.show_branch_panel && !self.graph.is_empty() {
+                    let page_size = 10;
+                    self.selected_index = self.selected_index.saturating_sub(page_size);
+                    self.graph_state.select(Some(self.selected_index * 2));
+                    self.update_commit_files();
+                }
+            }
+            AppAction::PageDown => {
+                if !self.show_branch_panel && !self.graph.is_empty() {
+                    let page_size = 10;
+                    self.selected_index =
+                        (self.selected_index + page_size).min(self.graph.len() - 1);
+                    self.graph_state.select(Some(self.selected_index * 2));
+                    self.update_commit_files();
+                }
+            }
+            AppAction::GoTop => {
+                if !self.show_branch_panel && !self.graph.is_empty() {
+                    self.selected_index = 0;
+                    self.graph_state.select(Some(0));
+                    self.update_commit_files();
+                }
+            }
+            AppAction::GoBottom => {
+                if !self.show_branch_panel && !self.graph.is_empty() {
+                    self.selected_index = self.graph.len() - 1;
+                    self.graph_state.select(Some(self.selected_index * 2));
+                    self.update_commit_files();
+                }
+            }
             AppAction::Select => {
                 // Pour l'instant, Select ne fait rien de spécial.
                 // Plus tard : ouvrir un panneau de détail étendu.
@@ -165,10 +229,11 @@ impl App {
                 };
             }
             AppAction::SwitchBottomMode => {
-                self.bottom_left_mode = if self.bottom_left_mode == BottomLeftMode::CommitFiles {
-                    BottomLeftMode::WorkingDir
-                } else {
-                    BottomLeftMode::CommitFiles
+                // Cycle entre les panneaux : Graph -> Files -> Detail -> Graph
+                self.focus = match self.focus {
+                    FocusPanel::Graph => FocusPanel::Files,
+                    FocusPanel::Files => FocusPanel::Detail,
+                    FocusPanel::Detail => FocusPanel::Graph,
                 };
             }
             AppAction::BranchList => {
@@ -185,12 +250,13 @@ impl App {
             }
             AppAction::BranchCheckout => {
                 if self.show_branch_panel {
-                    if let Some(branch) = self.branches.get(self.branch_selected) {
+                    if let Some(branch) = self.branches.get(self.branch_selected).cloned() {
                         if let Err(e) = self.repo.checkout_branch(&branch.name) {
-                            eprintln!("Erreur checkout: {}", e);
+                            self.set_flash_message(format!("Erreur: {}", e));
                         } else {
                             self.show_branch_panel = false;
                             self.refresh()?;
+                            self.set_flash_message(format!("Checkout sur '{}'", branch.name));
                         }
                     }
                 }
@@ -234,9 +300,12 @@ impl App {
                     self.selected_index,
                     self.branch_selected,
                     self.bottom_left_mode.clone(),
+                    self.focus.clone(),
                     &mut self.graph_state,
                     self.view_mode.clone(),
                     self.show_branch_panel,
+                    &self.repo_path,
+                    self.flash_message.as_ref().map(|(msg, _)| msg.as_str()),
                 );
             })?;
 
@@ -248,6 +317,9 @@ impl App {
             if self.should_quit {
                 break;
             }
+
+            // Vérifier si le message flash a expiré.
+            self.check_flash_expired();
         }
         Ok(())
     }

@@ -32,6 +32,7 @@ pub fn render(
     selected_index: usize,
     area: Rect,
     state: &mut ListState,
+    is_focused: bool,
 ) {
     // Construire les lignes du graphe avec les edges de connexion.
     let items = build_graph_items(graph, selected_index);
@@ -39,8 +40,19 @@ pub fn render(
     let branch_name = current_branch.as_deref().unwrap_or("???");
     let title = format!(" Graphe — {} ", branch_name);
 
+    let border_style = if is_focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+
     let list = List::new(items)
-        .block(Block::default().title(title).borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        )
         .highlight_style(
             Style::default()
                 .bg(Color::DarkGray)

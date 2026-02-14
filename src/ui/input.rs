@@ -20,6 +20,15 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
         return Some(AppAction::Quit);
     }
 
+    // Ctrl+d / Ctrl+u pour page down/up
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match key.code {
+            KeyCode::Char('d') => return Some(AppAction::PageDown),
+            KeyCode::Char('u') => return Some(AppAction::PageUp),
+            _ => {}
+        }
+    }
+
     // Escape ferme l'overlay d'aide si actif.
     if key.code == KeyCode::Esc && app.view_mode == crate::app::ViewMode::Help {
         return Some(AppAction::ToggleHelp);
@@ -43,6 +52,10 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
         KeyCode::Char('q') => Some(AppAction::Quit),
         KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
         KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+        KeyCode::Char('g') | KeyCode::Home => Some(AppAction::GoTop),
+        KeyCode::Char('G') | KeyCode::End => Some(AppAction::GoBottom),
+        KeyCode::PageUp => Some(AppAction::PageUp),
+        KeyCode::PageDown => Some(AppAction::PageDown),
         KeyCode::Enter => Some(AppAction::Select),
 
         // Actions git
