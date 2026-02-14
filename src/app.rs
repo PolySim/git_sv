@@ -6,6 +6,7 @@ use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 use std::io::{self, Stdout};
 
 use crate::error::Result;
+use crate::git::branch::BranchInfo;
 use crate::git::diff::DiffFile;
 use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
@@ -28,6 +29,10 @@ pub enum AppAction {
     ToggleHelp,
     Refresh,
     SwitchBottomMode,
+    BranchCheckout,
+    BranchCreate,
+    BranchDelete,
+    CloseBranchPanel,
 }
 
 /// Mode d'affichage actif.
@@ -50,11 +55,14 @@ pub struct App {
     pub graph: Vec<GraphRow>,
     pub status_entries: Vec<StatusEntry>,
     pub commit_files: Vec<DiffFile>,
+    pub branches: Vec<BranchInfo>,
     pub current_branch: Option<String>,
     pub selected_index: usize,
     pub graph_state: ListState,
     pub view_mode: ViewMode,
     pub bottom_left_mode: BottomLeftMode,
+    pub show_branch_panel: bool,
+    pub branch_selected: usize,
     pub should_quit: bool,
 }
 
@@ -69,11 +77,14 @@ impl App {
             graph: Vec::new(),
             status_entries: Vec::new(),
             commit_files: Vec::new(),
+            branches: Vec::new(),
             current_branch: None,
             selected_index: 0,
             graph_state,
             view_mode: ViewMode::Graph,
             bottom_left_mode: BottomLeftMode::CommitFiles,
+            show_branch_panel: false,
+            branch_selected: 0,
             should_quit: false,
         };
         app.refresh()?;
@@ -118,14 +129,22 @@ impl App {
                 self.should_quit = true;
             }
             AppAction::MoveUp => {
-                if self.selected_index > 0 {
+                if self.show_branch_panel {
+                    if self.branch_selected > 0 {
+                        self.branch_selected -= 1;
+                    }
+                } else if self.selected_index > 0 {
                     self.selected_index -= 1;
                     self.graph_state.select(Some(self.selected_index * 2));
                     self.update_commit_files();
                 }
             }
             AppAction::MoveDown => {
-                if self.selected_index + 1 < self.graph.len() {
+                if self.show_branch_panel {
+                    if self.branch_selected + 1 < self.branches.len() {
+                        self.branch_selected += 1;
+                    }
+                } else if self.selected_index + 1 < self.graph.len() {
                     self.selected_index += 1;
                     self.graph_state.select(Some(self.selected_index * 2));
                     self.update_commit_files();
@@ -152,11 +171,38 @@ impl App {
                     BottomLeftMode::CommitFiles
                 };
             }
+            AppAction::BranchList => {
+                if self.show_branch_panel {
+                    self.show_branch_panel = false;
+                } else {
+                    self.branches = self.repo.branches().unwrap_or_default();
+                    self.branch_selected = 0;
+                    self.show_branch_panel = true;
+                }
+            }
+            AppAction::CloseBranchPanel => {
+                self.show_branch_panel = false;
+            }
+            AppAction::BranchCheckout => {
+                if self.show_branch_panel {
+                    if let Some(branch) = self.branches.get(self.branch_selected) {
+                        if let Err(e) = self.repo.checkout_branch(&branch.name) {
+                            eprintln!("Erreur checkout: {}", e);
+                        } else {
+                            self.show_branch_panel = false;
+                            self.refresh()?;
+                        }
+                    }
+                }
+            }
+            AppAction::BranchCreate => {
+                // TODO: implémenter le prompt pour créer une branche
+            }
+            AppAction::BranchDelete => {
+                // TODO: implémenter la confirmation et suppression
+            }
             // Les prompts seront implémentés dans les prochaines itérations.
-            AppAction::CommitPrompt
-            | AppAction::StashPrompt
-            | AppAction::MergePrompt
-            | AppAction::BranchList => {
+            AppAction::CommitPrompt | AppAction::StashPrompt | AppAction::MergePrompt => {
                 // TODO: implémenter les modales/prompts interactifs.
             }
         }
@@ -184,10 +230,13 @@ impl App {
                     &self.current_branch,
                     &self.commit_files,
                     &self.status_entries,
+                    &self.branches,
                     self.selected_index,
+                    self.branch_selected,
                     self.bottom_left_mode.clone(),
                     &mut self.graph_state,
                     self.view_mode.clone(),
+                    self.show_branch_panel,
                 );
             })?;
 

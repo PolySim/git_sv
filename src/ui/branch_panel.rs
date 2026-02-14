@@ -1,0 +1,113 @@
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    Frame,
+};
+
+use crate::git::branch::BranchInfo;
+
+/// Rend le panneau de branches en overlay.
+pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize, area: Rect) {
+    // Créer une zone centrale pour le popup (60% largeur, 50% hauteur).
+    let popup_area = centered_rect(60, 50, area);
+
+    // Effacer l'arrière-plan derrière le popup.
+    frame.render_widget(Clear, popup_area);
+
+    // Construire la liste des branches.
+    let items: Vec<ListItem> = branches
+        .iter()
+        .enumerate()
+        .map(|(i, branch)| build_branch_line(branch, i == branch_selected))
+        .collect();
+
+    // Titre avec le nombre de branches.
+    let title = format!(" Branches ({}) ", branches.len());
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(title)
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    frame.render_stateful_widget(
+        list,
+        popup_area,
+        &mut ratatui::widgets::ListState::default().with_selected(Some(branch_selected)),
+    );
+
+    // Barre d'aide en bas du panneau.
+    render_help_bar(frame, popup_area);
+}
+
+/// Construit une ligne pour une branche.
+fn build_branch_line(branch: &BranchInfo, is_selected: bool) -> ListItem {
+    let prefix = if branch.is_head { "* " } else { "  " };
+    let name = &branch.name;
+
+    let style = if branch.is_head {
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
+    } else if is_selected {
+        Style::default()
+            .bg(Color::DarkGray)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+
+    let line = Line::from(vec![
+        Span::styled(prefix, style),
+        Span::styled(name.clone(), style),
+    ]);
+
+    ListItem::new(line)
+}
+
+/// Rend la barre d'aide en bas du panneau.
+fn render_help_bar(frame: &mut Frame, area: Rect) {
+    // Créer une zone pour la barre d'aide (dernière ligne du popup).
+    let help_area = Rect {
+        x: area.x + 1,
+        y: area.y + area.height.saturating_sub(2),
+        width: area.width.saturating_sub(2),
+        height: 1,
+    };
+
+    let help_text = "Enter:checkout  n:new  d:delete  Esc/b:close";
+    let paragraph = Paragraph::new(help_text).style(Style::default().fg(Color::DarkGray));
+
+    frame.render_widget(paragraph, help_area);
+}
+
+/// Calcule un rectangle centré de dimensions données (en pourcentage).
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}

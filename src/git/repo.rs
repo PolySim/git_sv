@@ -106,6 +106,11 @@ impl GitRepo {
     pub fn commit_diff(&self, oid: git2::Oid) -> Result<Vec<super::diff::DiffFile>> {
         super::diff::commit_diff(&self.repo, oid)
     }
+
+    /// Checkout une branche existante.
+    pub fn checkout_branch(&self, name: &str) -> Result<()> {
+        super::branch::checkout_branch(&self.repo, name)
+    }
 }
 
 /// Entrée de status (fichier + état).

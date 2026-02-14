@@ -1,3 +1,4 @@
+pub mod branch_panel;
 pub mod detail_view;
 pub mod files_view;
 pub mod graph_view;
@@ -17,10 +18,13 @@ pub fn render(
     current_branch: &Option<String>,
     commit_files: &[crate::git::diff::DiffFile],
     status_entries: &[crate::git::repo::StatusEntry],
+    branches: &[crate::git::branch::BranchInfo],
     selected_index: usize,
+    branch_selected: usize,
     bottom_left_mode: crate::app::BottomLeftMode,
     graph_state: &mut ListState,
     view_mode: crate::app::ViewMode,
+    show_branch_panel: bool,
 ) {
     let layout = layout::build_layout(frame.area());
 
@@ -65,5 +69,10 @@ pub fn render(
     // Overlay d'aide (si actif).
     if view_mode == ViewMode::Help {
         help_overlay::render(frame, frame.area());
+    }
+
+    // Panneau de branches (si actif).
+    if show_branch_panel {
+        branch_panel::render(frame, branches, branch_selected, frame.area());
     }
 }

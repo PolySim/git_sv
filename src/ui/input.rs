@@ -25,6 +25,19 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
         return Some(AppAction::ToggleHelp);
     }
 
+    // Contexte: panneau de branches ouvert
+    if app.show_branch_panel {
+        return match key.code {
+            KeyCode::Esc | KeyCode::Char('b') => Some(AppAction::CloseBranchPanel),
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Enter => Some(AppAction::BranchCheckout),
+            KeyCode::Char('n') => Some(AppAction::BranchCreate),
+            KeyCode::Char('d') => Some(AppAction::BranchDelete),
+            _ => None,
+        };
+    }
+
     match key.code {
         // Navigation
         KeyCode::Char('q') => Some(AppAction::Quit),
