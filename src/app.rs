@@ -2,10 +2,11 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 use std::io::{self, Stdout};
 
 use crate::error::Result;
+use crate::git::diff::DiffFile;
 use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
 use crate::ui;
@@ -26,6 +27,7 @@ pub enum AppAction {
     BranchList,
     ToggleHelp,
     Refresh,
+    SwitchBottomMode,
 }
 
 /// Mode d'affichage actif.
@@ -35,27 +37,43 @@ pub enum ViewMode {
     Help,
 }
 
+/// Mode du panneau bas-gauche.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BottomLeftMode {
+    CommitFiles,
+    WorkingDir,
+}
+
 /// État principal de l'application.
 pub struct App {
     pub repo: GitRepo,
     pub graph: Vec<GraphRow>,
     pub status_entries: Vec<StatusEntry>,
+    pub commit_files: Vec<DiffFile>,
     pub current_branch: Option<String>,
     pub selected_index: usize,
+    pub graph_state: ListState,
     pub view_mode: ViewMode,
+    pub bottom_left_mode: BottomLeftMode,
     pub should_quit: bool,
 }
 
 impl App {
     /// Crée une nouvelle instance de l'application.
     pub fn new(repo: GitRepo) -> Result<Self> {
+        let mut graph_state = ListState::default();
+        graph_state.select(Some(0));
+
         let mut app = Self {
             repo,
             graph: Vec::new(),
             status_entries: Vec::new(),
+            commit_files: Vec::new(),
             current_branch: None,
             selected_index: 0,
+            graph_state,
             view_mode: ViewMode::Graph,
+            bottom_left_mode: BottomLeftMode::CommitFiles,
             should_quit: false,
         };
         app.refresh()?;
@@ -72,7 +90,20 @@ impl App {
         if self.selected_index >= self.graph.len() && !self.graph.is_empty() {
             self.selected_index = self.graph.len() - 1;
         }
+
+        // Charger les fichiers du commit sélectionné.
+        self.update_commit_files();
+
         Ok(())
+    }
+
+    /// Met à jour la liste des fichiers du commit sélectionné.
+    fn update_commit_files(&mut self) {
+        if let Some(row) = self.graph.get(self.selected_index) {
+            self.commit_files = self.repo.commit_diff(row.node.oid).unwrap_or_default();
+        } else {
+            self.commit_files.clear();
+        }
     }
 
     /// Retourne le commit actuellement sélectionné.
@@ -89,11 +120,15 @@ impl App {
             AppAction::MoveUp => {
                 if self.selected_index > 0 {
                     self.selected_index -= 1;
+                    self.graph_state.select(Some(self.selected_index * 2));
+                    self.update_commit_files();
                 }
             }
             AppAction::MoveDown => {
                 if self.selected_index + 1 < self.graph.len() {
                     self.selected_index += 1;
+                    self.graph_state.select(Some(self.selected_index * 2));
+                    self.update_commit_files();
                 }
             }
             AppAction::Select => {
@@ -108,6 +143,13 @@ impl App {
                     ViewMode::Graph
                 } else {
                     ViewMode::Help
+                };
+            }
+            AppAction::SwitchBottomMode => {
+                self.bottom_left_mode = if self.bottom_left_mode == BottomLeftMode::CommitFiles {
+                    BottomLeftMode::WorkingDir
+                } else {
+                    BottomLeftMode::CommitFiles
                 };
             }
             // Les prompts seront implémentés dans les prochaines itérations.
@@ -136,7 +178,17 @@ impl App {
         loop {
             // Render.
             terminal.draw(|frame| {
-                ui::render(frame, self);
+                ui::render(
+                    frame,
+                    &self.graph,
+                    &self.current_branch,
+                    &self.commit_files,
+                    &self.status_entries,
+                    self.selected_index,
+                    self.view_mode.clone(),
+                    self.bottom_left_mode.clone(),
+                    &mut self.graph_state,
+                );
             })?;
 
             // Input.

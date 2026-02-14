@@ -101,6 +101,11 @@ impl GitRepo {
     pub fn stashes(&mut self) -> Result<Vec<StashEntry>> {
         super::stash::list_stashes(&mut self.repo)
     }
+
+    /// Retourne le diff d'un commit.
+    pub fn commit_diff(&self, oid: git2::Oid) -> Result<Vec<super::diff::DiffFile>> {
+        super::diff::commit_diff(&self.repo, oid)
+    }
 }
 
 /// Entrée de status (fichier + état).

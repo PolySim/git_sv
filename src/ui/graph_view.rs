@@ -2,11 +2,10 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, ListState},
     Frame,
 };
 
-use crate::app::App;
 use crate::git::graph::{Edge, GraphRow};
 
 /// Couleurs assignées aux branches du graphe.
@@ -26,12 +25,19 @@ const BRANCH_COLORS: &[Color] = &[
 ];
 
 /// Rend le graphe de commits dans la zone donnée.
-pub fn render(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render(
+    frame: &mut Frame,
+    graph: &[GraphRow],
+    current_branch: &Option<String>,
+    selected_index: usize,
+    area: Rect,
+    state: &mut ListState,
+) {
     // Construire les lignes du graphe avec les edges de connexion.
-    let items = build_graph_items(app);
+    let items = build_graph_items(graph, selected_index);
 
-    let current_branch = app.current_branch.as_deref().unwrap_or("???");
-    let title = format!(" Graphe — {} ", current_branch);
+    let branch_name = current_branch.as_deref().unwrap_or("???");
+    let title = format!(" Graphe — {} ", branch_name);
 
     let list = List::new(items)
         .block(Block::default().title(title).borders(Borders::ALL))
@@ -41,23 +47,23 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         );
 
-    frame.render_widget(list, area);
+    frame.render_stateful_widget(list, area, state);
 }
 
 /// Construit les items de la liste avec le graphe enrichi.
-fn build_graph_items(app: &App) -> Vec<ListItem> {
-    let mut items = Vec::with_capacity(app.graph.len() * 2);
+fn build_graph_items(graph: &[GraphRow], selected_index: usize) -> Vec<ListItem> {
+    let mut items = Vec::with_capacity(graph.len() * 2);
 
-    for (i, row) in app.graph.iter().enumerate() {
-        let is_selected = i == app.selected_index;
+    for (i, row) in graph.iter().enumerate() {
+        let is_selected = i == selected_index;
 
         // Ligne du commit.
         let commit_line = build_commit_line(row, is_selected);
         items.push(ListItem::new(commit_line));
 
         // Ligne de connexion (edges) si ce n'est pas le dernier commit.
-        if i + 1 < app.graph.len() {
-            let edge_line = build_edge_line(row, &app.graph[i + 1]);
+        if i + 1 < graph.len() {
+            let edge_line = build_edge_line(row, &graph[i + 1]);
             items.push(ListItem::new(edge_line));
         }
     }

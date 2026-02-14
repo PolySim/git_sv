@@ -39,6 +39,9 @@ fn map_key(key: KeyEvent, _app: &App) -> Option<AppAction> {
         // Rafraîchir
         KeyCode::Char('r') => Some(AppAction::Refresh),
 
+        // Basculer entre les modes du panneau bas-gauche
+        KeyCode::Tab => Some(AppAction::SwitchBottomMode),
+
         _ => None,
     }
 }

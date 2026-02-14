@@ -6,12 +6,13 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
+use crate::git::graph::GraphRow;
 use chrono::{DateTime, Local, TimeZone};
 
 /// Rend le panneau de détail du commit sélectionné.
-pub fn render(frame: &mut Frame, app: &App, area: Rect) {
-    let content: Vec<Line<'static>> = if let Some(node) = app.selected_commit() {
+pub fn render(frame: &mut Frame, graph: &[GraphRow], selected_index: usize, area: Rect) {
+    let content: Vec<Line<'static>> = if let Some(row) = graph.get(selected_index) {
+        let node = &row.node;
         let datetime: DateTime<Local> = Local
             .timestamp_opt(node.timestamp, 0)
             .single()
