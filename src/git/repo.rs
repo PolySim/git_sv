@@ -2,7 +2,7 @@ use git2::{Repository, StatusOptions};
 
 use super::branch::BranchInfo;
 use super::commit::CommitInfo;
-use super::graph::CommitNode;
+use super::graph::GraphRow;
 use super::stash::StashEntry;
 use crate::error::Result;
 
@@ -70,7 +70,7 @@ impl GitRepo {
     }
 
     /// Construit le graphe de commits pour l'affichage.
-    pub fn build_graph(&self, max_count: usize) -> Result<Vec<CommitNode>> {
+    pub fn build_graph(&self, max_count: usize) -> Result<Vec<GraphRow>> {
         let commits = self.log_all_branches(max_count)?;
         let graph = super::graph::build_graph(&self.repo, &commits)?;
         Ok(graph)

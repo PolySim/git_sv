@@ -6,7 +6,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::{self, Stdout};
 
 use crate::error::Result;
-use crate::git::graph::CommitNode;
+use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
 use crate::ui;
 
@@ -38,7 +38,7 @@ pub enum ViewMode {
 /// État principal de l'application.
 pub struct App {
     pub repo: GitRepo,
-    pub graph: Vec<CommitNode>,
+    pub graph: Vec<GraphRow>,
     pub status_entries: Vec<StatusEntry>,
     pub current_branch: Option<String>,
     pub selected_index: usize,
@@ -76,8 +76,8 @@ impl App {
     }
 
     /// Retourne le commit actuellement sélectionné.
-    pub fn selected_commit(&self) -> Option<&CommitNode> {
-        self.graph.get(self.selected_index)
+    pub fn selected_commit(&self) -> Option<&crate::git::graph::CommitNode> {
+        self.graph.get(self.selected_index).map(|row| &row.node)
     }
 
     /// Applique une action à l'état de l'application.
