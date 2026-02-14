@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::app::App;
@@ -70,11 +70,8 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         vec![Line::from("Aucun commit sélectionné")]
     };
 
-    let paragraph = Paragraph::new(content).block(
-        Block::default()
-            .title(" Détail ")
-            .borders(Borders::ALL),
-    );
+    let paragraph =
+        Paragraph::new(content).block(Block::default().title(" Détail ").borders(Borders::ALL));
 
     frame.render_widget(paragraph, area);
 }

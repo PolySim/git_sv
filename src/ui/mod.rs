@@ -1,11 +1,11 @@
-pub mod graph_view;
-pub mod status_view;
 pub mod detail_view;
+pub mod graph_view;
 pub mod input;
 pub mod layout;
+pub mod status_view;
 
-use ratatui::Frame;
 use crate::app::App;
+use ratatui::Frame;
 
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, app: &App) {

@@ -26,9 +26,9 @@ pub fn list_stashes(repo: &mut Repository) -> Result<Vec<StashEntry>> {
 
 /// Sauvegarde le working directory dans un stash.
 pub fn save_stash(repo: &mut Repository, message: Option<&str>) -> Result<()> {
-    let sig = repo.signature().or_else(|_| {
-        git2::Signature::now("git_sv", "git_sv@local")
-    })?;
+    let sig = repo
+        .signature()
+        .or_else(|_| git2::Signature::now("git_sv", "git_sv@local"))?;
 
     let msg = message.unwrap_or("Stash créé par git_sv");
     repo.stash_save(&sig, msg, None)?;

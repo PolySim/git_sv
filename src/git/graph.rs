@@ -1,7 +1,7 @@
 use git2::{Oid, Repository};
 
-use crate::error::Result;
 use super::commit::CommitInfo;
+use crate::error::Result;
 
 /// Noeud du graphe de commits, enrichi avec des infos de placement.
 #[derive(Debug, Clone)]
@@ -64,10 +64,7 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Comm
             }
         }
 
-        let refs = refs_map
-            .get(&oid)
-            .cloned()
-            .unwrap_or_default();
+        let refs = refs_map.get(&oid).cloned().unwrap_or_default();
 
         nodes.push(CommitNode {
             oid,

@@ -1,9 +1,9 @@
-pub mod repo;
-pub mod graph;
-pub mod commit;
 pub mod branch;
-pub mod stash;
+pub mod commit;
+pub mod graph;
 pub mod merge;
+pub mod repo;
+pub mod stash;
 
-pub use repo::GitRepo;
 pub use graph::CommitNode;
+pub use repo::GitRepo;

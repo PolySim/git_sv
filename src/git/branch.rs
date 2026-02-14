@@ -21,10 +21,7 @@ pub fn list_branches(repo: &Repository) -> Result<Vec<BranchInfo>> {
 
     for branch_result in repo.branches(Some(BranchType::Local))? {
         let (branch, _branch_type) = branch_result?;
-        let name = branch
-            .name()?
-            .unwrap_or("???")
-            .to_string();
+        let name = branch.name()?.unwrap_or("???").to_string();
         let is_head = head_name.as_deref() == Some(&name);
 
         branches.push(BranchInfo {

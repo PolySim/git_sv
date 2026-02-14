@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem},
+    Frame,
 };
 
 use crate::app::App;
@@ -32,11 +32,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let title = format!(" Graphe — {} ", current_branch);
 
     let list = List::new(items)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL),
-        )
+        .block(Block::default().title(title).borders(Borders::ALL))
         .highlight_style(
             Style::default()
                 .bg(Color::DarkGray)
@@ -71,7 +67,9 @@ fn build_graph_line(node: &CommitNode, is_selected: bool) -> ListItem<'static> {
     let author = node.author.clone();
 
     let style = if is_selected {
-        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+        Style::default()
+            .bg(Color::DarkGray)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
@@ -80,7 +78,12 @@ fn build_graph_line(node: &CommitNode, is_selected: bool) -> ListItem<'static> {
         Span::styled(prefix, Style::default().fg(color)),
         Span::styled(format!("{} ", hash), Style::default().fg(Color::Yellow)),
         Span::styled(message, style),
-        Span::styled(refs_str, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            refs_str,
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(
             format!(" — {}", author),
             Style::default().fg(Color::DarkGray),

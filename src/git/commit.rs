@@ -16,20 +16,9 @@ pub struct CommitInfo {
 impl CommitInfo {
     /// Crée un CommitInfo depuis un git2::Commit.
     pub fn from_git2_commit(commit: &git2::Commit) -> Self {
-        let message = commit
-            .summary()
-            .unwrap_or("")
-            .to_string();
-        let author = commit
-            .author()
-            .name()
-            .unwrap_or("Inconnu")
-            .to_string();
-        let email = commit
-            .author()
-            .email()
-            .unwrap_or("")
-            .to_string();
+        let message = commit.summary().unwrap_or("").to_string();
+        let author = commit.author().name().unwrap_or("Inconnu").to_string();
+        let email = commit.author().email().unwrap_or("").to_string();
         let timestamp = commit.time().seconds();
         let parents = commit.parent_ids().collect();
 
@@ -51,9 +40,9 @@ impl CommitInfo {
 
 /// Crée un commit avec le message donné sur l'index courant.
 pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
-    let sig = repo.signature().or_else(|_| {
-        Signature::now("git_sv", "git_sv@local")
-    })?;
+    let sig = repo
+        .signature()
+        .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
 
     let mut index = repo.index()?;
     let tree_oid = index.write_tree()?;
@@ -69,14 +58,7 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
 
     let parents: Vec<&git2::Commit> = parent_commit.iter().collect();
 
-    let oid = repo.commit(
-        Some("HEAD"),
-        &sig,
-        &sig,
-        message,
-        &tree,
-        &parents,
-    )?;
+    let oid = repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)?;
 
     Ok(oid)
 }

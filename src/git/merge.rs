@@ -21,9 +21,7 @@ pub fn merge_branch(repo: &Repository, branch_name: &str) -> Result<()> {
             .ok_or_else(|| GitSvError::Other("Référence invalide".into()))?;
         let mut head_ref = repo.head()?;
         head_ref.set_target(target_oid, "fast-forward merge")?;
-        repo.checkout_head(Some(
-            git2::build::CheckoutBuilder::default().force(),
-        ))?;
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
         return Ok(());
     }
 

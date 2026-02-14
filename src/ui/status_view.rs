@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem},
+    Frame,
 };
 
 use crate::app::App;
@@ -34,11 +34,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
 
     let title = format!(" Status ({} fichiers) ", app.status_entries.len());
 
-    let list = List::new(items).block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL),
-    );
+    let list = List::new(items).block(Block::default().title(title).borders(Borders::ALL));
 
     frame.render_widget(list, area);
 }

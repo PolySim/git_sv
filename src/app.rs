@@ -6,8 +6,8 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::{self, Stdout};
 
 use crate::error::Result;
-use crate::git::repo::{GitRepo, StatusEntry};
 use crate::git::graph::CommitNode;
+use crate::git::repo::{GitRepo, StatusEntry};
 use crate::ui;
 
 /// Nombre maximum de commits à charger.
@@ -132,10 +132,7 @@ impl App {
     }
 
     /// Boucle événementielle : render -> poll input -> update.
-    fn event_loop(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    ) -> Result<()> {
+    fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
         loop {
             // Render.
             terminal.draw(|frame| {
