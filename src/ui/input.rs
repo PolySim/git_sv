@@ -14,10 +14,15 @@ pub fn handle_input(app: &App) -> std::io::Result<Option<AppAction>> {
 }
 
 /// Mappe un événement clavier à une action de l'application.
-fn map_key(key: KeyEvent, _app: &App) -> Option<AppAction> {
+fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     // Ctrl+C quitte toujours.
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(AppAction::Quit);
+    }
+
+    // Escape ferme l'overlay d'aide si actif.
+    if key.code == KeyCode::Esc && app.view_mode == crate::app::ViewMode::Help {
+        return Some(AppAction::ToggleHelp);
     }
 
     match key.code {

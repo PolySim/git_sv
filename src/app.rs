@@ -185,9 +185,9 @@ impl App {
                     &self.commit_files,
                     &self.status_entries,
                     self.selected_index,
-                    self.view_mode.clone(),
                     self.bottom_left_mode.clone(),
                     &mut self.graph_state,
+                    self.view_mode.clone(),
                 );
             })?;
 
