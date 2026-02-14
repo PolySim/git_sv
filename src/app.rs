@@ -1,0 +1,174 @@
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io::{self, Stdout};
+
+use crate::error::Result;
+use crate::git::repo::{GitRepo, StatusEntry};
+use crate::git::graph::CommitNode;
+use crate::ui;
+
+/// Nombre maximum de commits à charger.
+const MAX_COMMITS: usize = 200;
+
+/// Actions possibles déclenchées par l'utilisateur.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AppAction {
+    Quit,
+    MoveUp,
+    MoveDown,
+    Select,
+    CommitPrompt,
+    StashPrompt,
+    MergePrompt,
+    BranchList,
+    ToggleHelp,
+    Refresh,
+}
+
+/// Mode d'affichage actif.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ViewMode {
+    Graph,
+    Help,
+}
+
+/// État principal de l'application.
+pub struct App {
+    pub repo: GitRepo,
+    pub graph: Vec<CommitNode>,
+    pub status_entries: Vec<StatusEntry>,
+    pub current_branch: Option<String>,
+    pub selected_index: usize,
+    pub view_mode: ViewMode,
+    pub should_quit: bool,
+}
+
+impl App {
+    /// Crée une nouvelle instance de l'application.
+    pub fn new(repo: GitRepo) -> Result<Self> {
+        let mut app = Self {
+            repo,
+            graph: Vec::new(),
+            status_entries: Vec::new(),
+            current_branch: None,
+            selected_index: 0,
+            view_mode: ViewMode::Graph,
+            should_quit: false,
+        };
+        app.refresh()?;
+        Ok(app)
+    }
+
+    /// Rafraîchit les données depuis le repository git.
+    pub fn refresh(&mut self) -> Result<()> {
+        self.current_branch = self.repo.current_branch().ok();
+        self.graph = self.repo.build_graph(MAX_COMMITS).unwrap_or_default();
+        self.status_entries = self.repo.status().unwrap_or_default();
+
+        // Réajuster la sélection si nécessaire.
+        if self.selected_index >= self.graph.len() && !self.graph.is_empty() {
+            self.selected_index = self.graph.len() - 1;
+        }
+        Ok(())
+    }
+
+    /// Retourne le commit actuellement sélectionné.
+    pub fn selected_commit(&self) -> Option<&CommitNode> {
+        self.graph.get(self.selected_index)
+    }
+
+    /// Applique une action à l'état de l'application.
+    pub fn apply_action(&mut self, action: AppAction) -> Result<()> {
+        match action {
+            AppAction::Quit => {
+                self.should_quit = true;
+            }
+            AppAction::MoveUp => {
+                if self.selected_index > 0 {
+                    self.selected_index -= 1;
+                }
+            }
+            AppAction::MoveDown => {
+                if self.selected_index + 1 < self.graph.len() {
+                    self.selected_index += 1;
+                }
+            }
+            AppAction::Select => {
+                // Pour l'instant, Select ne fait rien de spécial.
+                // Plus tard : ouvrir un panneau de détail étendu.
+            }
+            AppAction::Refresh => {
+                self.refresh()?;
+            }
+            AppAction::ToggleHelp => {
+                self.view_mode = if self.view_mode == ViewMode::Help {
+                    ViewMode::Graph
+                } else {
+                    ViewMode::Help
+                };
+            }
+            // Les prompts seront implémentés dans les prochaines itérations.
+            AppAction::CommitPrompt
+            | AppAction::StashPrompt
+            | AppAction::MergePrompt
+            | AppAction::BranchList => {
+                // TODO: implémenter les modales/prompts interactifs.
+            }
+        }
+        Ok(())
+    }
+
+    /// Lance la boucle événementielle principale de l'application.
+    pub fn run(&mut self) -> Result<()> {
+        let mut terminal = setup_terminal()?;
+
+        let result = self.event_loop(&mut terminal);
+
+        restore_terminal(&mut terminal)?;
+        result
+    }
+
+    /// Boucle événementielle : render -> poll input -> update.
+    fn event_loop(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    ) -> Result<()> {
+        loop {
+            // Render.
+            terminal.draw(|frame| {
+                ui::render(frame, self);
+            })?;
+
+            // Input.
+            if let Some(action) = ui::input::handle_input(self)? {
+                self.apply_action(action)?;
+            }
+
+            if self.should_quit {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Initialise le terminal en mode raw + alternate screen.
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let terminal = Terminal::new(backend)?;
+    Ok(terminal)
+}
+
+/// Restaure le terminal à son état normal.
+fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+    Ok(())
+}
