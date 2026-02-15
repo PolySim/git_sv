@@ -182,3 +182,152 @@ impl StatusEntry {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::tests::test_utils::*;
+
+    #[test]
+    fn test_status_entry_is_staged() {
+        // INDEX_NEW - fichier nouveau staged
+        let entry_new = StatusEntry {
+            path: "new.txt".to_string(),
+            status: git2::Status::INDEX_NEW,
+        };
+        assert!(entry_new.is_staged());
+        assert!(!entry_new.is_unstaged());
+
+        // INDEX_MODIFIED - fichier modifié staged
+        let entry_modified = StatusEntry {
+            path: "modified.txt".to_string(),
+            status: git2::Status::INDEX_MODIFIED,
+        };
+        assert!(entry_modified.is_staged());
+        assert!(!entry_modified.is_unstaged());
+
+        // WT_MODIFIED - fichier modifié non staged
+        let entry_wt = StatusEntry {
+            path: "wt_modified.txt".to_string(),
+            status: git2::Status::WT_MODIFIED,
+        };
+        assert!(!entry_wt.is_staged());
+        assert!(entry_wt.is_unstaged());
+
+        // WT_NEW - fichier non suivi
+        let entry_untracked = StatusEntry {
+            path: "untracked.txt".to_string(),
+            status: git2::Status::WT_NEW,
+        };
+        assert!(!entry_untracked.is_staged());
+        assert!(entry_untracked.is_unstaged());
+    }
+
+    #[test]
+    fn test_status_entry_display_status() {
+        let entry_new = StatusEntry {
+            path: "new.txt".to_string(),
+            status: git2::Status::INDEX_NEW,
+        };
+        assert_eq!(entry_new.display_status(), "Nouveau (staged)");
+
+        let entry_modified = StatusEntry {
+            path: "modified.txt".to_string(),
+            status: git2::Status::WT_MODIFIED,
+        };
+        assert_eq!(entry_modified.display_status(), "Modifié");
+
+        let entry_untracked = StatusEntry {
+            path: "untracked.txt".to_string(),
+            status: git2::Status::WT_NEW,
+        };
+        assert_eq!(entry_untracked.display_status(), "Non suivi");
+
+        let entry_deleted = StatusEntry {
+            path: "deleted.txt".to_string(),
+            status: git2::Status::WT_DELETED,
+        };
+        assert_eq!(entry_deleted.display_status(), "Supprimé");
+    }
+
+    #[test]
+    fn test_git_repo_open() {
+        let (_temp_dir, repo) = create_test_repo();
+        let path = repo.workdir().unwrap().to_str().unwrap();
+
+        let git_repo = GitRepo::open(path).unwrap();
+        // Vérifier que le repo est bien ouvert
+        assert!(git_repo.repo.workdir().is_some());
+    }
+
+    #[test]
+    fn test_git_repo_current_branch() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer un premier commit pour avoir une branche
+        commit_file(&repo, "test.txt", "content", "Initial commit");
+
+        let git_repo = GitRepo::open(repo.workdir().unwrap().to_str().unwrap()).unwrap();
+        let branch = git_repo.current_branch().unwrap();
+
+        // La branche devrait s'appeler "main"
+        assert_eq!(branch, "main");
+    }
+
+    #[test]
+    fn test_git_repo_log() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer plusieurs commits
+        commit_file(&repo, "test.txt", "A", "First commit");
+        commit_file(&repo, "test.txt", "B", "Second commit");
+        commit_file(&repo, "test.txt", "C", "Third commit");
+
+        let git_repo = GitRepo::open(repo.workdir().unwrap().to_str().unwrap()).unwrap();
+        let commits = git_repo.log(10).unwrap();
+
+        // Devrait avoir 3 commits
+        assert_eq!(commits.len(), 3);
+        // Le premier commit dans le log est le plus récent
+        assert_eq!(commits[0].message, "Third commit");
+        assert_eq!(commits[1].message, "Second commit");
+        assert_eq!(commits[2].message, "First commit");
+    }
+
+    #[test]
+    fn test_git_repo_status() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        commit_file(&repo, "test.txt", "content", "Initial commit");
+
+        let git_repo = GitRepo::open(repo.workdir().unwrap().to_str().unwrap()).unwrap();
+
+        // Modifier un fichier
+        create_file(&repo, "test.txt", "modified content");
+
+        let status = git_repo.status().unwrap();
+        // Devrait avoir 1 fichier modifié
+        assert_eq!(status.len(), 1);
+        assert!(status[0].is_unstaged());
+        assert!(!status[0].is_staged());
+    }
+
+    #[test]
+    fn test_git_repo_branches() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        commit_file(&repo, "test.txt", "content", "Initial commit");
+
+        // Créer une branche
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &head, false).unwrap();
+
+        let git_repo = GitRepo::open(repo.workdir().unwrap().to_str().unwrap()).unwrap();
+        let branches = git_repo.branches().unwrap();
+
+        // Devrait avoir 2 branches: main et feature
+        assert_eq!(branches.len(), 2);
+    }
+}

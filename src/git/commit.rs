@@ -98,3 +98,125 @@ pub fn unstage_all(repo: &Repository) -> Result<()> {
     repo.reset(&obj, git2::ResetType::Mixed, None)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::tests::test_utils::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_commit_info_from_git2_commit() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer un commit
+        let oid = commit_file(&repo, "test.txt", "Hello World", "Test commit message");
+        let commit = repo.find_commit(oid).unwrap();
+
+        let info = CommitInfo::from_git2_commit(&commit);
+
+        assert_eq!(info.message, "Test commit message");
+        assert_eq!(info.author, "Test User");
+        assert_eq!(info.email, "test@example.com");
+        assert!(info.timestamp > 0);
+        assert!(info.parents.is_empty()); // Premier commit
+    }
+
+    #[test]
+    fn test_commit_info_short_hash() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        let oid = commit_file(&repo, "test.txt", "content", "Test");
+        let commit = repo.find_commit(oid).unwrap();
+        let info = CommitInfo::from_git2_commit(&commit);
+
+        let short = info.short_hash();
+        assert_eq!(short.len(), 7);
+        assert!(oid.to_string().starts_with(&short));
+    }
+
+    #[test]
+    fn test_stage_file() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer un fichier
+        create_file(&repo, "test.txt", "Hello");
+
+        // Stage le fichier
+        stage_file(&repo, "test.txt").unwrap();
+
+        // Vérifier qu'il est dans l'index
+        let index = repo.index().unwrap();
+        let entries: Vec<_> = index.iter().collect();
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn test_stage_all() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer plusieurs fichiers
+        create_file(&repo, "file1.txt", "content1");
+        create_file(&repo, "file2.txt", "content2");
+
+        // Stage tous les fichiers
+        stage_all(&repo).unwrap();
+
+        // Vérifier qu'ils sont dans l'index
+        let index = repo.index().unwrap();
+        let entries: Vec<_> = index.iter().collect();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn test_unstage_file() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer et commiter un fichier
+        commit_file(&repo, "test.txt", "Initial content", "Initial commit");
+
+        // Modifier le fichier et stage
+        create_file(&repo, "test.txt", "Modified content");
+        stage_file(&repo, "test.txt").unwrap();
+
+        // Vérifier qu'il est staged (modification présente dans l'index)
+        let index = repo.index().unwrap();
+        assert_eq!(index.iter().count(), 1);
+
+        // Unstage le fichier - retour à HEAD
+        unstage_file(&repo, "test.txt").unwrap();
+
+        // Après unstage, le fichier devrait correspondre à HEAD
+        // Donc il n'y a plus de diff entre index et HEAD
+        let statuses = repo.statuses(None).unwrap();
+        // Le fichier ne devrait plus être dans l'état "staged modified"
+        let mut found_staged = false;
+        for entry in statuses.iter() {
+            if entry.path() == Some("test.txt") {
+                let status = entry.status();
+                if status.contains(git2::Status::INDEX_MODIFIED) {
+                    found_staged = true;
+                }
+            }
+        }
+        assert!(!found_staged, "Le fichier ne devrait plus être staged");
+    }
+
+    #[test]
+    fn test_create_commit() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer un fichier et l'ajouter à l'index
+        create_file(&repo, "test.txt", "content");
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("test.txt")).unwrap();
+        index.write().unwrap();
+
+        // Créer un commit
+        let oid = create_commit(&repo, "My commit message").unwrap();
+
+        // Vérifier que le commit existe
+        let commit = repo.find_commit(oid).unwrap();
+        assert_eq!(commit.summary().unwrap(), "My commit message");
+    }
+}

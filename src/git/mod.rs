@@ -8,3 +8,8 @@ pub mod stash;
 pub mod worktree;
 
 pub use repo::GitRepo;
+
+#[cfg(test)]
+pub mod tests {
+    pub mod test_utils;
+}

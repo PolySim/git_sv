@@ -303,3 +303,124 @@ impl DiffStatus {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::tests::test_utils::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_diff_status_display_char() {
+        assert_eq!(DiffStatus::Added.display_char(), 'A');
+        assert_eq!(DiffStatus::Modified.display_char(), 'M');
+        assert_eq!(DiffStatus::Deleted.display_char(), 'D');
+        assert_eq!(DiffStatus::Renamed.display_char(), 'R');
+    }
+
+    #[test]
+    fn test_commit_diff_simple() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        let oid = commit_file(&repo, "test.txt", "Hello World", "Initial commit");
+
+        // Obtenir le diff du commit
+        let files = commit_diff(&repo, oid).unwrap();
+
+        // Devrait avoir 1 fichier ajouté
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "test.txt");
+        assert!(matches!(files[0].status, DiffStatus::Added));
+        assert!(files[0].additions > 0);
+    }
+
+    #[test]
+    fn test_commit_diff_multiple_files() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit avec plusieurs fichiers
+        create_file(&repo, "file1.txt", "content1");
+        create_file(&repo, "file2.txt", "content2");
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file1.txt")).unwrap();
+        index.add_path(Path::new("file2.txt")).unwrap();
+        index.write().unwrap();
+        let oid = commit(&repo, "Multi-file commit");
+
+        // Obtenir le diff
+        let files = commit_diff(&repo, oid).unwrap();
+
+        // Devrait avoir 2 fichiers
+        assert_eq!(files.len(), 2);
+        let paths: Vec<_> = files.iter().map(|f| f.path.as_str()).collect();
+        assert!(paths.contains(&"file1.txt"));
+        assert!(paths.contains(&"file2.txt"));
+    }
+
+    #[test]
+    fn test_commit_diff_modification() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        commit_file(&repo, "test.txt", "Initial content", "Initial commit");
+
+        // Modifier le fichier et committer
+        let oid = commit_file(&repo, "test.txt", "Modified content", "Second commit");
+
+        // Obtenir le diff
+        let files = commit_diff(&repo, oid).unwrap();
+
+        // Devrait avoir 1 fichier modifié
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "test.txt");
+        assert!(matches!(files[0].status, DiffStatus::Modified));
+    }
+
+    #[test]
+    fn test_get_file_diff() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial avec un fichier
+        let _oid = commit_file(
+            &repo,
+            "test.txt",
+            "Line 1\nLine 2\nLine 3\n",
+            "Initial commit",
+        );
+
+        // Modifier le fichier
+        let oid2 = commit_file(
+            &repo,
+            "test.txt",
+            "Line 1\nModified Line 2\nLine 3\n",
+            "Second commit",
+        );
+
+        // Obtenir le diff détaillé
+        let file_diff = get_file_diff(&repo, oid2, "test.txt").unwrap();
+
+        assert_eq!(file_diff.path, "test.txt");
+        assert!(matches!(file_diff.status, DiffStatus::Modified));
+        // Devrait avoir au moins quelques lignes
+        assert!(!file_diff.lines.is_empty());
+    }
+
+    #[test]
+    fn test_working_dir_file_diff() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        commit_file(&repo, "test.txt", "Initial content", "Initial commit");
+
+        // Modifier le fichier sans committer
+        create_file(&repo, "test.txt", "Modified in working dir");
+
+        // Obtenir le diff du working directory
+        let file_diff = working_dir_file_diff(&repo, "test.txt").unwrap();
+
+        assert_eq!(file_diff.path, "test.txt");
+        assert!(matches!(file_diff.status, DiffStatus::Modified));
+        assert!(!file_diff.lines.is_empty());
+    }
+}

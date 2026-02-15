@@ -427,3 +427,152 @@ fn assign_new_column(active_columns: &mut Vec<ColumnState>, oid: Oid) -> usize {
     });
     active_columns.len() - 1
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::tests::test_utils::*;
+
+    #[test]
+    fn test_build_graph_linear() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer une histoire linéaire: A -> B -> C
+        let oid_a = commit_file(&repo, "file.txt", "A", "First commit");
+        let oid_b = commit_file(&repo, "file.txt", "B", "Second commit");
+        let oid_c = commit_file(&repo, "file.txt", "C", "Third commit");
+
+        // Récupérer les commits
+        let commits = vec![
+            CommitInfo::from_git2_commit(&repo.find_commit(oid_c).unwrap()),
+            CommitInfo::from_git2_commit(&repo.find_commit(oid_b).unwrap()),
+            CommitInfo::from_git2_commit(&repo.find_commit(oid_a).unwrap()),
+        ];
+
+        // Construire le graphe
+        let graph = build_graph(&repo, &commits).unwrap();
+
+        // Devrait avoir 3 rangées
+        assert_eq!(graph.len(), 3);
+
+        // Tous les commits devraient être sur la même colonne (0)
+        assert_eq!(graph[0].node.column, 0);
+        assert_eq!(graph[1].node.column, 0);
+        assert_eq!(graph[2].node.column, 0);
+    }
+
+    #[test]
+    fn test_find_or_assign_column() {
+        let mut columns: Vec<ColumnState> = vec![];
+        let oid1 = Oid::from_bytes(&[1; 20]).unwrap();
+        let oid2 = Oid::from_bytes(&[2; 20]).unwrap();
+
+        // Premier OID : nouvelle colonne
+        let col1 = find_or_assign_column(&mut columns, oid1);
+        assert_eq!(col1, 0);
+        assert_eq!(columns.len(), 1);
+
+        // Deuxième OID différent : nouvelle colonne
+        let col2 = find_or_assign_column(&mut columns, oid2);
+        assert_eq!(col2, 1);
+        assert_eq!(columns.len(), 2);
+
+        // Même OID que le premier : colonne existante
+        let col1_again = find_or_assign_column(&mut columns, oid1);
+        assert_eq!(col1_again, 0);
+    }
+
+    #[test]
+    fn test_assign_new_column_reuse() {
+        let mut columns: Vec<ColumnState> = vec![
+            ColumnState {
+                expected_oid: Some(Oid::from_bytes(&[1; 20]).unwrap()),
+                color_index: 0,
+            },
+            ColumnState {
+                expected_oid: None,
+                color_index: 0,
+            }, // Libre
+            ColumnState {
+                expected_oid: Some(Oid::from_bytes(&[2; 20]).unwrap()),
+                color_index: 0,
+            },
+        ];
+
+        let new_oid = Oid::from_bytes(&[3; 20]).unwrap();
+        let col = assign_new_column(&mut columns, new_oid);
+
+        // Devrait réutiliser la colonne 1 (la libre)
+        assert_eq!(col, 1);
+        assert_eq!(columns[1].expected_oid, Some(new_oid));
+    }
+
+    #[test]
+    fn test_determine_color_index() {
+        let mut branch_colors: HashMap<String, usize> = HashMap::new();
+        let mut next_color: usize = 0;
+        let columns: Vec<ColumnState> = vec![];
+
+        // Sans refs, utilise l'index de colonne
+        let color = determine_color_index(0, &[], &mut branch_colors, &mut next_color, &columns);
+        assert_eq!(color, 0);
+
+        // Avec refs, assigne une nouvelle couleur
+        let color2 = determine_color_index(
+            0,
+            &vec!["feature".to_string()],
+            &mut branch_colors,
+            &mut next_color,
+            &columns,
+        );
+        assert_eq!(color2, 0);
+        assert_eq!(next_color, 1);
+
+        // Même ref, même couleur
+        let color3 = determine_color_index(
+            0,
+            &vec!["feature".to_string()],
+            &mut branch_colors,
+            &mut next_color,
+            &columns,
+        );
+        assert_eq!(color3, 0);
+
+        // Nouvelle ref, nouvelle couleur
+        let color4 = determine_color_index(
+            0,
+            &vec!["main".to_string()],
+            &mut branch_colors,
+            &mut next_color,
+            &columns,
+        );
+        assert_eq!(color4, 1);
+        assert_eq!(next_color, 2);
+    }
+
+    #[test]
+    fn test_collect_refs() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        let oid = commit_file(&repo, "test.txt", "content", "Initial commit");
+
+        // Créer une branche
+        let commit = repo.find_commit(oid).unwrap();
+        repo.branch("feature", &commit, false).unwrap();
+
+        // Collecter les refs
+        let refs_map = collect_refs(&repo).unwrap();
+
+        // Devrait avoir des entrées
+        assert!(!refs_map.is_empty());
+
+        // La branche main et feature devraient pointer vers le commit
+        if let Some(refs) = refs_map.get(&oid) {
+            assert!(refs.iter().any(|r| r.contains("main")));
+            assert!(refs.iter().any(|r| r.contains("feature")));
+        } else {
+            panic!("Commit non trouvé dans refs_map");
+        }
+    }
+}
