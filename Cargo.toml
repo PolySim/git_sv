@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Visualize git graph in your terminal"
 license = "MIT"
+homepage = "https://github.com/PolySim/git_sv"
+repository = "https://github.com/PolySim/git_sv"
+readme = "README.md"
+keywords = ["git", "tui", "terminal", "graph", "ratatui"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "git_sv"

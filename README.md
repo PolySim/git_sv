@@ -4,14 +4,24 @@ Un visualiseur git en terminal avec graphe de commits style GitKraken, staging i
 
 ## Installation
 
+### Via Homebrew (recommandé)
+
+```bash
+brew tap PolySim/tap
+brew install git_sv
+```
+
+### Depuis les sources
+
 ```bash
 cargo build --release
 ./target/release/git_sv
 ```
 
-Ou directement :
+### Via cargo install
+
 ```bash
-cargo run
+cargo install --git https://github.com/PolySim/git_sv.git
 ```
 
 ## Navigation entre les vues
