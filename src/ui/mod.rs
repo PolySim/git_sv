@@ -1,6 +1,7 @@
 pub mod branch_panel;
 pub mod branches_layout;
 pub mod branches_view;
+pub mod common;
 pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;

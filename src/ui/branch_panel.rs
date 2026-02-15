@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::git::branch::BranchInfo;
+use crate::ui::common::centered_rect;
 
 /// Rend le panneau de branches en overlay.
 pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize, area: Rect) {
@@ -89,25 +90,4 @@ fn render_help_bar(frame: &mut Frame, area: Rect) {
     let paragraph = Paragraph::new(help_text).style(Style::default().fg(Color::DarkGray));
 
     frame.render_widget(paragraph, help_area);
-}
-
-/// Calcule un rectangle centré de dimensions données (en pourcentage).
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }

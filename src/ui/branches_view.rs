@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
+use crate::ui::common::centered_rect;
 
 /// Rend la vue complète branches/worktrees/stashes.
 pub fn render(
@@ -418,7 +419,7 @@ fn render_branches_help(
 
 /// Rend l'overlay d'input.
 fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let popup = super::branches_layout::centered_rect(50, 20, area);
+    let popup = centered_rect(50, 20, area);
     frame.render_widget(Clear, popup);
 
     let title = match state.input_action {

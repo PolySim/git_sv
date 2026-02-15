@@ -133,6 +133,71 @@ fn count_patch_lines(patch: &git2::Patch) -> (usize, usize) {
     (additions, deletions)
 }
 
+/// Extrait les lignes d'un patch pour un fichier donné.
+///
+/// Cette fonction factorise la logique commune entre get_file_diff() et working_dir_file_diff().
+fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
+    let mut lines = Vec::new();
+    let mut additions = 0;
+    let mut deletions = 0;
+
+    for hunk_idx in 0..patch.num_hunks() {
+        let Ok((hunk, _)) = patch.hunk(hunk_idx) else {
+            continue;
+        };
+
+        // Ajouter le header du hunk.
+        lines.push(DiffLine {
+            line_type: DiffLineType::HunkHeader,
+            content: format!(
+                "@@ -{},{} +{},{} @@",
+                hunk.old_start(),
+                hunk.old_lines(),
+                hunk.new_start(),
+                hunk.new_lines()
+            ),
+            old_lineno: None,
+            new_lineno: None,
+        });
+
+        let num_lines = match patch.num_lines_in_hunk(hunk_idx) {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+
+        for line_idx in 0..num_lines {
+            let line = match patch.line_in_hunk(hunk_idx, line_idx) {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+
+            let line_type = match line.origin() {
+                '+' => DiffLineType::Addition,
+                '-' => DiffLineType::Deletion,
+                ' ' => DiffLineType::Context,
+                _ => continue,
+            };
+
+            match line_type {
+                DiffLineType::Addition => additions += 1,
+                DiffLineType::Deletion => deletions += 1,
+                _ => {}
+            }
+
+            lines.push(DiffLine {
+                line_type,
+                content: String::from_utf8_lossy(line.content())
+                    .trim_end()
+                    .to_string(),
+                old_lineno: line.old_lineno(),
+                new_lineno: line.new_lineno(),
+            });
+        }
+    }
+
+    (lines, additions, deletions)
+}
+
 /// Récupère le diff détaillé d'un fichier spécifique dans un commit.
 pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<FileDiff> {
     let commit = repo.find_commit(oid)?;
@@ -150,87 +215,7 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
     let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)?;
 
     // Trouver le delta correspondant au fichier.
-    for (idx, delta) in diff.deltas().enumerate() {
-        let path = delta
-            .new_file()
-            .path()
-            .and_then(|p| p.to_str())
-            .unwrap_or("???");
-
-        if path != file_path {
-            continue;
-        }
-
-        let status = match delta.status() {
-            git2::Delta::Added => DiffStatus::Added,
-            git2::Delta::Modified => DiffStatus::Modified,
-            git2::Delta::Deleted => DiffStatus::Deleted,
-            git2::Delta::Renamed => DiffStatus::Renamed,
-            _ => continue,
-        };
-
-        // Extraire les lignes du patch.
-        let mut lines = Vec::new();
-        let mut additions = 0;
-        let mut deletions = 0;
-
-        if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
-            for hunk_idx in 0..patch.num_hunks() {
-                let (hunk, _) = patch.hunk(hunk_idx)?;
-                // Ajouter le header du hunk.
-                lines.push(DiffLine {
-                    line_type: DiffLineType::HunkHeader,
-                    content: format!(
-                        "@@ -{},{} +{},{} @@",
-                        hunk.old_start(),
-                        hunk.old_lines(),
-                        hunk.new_start(),
-                        hunk.new_lines()
-                    ),
-                    old_lineno: None,
-                    new_lineno: None,
-                });
-
-                let num_lines = patch.num_lines_in_hunk(hunk_idx)?;
-                for line_idx in 0..num_lines {
-                    let line = patch.line_in_hunk(hunk_idx, line_idx)?;
-                    let line_type = match line.origin() {
-                        '+' => DiffLineType::Addition,
-                        '-' => DiffLineType::Deletion,
-                        ' ' => DiffLineType::Context,
-                        _ => continue,
-                    };
-
-                    match line_type {
-                        DiffLineType::Addition => additions += 1,
-                        DiffLineType::Deletion => deletions += 1,
-                        _ => {}
-                    }
-
-                    lines.push(DiffLine {
-                        line_type,
-                        content: String::from_utf8_lossy(line.content())
-                            .trim_end()
-                            .to_string(),
-                        old_lineno: line.old_lineno(),
-                        new_lineno: line.new_lineno(),
-                    });
-                }
-            }
-        }
-
-        return Ok(FileDiff {
-            path: path.to_string(),
-            status,
-            lines,
-            additions,
-            deletions,
-        });
-    }
-
-    Err(crate::error::GitSvError::Git(git2::Error::from_str(
-        "Fichier non trouvé dans le commit",
-    )))
+    find_and_extract_file_diff(&diff, file_path, "Fichier non trouvé dans le commit")
 }
 
 /// Récupère le diff d'un fichier du working directory (non committé).
@@ -249,6 +234,23 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
     let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut opts))?;
 
     // Trouver le delta correspondant au fichier.
+    find_and_extract_file_diff(
+        &diff,
+        file_path,
+        "Fichier non trouvé dans le working directory",
+    )
+}
+
+/// Trouve un fichier dans un diff et extrait son contenu.
+///
+/// Cette fonction factorise la logique de recherche et d'extraction
+/// utilisée par get_file_diff() et working_dir_file_diff().
+fn find_and_extract_file_diff(
+    diff: &git2::Diff,
+    file_path: &str,
+    error_msg: &str,
+) -> Result<FileDiff> {
+    // Trouver le delta correspondant au fichier.
     for (idx, delta) in diff.deltas().enumerate() {
         let path = delta
             .new_file()
@@ -268,55 +270,13 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
             _ => continue,
         };
 
-        // Extraire les lignes du patch.
-        let mut lines = Vec::new();
-        let mut additions = 0;
-        let mut deletions = 0;
-
-        if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
-            for hunk_idx in 0..patch.num_hunks() {
-                let (hunk, _) = patch.hunk(hunk_idx)?;
-                // Ajouter le header du hunk.
-                lines.push(DiffLine {
-                    line_type: DiffLineType::HunkHeader,
-                    content: format!(
-                        "@@ -{},{} +{},{} @@",
-                        hunk.old_start(),
-                        hunk.old_lines(),
-                        hunk.new_start(),
-                        hunk.new_lines()
-                    ),
-                    old_lineno: None,
-                    new_lineno: None,
-                });
-
-                let num_lines = patch.num_lines_in_hunk(hunk_idx)?;
-                for line_idx in 0..num_lines {
-                    let line = patch.line_in_hunk(hunk_idx, line_idx)?;
-                    let line_type = match line.origin() {
-                        '+' => DiffLineType::Addition,
-                        '-' => DiffLineType::Deletion,
-                        ' ' => DiffLineType::Context,
-                        _ => continue,
-                    };
-
-                    match line_type {
-                        DiffLineType::Addition => additions += 1,
-                        DiffLineType::Deletion => deletions += 1,
-                        _ => {}
-                    }
-
-                    lines.push(DiffLine {
-                        line_type,
-                        content: String::from_utf8_lossy(line.content())
-                            .trim_end()
-                            .to_string(),
-                        old_lineno: line.old_lineno(),
-                        new_lineno: line.new_lineno(),
-                    });
-                }
-            }
-        }
+        // Extraire les lignes du patch en utilisant la fonction factorisée.
+        let (lines, additions, deletions) =
+            if let Ok(Some(patch)) = git2::Patch::from_diff(diff, idx) {
+                extract_diff_lines(&patch)
+            } else {
+                (Vec::new(), 0, 0)
+            };
 
         return Ok(FileDiff {
             path: path.to_string(),
@@ -328,7 +288,7 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
     }
 
     Err(crate::error::GitSvError::Git(git2::Error::from_str(
-        "Fichier non trouvé dans le working directory",
+        error_msg,
     )))
 }
 

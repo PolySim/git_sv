@@ -1,4 +1,4 @@
-use git2::{BranchType, Repository};
+use git2::{Branch, BranchType, Repository};
 
 use crate::error::Result;
 
@@ -32,62 +32,81 @@ impl BranchInfo {
     }
 }
 
+/// Construit les informations d'une branche locale.
+///
+/// Cette fonction factorise la logique commune entre list_branches() et list_all_branches().
+fn build_local_branch_info(
+    repo: &Repository,
+    branch: &Branch,
+    is_head: bool,
+) -> Result<BranchInfo> {
+    let name = branch.name()?.unwrap_or("???").to_string();
+
+    // Récupérer les métadonnées du dernier commit.
+    let (last_msg, last_date, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit()
+    {
+        let msg = reference.summary().map(|s| s.to_string());
+        let date = Some(reference.time().seconds());
+
+        // Calculer ahead/behind si tracking.
+        // CORRECTION: Un seul appel à graph_ahead_behind au lieu de deux
+        let (ahead_count, behind_count) = if let Ok(upstream) = branch.upstream() {
+            if let Ok(upstream_ref) = upstream.get().peel_to_commit() {
+                repo.graph_ahead_behind(reference.id(), upstream_ref.id())
+                    .map(|(a, b)| (Some(a), Some(b)))
+                    .unwrap_or((None, None))
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
+
+        (msg, date, ahead_count, behind_count)
+    } else {
+        (None, None, None, None)
+    };
+
+    Ok(BranchInfo {
+        name,
+        is_head,
+        is_remote: false,
+        last_commit_message: last_msg,
+        last_commit_date: last_date,
+        ahead,
+        behind,
+    })
+}
+
+/// Construit les informations d'une branche remote.
+fn build_remote_branch_info(branch: &Branch) -> Result<BranchInfo> {
+    let name = branch.name()?.unwrap_or("???").to_string();
+
+    // Récupérer les métadonnées du dernier commit.
+    let (last_msg, last_date) = if let Ok(reference) = branch.get().peel_to_commit() {
+        let msg = reference.summary().map(|s| s.to_string());
+        let date = Some(reference.time().seconds());
+        (msg, date)
+    } else {
+        (None, None)
+    };
+
+    Ok(BranchInfo {
+        name,
+        is_head: false,
+        is_remote: true,
+        last_commit_message: last_msg,
+        last_commit_date: last_date,
+        ahead: None,
+        behind: None,
+    })
+}
+
 /// Liste toutes les branches locales du repository.
 pub fn list_branches(repo: &Repository) -> Result<Vec<BranchInfo>> {
-    let mut branches = Vec::new();
-
-    let head_ref = repo.head().ok();
-    let head_name = head_ref
-        .as_ref()
-        .and_then(|h| h.shorthand().map(String::from));
-
-    for branch_result in repo.branches(Some(BranchType::Local))? {
-        let (branch, _branch_type) = branch_result?;
-        let name = branch.name()?.unwrap_or("???").to_string();
-        let is_head = head_name.as_deref() == Some(&name);
-
-        // Récupérer les métadonnées du dernier commit.
-        let (last_msg, last_date, ahead, behind) =
-            if let Ok(reference) = branch.get().peel_to_commit() {
-                let msg = reference.summary().map(|s| s.to_string());
-                let date = Some(reference.time().seconds());
-
-                // Calculer ahead/behind si tracking.
-                let (ahead_count, behind_count) = if let Ok(upstream) = branch.upstream() {
-                    if let Ok(upstream_ref) = upstream.get().peel_to_commit() {
-                        let ahead = repo
-                            .graph_ahead_behind(reference.id(), upstream_ref.id())
-                            .map(|(a, _)| a)
-                            .unwrap_or(0);
-                        let behind = repo
-                            .graph_ahead_behind(reference.id(), upstream_ref.id())
-                            .map(|(_, b)| b)
-                            .unwrap_or(0);
-                        (Some(ahead), Some(behind))
-                    } else {
-                        (None, None)
-                    }
-                } else {
-                    (None, None)
-                };
-
-                (msg, date, ahead_count, behind_count)
-            } else {
-                (None, None, None, None)
-            };
-
-        branches.push(BranchInfo {
-            name,
-            is_head,
-            is_remote: false,
-            last_commit_message: last_msg,
-            last_commit_date: last_date,
-            ahead,
-            behind,
-        });
-    }
-
-    Ok(branches)
+    // Utilise list_all_branches et filtre pour ne garder que les locales
+    let (local_branches, _) = list_all_branches(repo)?;
+    Ok(local_branches)
 }
 
 /// Liste toutes les branches (locales et remote).
@@ -106,70 +125,15 @@ pub fn list_all_branches(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<Bran
         let name = branch.name()?.unwrap_or("???").to_string();
         let is_head = head_name.as_deref() == Some(&name);
 
-        // Récupérer les métadonnées du dernier commit.
-        let (last_msg, last_date, ahead, behind) =
-            if let Ok(reference) = branch.get().peel_to_commit() {
-                let msg = reference.summary().map(|s| s.to_string());
-                let date = Some(reference.time().seconds());
-
-                // Calculer ahead/behind si tracking.
-                let (ahead_count, behind_count) = if let Ok(upstream) = branch.upstream() {
-                    if let Ok(upstream_ref) = upstream.get().peel_to_commit() {
-                        let ahead = repo
-                            .graph_ahead_behind(reference.id(), upstream_ref.id())
-                            .map(|(a, _)| a)
-                            .unwrap_or(0);
-                        let behind = repo
-                            .graph_ahead_behind(reference.id(), upstream_ref.id())
-                            .map(|(_, b)| b)
-                            .unwrap_or(0);
-                        (Some(ahead), Some(behind))
-                    } else {
-                        (None, None)
-                    }
-                } else {
-                    (None, None)
-                };
-
-                (msg, date, ahead_count, behind_count)
-            } else {
-                (None, None, None, None)
-            };
-
-        local_branches.push(BranchInfo {
-            name,
-            is_head,
-            is_remote: false,
-            last_commit_message: last_msg,
-            last_commit_date: last_date,
-            ahead,
-            behind,
-        });
+        let branch_info = build_local_branch_info(repo, &branch, is_head)?;
+        local_branches.push(branch_info);
     }
 
     // Branches remote.
     for branch_result in repo.branches(Some(BranchType::Remote))? {
         let (branch, _) = branch_result?;
-        let name = branch.name()?.unwrap_or("???").to_string();
-
-        // Récupérer les métadonnées du dernier commit.
-        let (last_msg, last_date) = if let Ok(reference) = branch.get().peel_to_commit() {
-            let msg = reference.summary().map(|s| s.to_string());
-            let date = Some(reference.time().seconds());
-            (msg, date)
-        } else {
-            (None, None)
-        };
-
-        remote_branches.push(BranchInfo {
-            name,
-            is_head: false,
-            is_remote: true,
-            last_commit_message: last_msg,
-            last_commit_date: last_date,
-            ahead: None,
-            behind: None,
-        });
+        let branch_info = build_remote_branch_info(&branch)?;
+        remote_branches.push(branch_info);
     }
 
     Ok((local_branches, remote_branches))
