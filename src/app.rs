@@ -444,6 +444,8 @@ impl App {
                     }
                 } else if self.view_mode == ViewMode::Staging {
                     self.handle_staging_navigation(-1);
+                } else if self.view_mode == ViewMode::Branches {
+                    self.handle_branches_navigation(-1);
                 } else if self.selected_index > 0 {
                     self.selected_index -= 1;
                     self.graph_state.select(Some(self.selected_index * 2));
@@ -457,6 +459,8 @@ impl App {
                     }
                 } else if self.view_mode == ViewMode::Staging {
                     self.handle_staging_navigation(1);
+                } else if self.view_mode == ViewMode::Branches {
+                    self.handle_branches_navigation(1);
                 } else if self.selected_index + 1 < self.graph.len() {
                     self.selected_index += 1;
                     self.graph_state.select(Some(self.selected_index * 2));
@@ -963,6 +967,45 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Gère la navigation dans la vue branches.
+    fn handle_branches_navigation(&mut self, direction: i32) {
+        match self.branches_view_state.section {
+            BranchesSection::Branches => {
+                let max = self.branches_view_state.local_branches.len();
+                if max > 0 {
+                    let new_idx = if direction > 0 {
+                        (self.branches_view_state.branch_selected + 1).min(max - 1)
+                    } else {
+                        self.branches_view_state.branch_selected.saturating_sub(1)
+                    };
+                    self.branches_view_state.branch_selected = new_idx;
+                }
+            }
+            BranchesSection::Worktrees => {
+                let max = self.branches_view_state.worktrees.len();
+                if max > 0 {
+                    let new_idx = if direction > 0 {
+                        (self.branches_view_state.worktree_selected + 1).min(max - 1)
+                    } else {
+                        self.branches_view_state.worktree_selected.saturating_sub(1)
+                    };
+                    self.branches_view_state.worktree_selected = new_idx;
+                }
+            }
+            BranchesSection::Stashes => {
+                let max = self.branches_view_state.stashes.len();
+                if max > 0 {
+                    let new_idx = if direction > 0 {
+                        (self.branches_view_state.stash_selected + 1).min(max - 1)
+                    } else {
+                        self.branches_view_state.stash_selected.saturating_sub(1)
+                    };
+                    self.branches_view_state.stash_selected = new_idx;
+                }
+            }
         }
     }
 
