@@ -213,14 +213,18 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
             // Ajouter l'espacement entre les colonnes.
             if col < num_cols - 1 {
                 // Vérifier s'il y a une ligne horizontale à continuer.
-                let needs_horizontal = col + 1 < num_cols
-                    && connection.cells[col + 1].as_ref().map_or(false, |c| {
-                        c.edge_type == EdgeType::Horizontal
-                            || c.edge_type == EdgeType::ForkRight
-                            || c.edge_type == EdgeType::ForkLeft
-                    });
+                // Une ligne horizontale continue seulement si la cellule suivante
+                // est Horizontal (pas ForkRight/ForkLeft qui sont des points d'arrivée).
+                let needs_horizontal_right = col + 1 < num_cols
+                    && connection.cells[col + 1]
+                        .as_ref()
+                        .map_or(false, |c| c.edge_type == EdgeType::Horizontal);
+                let needs_horizontal_left = col > 0
+                    && connection.cells[col - 1]
+                        .as_ref()
+                        .map_or(false, |c| c.edge_type == EdgeType::Horizontal);
 
-                if needs_horizontal {
+                if needs_horizontal_right || needs_horizontal_left {
                     spans.push(Span::styled("─", Style::default().fg(color)));
                 } else {
                     spans.push(Span::raw(" "));

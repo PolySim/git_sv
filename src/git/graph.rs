@@ -220,11 +220,24 @@ fn assign_parent_columns(
                 assignments.push((commit_col, commit_col, commit_color));
             }
         } else {
-            // Parents supplémentaires (merge) : nouvelle colonne.
-            let parent_col = assign_new_column(active_columns, parent_oid);
-            // Les merges utilisent la couleur du commit source
-            active_columns[parent_col].color_index = commit_color;
-            assignments.push((commit_col, parent_col, commit_color));
+            // Parents supplémentaires (merge).
+            // Chercher si ce parent est déjà dans une colonne active.
+            let existing_col = active_columns
+                .iter()
+                .position(|s| s.expected_oid == Some(parent_oid));
+
+            if let Some(parent_col) = existing_col {
+                // Le parent est déjà suivi dans une colonne existante.
+                // On ne modifie PAS expected_oid ni color_index de cette colonne.
+                // On utilise la couleur de la colonne cible pour le lien de merge.
+                let merge_color = active_columns[parent_col].color_index;
+                assignments.push((commit_col, parent_col, merge_color));
+            } else {
+                // Parent pas encore dans le graphe → nouvelle colonne.
+                let parent_col = assign_new_column(active_columns, parent_oid);
+                active_columns[parent_col].color_index = commit_color;
+                assignments.push((commit_col, parent_col, commit_color));
+            }
         }
     }
 
@@ -250,6 +263,14 @@ fn build_connection_row(
         }
     }
 
+    // Supprimer les lignes verticales aux positions d'arrivée des merges/forks
+    // pour éviter qu'elles traversent les points de connexion.
+    for &(from_col, to_col, _color) in parent_assignments {
+        if from_col != to_col && to_col < cells.len() {
+            cells[to_col] = None;
+        }
+    }
+
     // Ensuite, traiter les edges spéciaux (forks et merges).
     for &(from_col, to_col, color) in parent_assignments {
         if from_col == to_col {
@@ -268,10 +289,22 @@ fn build_connection_row(
 
             // Lignes horizontales entre from_col et to_col
             for col in (from_col + 1)..to_col {
-                cells[col] = Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: color,
-                });
+                if cells[col]
+                    .as_ref()
+                    .map_or(false, |c| c.edge_type == EdgeType::Vertical)
+                {
+                    // Croisement avec une ligne verticale existante.
+                    let existing_color = cells[col].as_ref().unwrap().color_index;
+                    cells[col] = Some(GraphCell {
+                        edge_type: EdgeType::Cross,
+                        color_index: existing_color,
+                    });
+                } else {
+                    cells[col] = Some(GraphCell {
+                        edge_type: EdgeType::Horizontal,
+                        color_index: color,
+                    });
+                }
             }
 
             // Courbe d'entrée à to_col
@@ -288,10 +321,22 @@ fn build_connection_row(
 
             // Lignes horizontales entre to_col et from_col
             for col in (to_col + 1)..from_col {
-                cells[col] = Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: color,
-                });
+                if cells[col]
+                    .as_ref()
+                    .map_or(false, |c| c.edge_type == EdgeType::Vertical)
+                {
+                    // Croisement avec une ligne verticale existante.
+                    let existing_color = cells[col].as_ref().unwrap().color_index;
+                    cells[col] = Some(GraphCell {
+                        edge_type: EdgeType::Cross,
+                        color_index: existing_color,
+                    });
+                } else {
+                    cells[col] = Some(GraphCell {
+                        edge_type: EdgeType::Horizontal,
+                        color_index: color,
+                    });
+                }
             }
 
             // Courbe d'entrée à to_col
