@@ -50,7 +50,9 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
 
     let parent_commit = match repo.head() {
         Ok(head) => {
-            let oid = head.target().expect("HEAD devrait pointer vers un commit");
+            let oid = head.target().ok_or_else(|| {
+                crate::error::GitSvError::Other("HEAD ne pointe pas vers un commit".into())
+            })?;
             Some(repo.find_commit(oid)?)
         }
         Err(_) => None, // Premier commit du repo.

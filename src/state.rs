@@ -97,7 +97,7 @@ pub enum AppAction {
 }
 
 /// Mode d'affichage actif.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ViewMode {
     Graph,
     Help,
@@ -106,14 +106,14 @@ pub enum ViewMode {
 }
 
 /// Mode du panneau bas-gauche.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BottomLeftMode {
     CommitFiles,
     WorkingDir,
 }
 
 /// Panneau actuellement focalisé.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FocusPanel {
     Graph,
     Files,
@@ -121,7 +121,7 @@ pub enum FocusPanel {
 }
 
 /// Panneau focalisé dans la vue staging.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StagingFocus {
     /// Liste des fichiers non staged (working directory).
     Unstaged,
@@ -175,7 +175,7 @@ impl Default for StagingState {
 }
 
 /// Section active dans la vue branches.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BranchesSection {
     Branches,
     Worktrees,
@@ -183,7 +183,7 @@ pub enum BranchesSection {
 }
 
 /// Panneau focalisé dans la vue branches.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BranchesFocus {
     List,
     Detail,
@@ -191,7 +191,7 @@ pub enum BranchesFocus {
 }
 
 /// Action d'input en cours.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputAction {
     CreateBranch,
     CreateWorktree,

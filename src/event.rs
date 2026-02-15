@@ -418,10 +418,12 @@ impl EventHandler {
         use crate::state::ViewMode;
 
         if self.state.view_mode == ViewMode::Staging && self.state.staging_state.is_committing {
-            self.state
-                .staging_state
-                .commit_message
-                .insert(self.state.staging_state.cursor_position, c);
+            // Utiliser char_indices pour trouver la position d'octet correcte
+            let byte_pos = self.char_to_byte_position(
+                &self.state.staging_state.commit_message,
+                self.state.staging_state.cursor_position,
+            );
+            self.state.staging_state.commit_message.insert(byte_pos, c);
             self.state.staging_state.cursor_position += 1;
         }
     }
@@ -434,10 +436,18 @@ impl EventHandler {
             && self.state.staging_state.cursor_position > 0
         {
             self.state.staging_state.cursor_position -= 1;
+            let byte_pos = self.char_to_byte_position(
+                &self.state.staging_state.commit_message,
+                self.state.staging_state.cursor_position,
+            );
+            let end_byte_pos = self.char_to_byte_position(
+                &self.state.staging_state.commit_message,
+                self.state.staging_state.cursor_position + 1,
+            );
             self.state
                 .staging_state
                 .commit_message
-                .remove(self.state.staging_state.cursor_position);
+                .drain(byte_pos..end_byte_pos);
         }
     }
 
@@ -458,10 +468,18 @@ impl EventHandler {
         if self.state.view_mode == ViewMode::Staging
             && self.state.staging_state.is_committing
             && self.state.staging_state.cursor_position
-                < self.state.staging_state.commit_message.len()
+                < self.state.staging_state.commit_message.chars().count()
         {
             self.state.staging_state.cursor_position += 1;
         }
+    }
+
+    /// Convertit une position de caractère en position d'octet pour gérer Unicode correctement.
+    fn char_to_byte_position(&self, s: &str, char_pos: usize) -> usize {
+        s.char_indices()
+            .nth(char_pos)
+            .map(|(idx, _)| idx)
+            .unwrap_or(s.len())
     }
 
     // Branches view handlers
@@ -894,15 +912,21 @@ impl EventHandler {
         self.state.selected_file_diff = None;
         self.state.diff_scroll_offset = 0;
 
-        // Rafraîchir aussi l'état de staging.
-        self.refresh_staging()?;
+        // Rafraîchir aussi l'état de staging en passant les status_entries déjà récupérés.
+        self.refresh_staging_with_entries(&self.state.status_entries.clone())?;
 
         Ok(())
     }
 
     fn refresh_staging(&mut self) -> Result<()> {
-        let all_entries = self.state.repo.status().unwrap_or_default();
+        let all_entries = self.state.repo.status()?;
+        self.refresh_staging_with_entries(&all_entries)
+    }
 
+    fn refresh_staging_with_entries(
+        &mut self,
+        all_entries: &[crate::git::repo::StatusEntry],
+    ) -> Result<()> {
         self.state.staging_state.staged_files = all_entries
             .iter()
             .filter(|e| e.is_staged())
