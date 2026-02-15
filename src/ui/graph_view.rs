@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::graph::{Edge, GraphRow};
+use crate::git::graph::{EdgeType, GraphRow};
 
 /// Couleurs assignées aux branches du graphe.
 const BRANCH_COLORS: &[Color] = &[
@@ -23,6 +23,9 @@ const BRANCH_COLORS: &[Color] = &[
     Color::LightMagenta,
     Color::LightCyan,
 ];
+
+/// Espacement entre les colonnes (en caractères).
+const COL_SPACING: usize = 2;
 
 /// Rend le graphe de commits dans la zone donnée.
 pub fn render(
@@ -73,10 +76,10 @@ fn build_graph_items(graph: &[GraphRow], selected_index: usize) -> Vec<ListItem>
         let commit_line = build_commit_line(row, is_selected);
         items.push(ListItem::new(commit_line));
 
-        // Ligne de connexion (edges) si ce n'est pas le dernier commit.
-        if i + 1 < graph.len() {
-            let edge_line = build_edge_line(row, &graph[i + 1]);
-            items.push(ListItem::new(edge_line));
+        // Ligne de connexion vers le commit suivant (si existe).
+        if let Some(ref connection) = row.connection {
+            let connection_line = build_connection_line(connection);
+            items.push(ListItem::new(connection_line));
         }
     }
 
@@ -86,43 +89,65 @@ fn build_graph_items(graph: &[GraphRow], selected_index: usize) -> Vec<ListItem>
 /// Construit la ligne d'un commit avec le graphe.
 fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
     let node = &row.node;
-    let color = get_branch_color(node.color_index);
+    let commit_color = get_branch_color(node.color_index);
 
-    // Construire le préfixe graphique.
     let mut spans: Vec<Span<'static>> = Vec::new();
 
-    // Colonnes avant le noeud.
-    for col in 0..node.column {
-        let edge_char = find_edge_char(col, &row.edges);
-        let edge_color = find_edge_color(col, &row.edges);
-        spans.push(Span::styled(
-            format!("{}", edge_char),
-            Style::default().fg(edge_color),
-        ));
-        spans.push(Span::raw(" "));
+    // Nombre total de colonnes à afficher.
+    let num_cols = row.cells.len().max(node.column + 1);
+
+    // Construire chaque colonne avec l'espacement approprié.
+    for col in 0..num_cols {
+        if col == node.column {
+            // C'est la colonne du commit - dessiner le nœud.
+            let symbol = if node.parents.len() > 1 { "○" } else { "●" };
+            spans.push(Span::styled(
+                symbol.to_string(),
+                Style::default()
+                    .fg(commit_color)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+            // Ajouter l'espacement après le nœud (sauf si c'est la dernière colonne).
+            if col < num_cols - 1 {
+                spans.push(Span::raw(" ".repeat(COL_SPACING - 1)));
+            }
+        } else if col < row.cells.len() {
+            // Colonne avec potentiellement une cellule graphique.
+            if let Some(ref cell) = row.cells[col] {
+                let color = get_branch_color(cell.color_index);
+                let ch = match cell.edge_type {
+                    EdgeType::Vertical => "│",
+                    _ => " ",
+                };
+                spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
+
+                // Ajouter l'espacement.
+                if col < num_cols - 1 {
+                    spans.push(Span::raw(" ".repeat(COL_SPACING - 1)));
+                }
+            } else {
+                // Colonne vide.
+                let spaces = if col < num_cols - 1 {
+                    " ".repeat(COL_SPACING)
+                } else {
+                    " ".to_string()
+                };
+                spans.push(Span::raw(spaces));
+            }
+        } else {
+            // Colonne au-delà des cellules définies - juste des espaces.
+            let spaces = if col < num_cols - 1 {
+                " ".repeat(COL_SPACING)
+            } else {
+                " ".to_string()
+            };
+            spans.push(Span::raw(spaces));
+        }
     }
 
-    // Le noeud lui-même.
-    spans.push(Span::styled("●", Style::default().fg(color)));
+    // Espace entre le graphe et le contenu.
     spans.push(Span::raw(" "));
-
-    // Colonnes après le noeud.
-    let max_col = row
-        .edges
-        .iter()
-        .map(|e| e.from_col.max(e.to_col))
-        .max()
-        .unwrap_or(node.column);
-
-    for col in node.column + 1..=max_col {
-        let edge_char = find_edge_char(col, &row.edges);
-        let edge_color = find_edge_color(col, &row.edges);
-        spans.push(Span::styled(
-            format!("{}", edge_char),
-            Style::default().fg(edge_color),
-        ));
-        spans.push(Span::raw(" "));
-    }
 
     // Hash du commit.
     let hash = node.oid.to_string();
@@ -166,57 +191,58 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
 }
 
 /// Construit la ligne de connexion entre deux commits.
-fn build_edge_line(current_row: &GraphRow, next_row: &GraphRow) -> Line<'static> {
+fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<'static> {
     let mut spans: Vec<Span<'static>> = Vec::new();
 
-    // Trouver le nombre maximum de colonnes à afficher.
-    let max_col = current_row
-        .edges
-        .iter()
-        .map(|e| e.from_col.max(e.to_col))
-        .max()
-        .unwrap_or(0)
-        .max(
-            next_row
-                .edges
-                .iter()
-                .map(|e| e.from_col.max(e.to_col))
-                .max()
-                .unwrap_or(0),
-        )
-        .max(next_row.node.column);
+    let num_cols = connection.cells.len();
 
-    for col in 0..=max_col {
-        // Chercher un edge sur cette colonne.
-        let edge = current_row.edges.iter().find(|e| e.from_col == col);
+    for col in 0..num_cols {
+        if let Some(ref cell) = connection.cells[col] {
+            let color = get_branch_color(cell.color_index);
+            let ch = match cell.edge_type {
+                EdgeType::Vertical => "│",
+                EdgeType::ForkRight => "╭",
+                EdgeType::ForkLeft => "╮",
+                EdgeType::MergeFromRight => "╰",
+                EdgeType::MergeFromLeft => "╯",
+                EdgeType::Horizontal => "─",
+                EdgeType::Cross => "┼",
+            };
+            spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
 
-        if let Some(edge) = edge {
-            let color = get_branch_color(edge.color_index);
+            // Ajouter l'espacement entre les colonnes.
+            if col < num_cols - 1 {
+                // Vérifier s'il y a une ligne horizontale à continuer.
+                let needs_horizontal = col + 1 < num_cols
+                    && connection.cells[col + 1].as_ref().map_or(false, |c| {
+                        c.edge_type == EdgeType::Horizontal
+                            || c.edge_type == EdgeType::ForkRight
+                            || c.edge_type == EdgeType::ForkLeft
+                    });
 
-            if edge.from_col == edge.to_col {
-                // Ligne verticale.
-                spans.push(Span::styled("│", Style::default().fg(color)));
-            } else if edge.to_col > edge.from_col {
-                // Fork vers la droite.
-                spans.push(Span::styled("╭", Style::default().fg(color)));
-                spans.push(Span::styled("─", Style::default().fg(color)));
-            } else {
-                // Merge depuis la droite.
-                spans.push(Span::styled("╰", Style::default().fg(color)));
-                spans.push(Span::styled("─", Style::default().fg(color)));
+                if needs_horizontal {
+                    spans.push(Span::styled("─", Style::default().fg(color)));
+                } else {
+                    spans.push(Span::raw(" "));
+                }
             }
         } else {
-            // Chercher si un edge traverse cette colonne (diagonale).
-            let crossing = current_row.edges.iter().any(|e| {
-                let min_col = e.from_col.min(e.to_col);
-                let max_col = e.from_col.max(e.to_col);
-                col > min_col && col < max_col
+            // Colonne vide - vérifier s'il y a une ligne horizontale qui traverse.
+            let has_horizontal = connection.cells.iter().any(|c| {
+                c.as_ref()
+                    .map_or(false, |cell| cell.edge_type == EdgeType::Horizontal)
             });
 
-            if crossing {
-                // Ligne horizontale pour la connexion.
-                spans.push(Span::styled("─", Style::default().fg(Color::DarkGray)));
-                spans.push(Span::styled("─", Style::default().fg(Color::DarkGray)));
+            if has_horizontal {
+                // Chercher la couleur d'une ligne horizontale adjacente.
+                let horizontal_color = find_horizontal_color(col, connection);
+                if let Some(color_idx) = horizontal_color {
+                    let color = get_branch_color(color_idx);
+                    spans.push(Span::styled("─", Style::default().fg(color)));
+                    spans.push(Span::styled("─", Style::default().fg(color)));
+                } else {
+                    spans.push(Span::raw("  "));
+                }
             } else {
                 spans.push(Span::raw("  "));
             }
@@ -226,33 +252,33 @@ fn build_edge_line(current_row: &GraphRow, next_row: &GraphRow) -> Line<'static>
     Line::from(spans)
 }
 
-/// Retourne la couleur pour un index de branche.
-fn get_branch_color(index: usize) -> Color {
-    BRANCH_COLORS[index % BRANCH_COLORS.len()]
-}
-
-/// Trouve le caractère à afficher pour une colonne donnée.
-fn find_edge_char(col: usize, edges: &[Edge]) -> char {
-    for edge in edges {
-        if edge.from_col == col || edge.to_col == col {
-            if edge.from_col == edge.to_col {
-                return '│';
-            } else if edge.to_col > edge.from_col {
-                return '╭';
-            } else {
-                return '╰';
+/// Trouve la couleur d'une ligne horizontale adjacente.
+fn find_horizontal_color(
+    col: usize,
+    connection: &crate::git::graph::ConnectionRow,
+) -> Option<usize> {
+    // Chercher à gauche.
+    for c in (0..=col).rev() {
+        if let Some(ref cell) = connection.cells[c] {
+            if cell.edge_type == EdgeType::Horizontal {
+                return Some(cell.color_index);
             }
         }
     }
-    ' '
-}
 
-/// Trouve la couleur pour une colonne donnée.
-fn find_edge_color(col: usize, edges: &[Edge]) -> Color {
-    for edge in edges {
-        if edge.from_col == col || edge.to_col == col {
-            return get_branch_color(edge.color_index);
+    // Chercher à droite.
+    for c in col..connection.cells.len() {
+        if let Some(ref cell) = connection.cells[c] {
+            if cell.edge_type == EdgeType::Horizontal {
+                return Some(cell.color_index);
+            }
         }
     }
-    Color::Reset
+
+    None
+}
+
+/// Retourne la couleur pour un index de branche.
+fn get_branch_color(index: usize) -> Color {
+    BRANCH_COLORS[index % BRANCH_COLORS.len()]
 }
