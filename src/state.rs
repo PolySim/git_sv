@@ -203,6 +203,7 @@ pub enum InputAction {
     CreateWorktree,
     RenameBranch,
     SaveStash,
+    MergeBranch,
 }
 
 /// État de la vue branches/worktree/stash.

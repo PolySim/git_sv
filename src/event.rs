@@ -80,9 +80,7 @@ impl EventHandler {
                 self.state.show_branch_panel = false;
             }
             AppAction::BranchCheckout => self.handle_branch_checkout()?,
-            AppAction::BranchCreate => {
-                // TODO: implémenter le prompt pour créer une branche
-            }
+            AppAction::BranchCreate => self.handle_branch_create()?,
             AppAction::BranchDelete => self.handle_branch_delete_trigger()?,
             AppAction::FileUp => self.handle_file_up(),
             AppAction::FileDown => self.handle_file_down(),
@@ -117,9 +115,9 @@ impl EventHandler {
             AppAction::CancelInput => self.handle_cancel_input(),
             AppAction::ConfirmAction => self.handle_confirm_action()?,
             AppAction::CancelAction => self.handle_cancel_action(),
-            AppAction::CommitPrompt | AppAction::StashPrompt | AppAction::MergePrompt => {
-                // TODO: implémenter les modales/prompts interactifs.
-            }
+            AppAction::CommitPrompt => self.handle_commit_prompt()?,
+            AppAction::StashPrompt => self.handle_stash_prompt()?,
+            AppAction::MergePrompt => self.handle_merge_prompt()?,
         }
         Ok(())
     }
@@ -566,18 +564,68 @@ impl EventHandler {
     fn handle_branch_delete_trigger(&mut self) -> Result<()> {
         use crate::state::ViewMode;
 
-        if self.state.view_mode == ViewMode::Branches
-            && self.state.branches_view_state.section == crate::state::BranchesSection::Branches
-        {
-            if let Some(branch) = self
-                .state
-                .branches_view_state
-                .local_branches
-                .get(self.state.branches_view_state.branch_selected)
-            {
-                let name = branch.name.clone();
-                self.state.pending_confirmation = Some(ConfirmAction::BranchDelete(name));
+        match self.state.view_mode {
+            ViewMode::Graph => {
+                // Dans la vue Graph, on supprime la branche du commit sélectionné
+                if let Some(row) = self.state.graph.get(self.state.selected_index) {
+                    // Trouver les branches pointant vers ce commit
+                    let branches: Vec<String> = row
+                        .node
+                        .refs
+                        .iter()
+                        .filter(|r| !r.contains("->") && !r.starts_with("tag:"))
+                        .map(|r| r.clone())
+                        .collect();
+
+                    if branches.is_empty() {
+                        self.state
+                            .set_flash_message("Aucune branche sur ce commit".into());
+                    } else if branches.len() == 1 {
+                        let name = branches[0].clone();
+                        // Vérifier si c'est la branche courante
+                        if let Some(current) = &self.state.current_branch {
+                            if &name == current {
+                                self.state.set_flash_message(
+                                    "Impossible de supprimer la branche courante (HEAD)".into(),
+                                );
+                                return Ok(());
+                            }
+                        }
+                        self.state.pending_confirmation = Some(ConfirmAction::BranchDelete(name));
+                    } else {
+                        // Plusieurs branches : afficher un message pour l'instant
+                        self.state.set_flash_message(format!(
+                            "Plusieurs branches sur ce commit: {}",
+                            branches.join(", ")
+                        ));
+                    }
+                }
             }
+            ViewMode::Branches => {
+                // Dans la vue Branches, on supprime la branche sélectionnée
+                if self.state.branches_view_state.section == crate::state::BranchesSection::Branches
+                {
+                    if let Some(branch) = self
+                        .state
+                        .branches_view_state
+                        .local_branches
+                        .get(self.state.branches_view_state.branch_selected)
+                    {
+                        let name = branch.name.clone();
+                        // Vérifier si c'est la branche courante
+                        if let Some(current) = &self.state.current_branch {
+                            if &name == current {
+                                self.state.set_flash_message(
+                                    "Impossible de supprimer la branche courante (HEAD)".into(),
+                                );
+                                return Ok(());
+                            }
+                        }
+                        self.state.pending_confirmation = Some(ConfirmAction::BranchDelete(name));
+                    }
+                }
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -833,6 +881,25 @@ impl EventHandler {
                         self.refresh_branches_view()?;
                     }
                 }
+                Some(InputAction::MergeBranch) => {
+                    let branch_name = self.state.branches_view_state.input_text.clone();
+                    if !branch_name.is_empty() {
+                        if let Err(e) =
+                            crate::git::merge::merge_branch(&self.state.repo.repo, &branch_name)
+                        {
+                            self.state.set_flash_message(format!("Erreur: {}", e));
+                        } else {
+                            self.state.set_flash_message(format!(
+                                "Branche '{}' mergée avec succès",
+                                branch_name
+                            ));
+                            self.state.mark_dirty(); // Marquer comme modifié
+                            self.refresh()?;
+                        }
+                    } else {
+                        self.state.set_flash_message("Nom de branche requis".into());
+                    }
+                }
                 _ => {}
             }
             self.state.branches_view_state.focus = BranchesFocus::List;
@@ -851,6 +918,90 @@ impl EventHandler {
             self.state.branches_view_state.input_text.clear();
             self.state.branches_view_state.input_cursor = 0;
         }
+    }
+
+    fn handle_branch_create(&mut self) -> Result<()> {
+        use crate::state::{BranchesFocus, InputAction, ViewMode};
+
+        // Disponible dans les vues Graph et Branches
+        match self.state.view_mode {
+            ViewMode::Graph => {
+                // Dans la vue Graph, on passe en mode Branches avec input activé
+                self.state.view_mode = ViewMode::Branches;
+                self.state.branches_view_state.focus = BranchesFocus::Input;
+                self.state.branches_view_state.input_action = Some(InputAction::CreateBranch);
+                self.state.branches_view_state.input_text.clear();
+                self.state.branches_view_state.input_cursor = 0;
+                self.refresh_branches_view()?;
+            }
+            ViewMode::Branches => {
+                // Dans la vue Branches, on active juste l'input
+                self.state.branches_view_state.focus = BranchesFocus::Input;
+                self.state.branches_view_state.input_action = Some(InputAction::CreateBranch);
+                self.state.branches_view_state.input_text.clear();
+                self.state.branches_view_state.input_cursor = 0;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_commit_prompt(&mut self) -> Result<()> {
+        use crate::state::{StagingFocus, ViewMode};
+
+        // Rediriger vers la vue Staging avec le focus sur le commit message
+        self.state.view_mode = ViewMode::Staging;
+
+        // Rafraîchir les données de staging si nécessaire
+        let all_entries = self.state.repo.status().unwrap_or_default();
+        self.state.staging_state.staged_files = all_entries
+            .iter()
+            .filter(|e| e.is_staged())
+            .cloned()
+            .collect();
+        self.state.staging_state.unstaged_files = all_entries
+            .iter()
+            .filter(|e| e.is_unstaged())
+            .cloned()
+            .collect();
+
+        // Activer directement le mode commit message
+        self.state.staging_state.focus = StagingFocus::CommitMessage;
+        self.state.staging_state.is_committing = true;
+        self.state.staging_state.commit_message.clear();
+        self.state.staging_state.cursor_position = 0;
+
+        Ok(())
+    }
+
+    fn handle_stash_prompt(&mut self) -> Result<()> {
+        use crate::state::{BranchesFocus, BranchesSection, InputAction, ViewMode};
+
+        // Ouvrir un overlay pour saisir le message du stash
+        self.state.view_mode = ViewMode::Branches;
+        self.state.branches_view_state.section = BranchesSection::Stashes;
+        self.state.branches_view_state.focus = BranchesFocus::Input;
+        self.state.branches_view_state.input_action = Some(InputAction::SaveStash);
+        self.state.branches_view_state.input_text.clear();
+        self.state.branches_view_state.input_cursor = 0;
+        self.refresh_branches_view()?;
+
+        Ok(())
+    }
+
+    fn handle_merge_prompt(&mut self) -> Result<()> {
+        use crate::state::{BranchesFocus, BranchesSection, InputAction, ViewMode};
+
+        // Ouvrir un overlay pour choisir la branche à merger
+        self.state.view_mode = ViewMode::Branches;
+        self.state.branches_view_state.section = BranchesSection::Branches;
+        self.state.branches_view_state.focus = BranchesFocus::Input;
+        self.state.branches_view_state.input_action = Some(InputAction::MergeBranch);
+        self.state.branches_view_state.input_text.clear();
+        self.state.branches_view_state.input_cursor = 0;
+        self.refresh_branches_view()?;
+
+        Ok(())
     }
 
     // Helper methods

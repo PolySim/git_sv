@@ -427,6 +427,7 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
         Some(InputAction::RenameBranch) => " Renommer la branche ",
         Some(InputAction::CreateWorktree) => " Nouveau worktree (nom chemin [branche]) ",
         Some(InputAction::SaveStash) => " Message du stash ",
+        Some(InputAction::MergeBranch) => " Merger la branche (nom de branche) ",
         None => " Input ",
     };
 
