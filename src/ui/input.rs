@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use std::time::Duration;
 
 use crate::state::{
@@ -10,17 +10,20 @@ pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
     handle_input_with_timeout(state, 100)
 }
 
-/// Poll un événement clavier avec un timeout configurable.
+/// Poll un événement avec un timeout configurable (clavier + souris).
 pub fn handle_input_with_timeout(
     state: &AppState,
     timeout_ms: u64,
 ) -> std::io::Result<Option<AppAction>> {
     if event::poll(Duration::from_millis(timeout_ms))? {
-        if let Event::Key(key) = event::read()? {
-            return Ok(map_key(key, state));
+        match event::read()? {
+            Event::Key(key) => Ok(map_key(key, state)),
+            Event::Mouse(mouse) => Ok(map_mouse(mouse, state)),
+            _ => Ok(None),
         }
+    } else {
+        Ok(None)
     }
-    Ok(None)
 }
 
 /// Mappe un événement clavier à une action de l'application.
@@ -28,6 +31,16 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Ctrl+C quitte toujours.
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(AppAction::Quit);
+    }
+
+    // Si une confirmation est en attente, gérer y/n/ESC
+    if state.pending_confirmation.is_some() {
+        return match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => Some(AppAction::ConfirmAction),
+            KeyCode::Char('n') | KeyCode::Char('N') => Some(AppAction::CancelAction),
+            KeyCode::Esc => Some(AppAction::CancelAction),
+            _ => None,
+        };
     }
 
     // Navigation entre les vues principales (toujours disponible)
@@ -247,5 +260,57 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Right => Some(AppAction::MoveCursorRight),
             _ => None,
         },
+    }
+}
+
+/// Mappe un événement souris à une action de l'application.
+fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
+    // Ignorer les événements de souris si une confirmation est en attente
+    if state.pending_confirmation.is_some() {
+        return None;
+    }
+
+    match mouse.kind {
+        MouseEventKind::Down(_) => {
+            // Pour l'instant, le clic sélectionne simplement (sera amélioré avec hit-testing)
+            // On pourrait ajouter ici la logique pour déterminer quel élément a été cliqué
+            // en fonction de la position (mouse.row, mouse.column)
+            None
+        }
+        MouseEventKind::ScrollUp => {
+            // Scroll up dans le panneau actif
+            match state.view_mode {
+                ViewMode::Graph => {
+                    if state.focus == FocusPanel::Files {
+                        Some(AppAction::FileUp)
+                    } else if state.focus == FocusPanel::Detail {
+                        Some(AppAction::DiffScrollUp)
+                    } else {
+                        Some(AppAction::MoveUp)
+                    }
+                }
+                ViewMode::Staging => Some(AppAction::MoveUp),
+                ViewMode::Branches => Some(AppAction::MoveUp),
+                _ => None,
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            // Scroll down dans le panneau actif
+            match state.view_mode {
+                ViewMode::Graph => {
+                    if state.focus == FocusPanel::Files {
+                        Some(AppAction::FileDown)
+                    } else if state.focus == FocusPanel::Detail {
+                        Some(AppAction::DiffScrollDown)
+                    } else {
+                        Some(AppAction::MoveDown)
+                    }
+                }
+                ViewMode::Staging => Some(AppAction::MoveDown),
+                ViewMode::Branches => Some(AppAction::MoveDown),
+                _ => None,
+            }
+        }
+        _ => None,
     }
 }

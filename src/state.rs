@@ -4,8 +4,9 @@ use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
 use crate::git::stash::StashEntry;
 use crate::git::worktree::WorktreeInfo;
+use crate::ui::confirm_dialog::ConfirmAction;
+use crate::ui::loading::LoadingSpinner;
 use ratatui::widgets::ListState;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Nombre maximum de commits à charger.
@@ -95,6 +96,10 @@ pub enum AppAction {
     ConfirmInput,
     /// Annuler l'input.
     CancelInput,
+    /// Confirmer une action destructive (oui).
+    ConfirmAction,
+    /// Annuler une action destructive (non).
+    CancelAction,
 }
 
 /// Mode d'affichage actif.
@@ -264,6 +269,10 @@ pub struct AppState {
     pub dirty: bool,
     /// Cache pour les diffs de fichiers (LRU simple).
     pub diff_cache: DiffCache,
+    /// Action en attente de confirmation (dialogue modal).
+    pub pending_confirmation: Option<ConfirmAction>,
+    /// Spinner de chargement actif (None si pas de chargement).
+    pub loading_spinner: Option<LoadingSpinner>,
 }
 
 /// Cache LRU simple pour les diffs de fichiers.
@@ -379,6 +388,8 @@ impl AppState {
             branches_view_state: BranchesViewState::default(),
             dirty: true,                    // Initialement dirty pour charger les données
             diff_cache: DiffCache::new(50), // Cache de 50 diffs
+            pending_confirmation: None,
+            loading_spinner: None,
         };
 
         Ok(state)

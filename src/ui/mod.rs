@@ -2,17 +2,22 @@ pub mod branch_panel;
 pub mod branches_layout;
 pub mod branches_view;
 pub mod common;
+pub mod confirm_dialog;
 pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;
+pub mod graph_legend;
 pub mod graph_view;
 pub mod help_bar;
 pub mod help_overlay;
 pub mod input;
 pub mod layout;
+pub mod loading;
+pub mod nav_bar;
 pub mod staging_layout;
 pub mod staging_view;
 pub mod status_bar;
+pub mod theme;
 
 use crate::state::{AppState, FocusPanel, ViewMode};
 use ratatui::Frame;
@@ -47,6 +52,11 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             );
         }
     }
+
+    // Rendre le dialogue de confirmation si actif
+    if let Some(ref action) = state.pending_confirmation {
+        confirm_dialog::render(frame, action, frame.area());
+    }
 }
 
 /// Rend la vue Graph (vue principale).
@@ -62,6 +72,9 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
         state.current_flash_message(),
         layout.status_bar,
     );
+
+    // Rendu de la barre de navigation.
+    nav_bar::render(frame, state.view_mode, layout.nav_bar);
 
     // Rendu du graphe.
     let is_graph_focused = state.focus == FocusPanel::Graph;

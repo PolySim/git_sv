@@ -4,6 +4,7 @@ use std::io::Stdout;
 use crate::error::Result;
 use crate::state::{AppAction, AppState};
 use crate::ui;
+use crate::ui::confirm_dialog::ConfirmAction;
 
 /// Gestionnaire de la boucle événementielle.
 pub struct EventHandler {
@@ -82,9 +83,7 @@ impl EventHandler {
             AppAction::BranchCreate => {
                 // TODO: implémenter le prompt pour créer une branche
             }
-            AppAction::BranchDelete => {
-                // TODO: implémenter la confirmation et suppression
-            }
+            AppAction::BranchDelete => self.handle_branch_delete_trigger()?,
             AppAction::FileUp => self.handle_file_up(),
             AppAction::FileDown => self.handle_file_down(),
             AppAction::DiffScrollUp => self.handle_diff_scroll_up(),
@@ -116,9 +115,75 @@ impl EventHandler {
             AppAction::StashSave => self.handle_stash_save(),
             AppAction::ConfirmInput => self.handle_confirm_input()?,
             AppAction::CancelInput => self.handle_cancel_input(),
+            AppAction::ConfirmAction => self.handle_confirm_action()?,
+            AppAction::CancelAction => self.handle_cancel_action(),
             AppAction::CommitPrompt | AppAction::StashPrompt | AppAction::MergePrompt => {
                 // TODO: implémenter les modales/prompts interactifs.
             }
+        }
+        Ok(())
+    }
+
+    /// Gère la confirmation d'une action destructive.
+    fn handle_confirm_action(&mut self) -> Result<()> {
+        use crate::ui::confirm_dialog::ConfirmAction;
+
+        if let Some(action) = self.state.pending_confirmation.take() {
+            match action {
+                ConfirmAction::BranchDelete(name) => {
+                    self.execute_branch_delete(&name)?;
+                }
+                ConfirmAction::WorktreeRemove(name) => {
+                    self.execute_worktree_remove(&name)?;
+                }
+                ConfirmAction::StashDrop(index) => {
+                    self.execute_stash_drop(index)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Annule l'action en attente de confirmation.
+    fn handle_cancel_action(&mut self) {
+        self.state.pending_confirmation = None;
+    }
+
+    /// Exécute la suppression d'une branche.
+    fn execute_branch_delete(&mut self, name: &str) -> Result<()> {
+        if let Err(e) = crate::git::branch::delete_branch(&self.state.repo.repo, name) {
+            self.state.set_flash_message(format!("Erreur: {}", e));
+        } else {
+            self.state
+                .set_flash_message(format!("Branche '{}' supprimée", name));
+            self.state.mark_dirty();
+            self.refresh()?;
+        }
+        Ok(())
+    }
+
+    /// Exécute la suppression d'un worktree.
+    fn execute_worktree_remove(&mut self, name: &str) -> Result<()> {
+        if let Err(e) = self.state.repo.remove_worktree(name) {
+            self.state.set_flash_message(format!("Erreur: {}", e));
+        } else {
+            self.state
+                .set_flash_message(format!("Worktree '{}' supprimé", name));
+            self.state.mark_dirty();
+            self.refresh_branches_view()?;
+        }
+        Ok(())
+    }
+
+    /// Exécute la suppression d'un stash.
+    fn execute_stash_drop(&mut self, index: usize) -> Result<()> {
+        if let Err(e) = crate::git::stash::drop_stash(&mut self.state.repo.repo, index) {
+            self.state.set_flash_message(format!("Erreur: {}", e));
+        } else {
+            self.state
+                .set_flash_message(format!("Stash @{{{}}} supprimé", index));
+            self.state.mark_dirty();
+            self.refresh_branches_view()?;
         }
         Ok(())
     }
@@ -497,6 +562,26 @@ impl EventHandler {
         }
     }
 
+    /// Déclenche la confirmation pour la suppression d'une branche.
+    fn handle_branch_delete_trigger(&mut self) -> Result<()> {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Branches
+            && self.state.branches_view_state.section == crate::state::BranchesSection::Branches
+        {
+            if let Some(branch) = self
+                .state
+                .branches_view_state
+                .local_branches
+                .get(self.state.branches_view_state.branch_selected)
+            {
+                let name = branch.name.clone();
+                self.state.pending_confirmation = Some(ConfirmAction::BranchDelete(name));
+            }
+        }
+        Ok(())
+    }
+
     /// Convertit une position de caractère en position d'octet pour gérer Unicode correctement.
     fn char_to_byte_position(&self, s: &str, char_pos: usize) -> usize {
         s.char_indices()
@@ -573,14 +658,8 @@ impl EventHandler {
             {
                 if !worktree.is_main {
                     let name = worktree.name.clone();
-                    if let Err(e) = self.state.repo.remove_worktree(&name) {
-                        self.state.set_flash_message(format!("Erreur: {}", e));
-                    } else {
-                        self.state
-                            .set_flash_message(format!("Worktree '{}' supprimé", name));
-                        self.state.mark_dirty(); // Marquer comme modifié
-                        self.refresh_branches_view()?;
-                    }
+                    // Déclencher le dialogue de confirmation
+                    self.state.pending_confirmation = Some(ConfirmAction::WorktreeRemove(name));
                 } else {
                     self.state
                         .set_flash_message("Impossible de supprimer le worktree principal".into());
@@ -649,14 +728,8 @@ impl EventHandler {
                 .get(self.state.branches_view_state.stash_selected)
             {
                 let idx = stash.index;
-                if let Err(e) = crate::git::stash::drop_stash(&mut self.state.repo.repo, idx) {
-                    self.state.set_flash_message(format!("Erreur: {}", e));
-                } else {
-                    self.state
-                        .set_flash_message(format!("Stash @{{{}}} supprimé", idx));
-                    self.state.mark_dirty(); // Marquer comme modifié - stash modifié
-                    self.refresh_branches_view()?;
-                }
+                // Déclencher le dialogue de confirmation
+                self.state.pending_confirmation = Some(ConfirmAction::StashDrop(idx));
             }
         }
         Ok(())

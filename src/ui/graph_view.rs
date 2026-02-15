@@ -7,22 +7,8 @@ use ratatui::{
 };
 
 use crate::git::graph::{EdgeType, GraphRow};
-
-/// Couleurs assignées aux branches du graphe.
-const BRANCH_COLORS: &[Color] = &[
-    Color::Green,
-    Color::Red,
-    Color::Yellow,
-    Color::Blue,
-    Color::Magenta,
-    Color::Cyan,
-    Color::LightGreen,
-    Color::LightRed,
-    Color::LightYellow,
-    Color::LightBlue,
-    Color::LightMagenta,
-    Color::LightCyan,
-];
+use crate::ui::theme;
+use crate::utils::format_relative_time;
 
 /// Espacement entre les colonnes (en caractères).
 const COL_SPACING: usize = 2;
@@ -181,9 +167,10 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
     };
     spans.push(Span::styled(node.message.clone(), message_style));
 
-    // Auteur.
+    // Auteur et date relative.
+    let relative_date = format_relative_time(node.timestamp);
     spans.push(Span::styled(
-        format!(" — {}", node.author),
+        format!(" — {} ({})", node.author, relative_date),
         Style::default().fg(Color::DarkGray),
     ));
 
@@ -284,5 +271,5 @@ fn find_horizontal_color(
 
 /// Retourne la couleur pour un index de branche.
 fn get_branch_color(index: usize) -> Color {
-    BRANCH_COLORS[index % BRANCH_COLORS.len()]
+    theme::branch_color(index)
 }

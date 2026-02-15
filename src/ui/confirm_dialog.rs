@@ -1,0 +1,129 @@
+//! Composant de dialogue de confirmation pour les actions destructives.
+
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    Frame,
+};
+
+/// Type d'action nécessitant une confirmation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConfirmAction {
+    /// Supprimer une branche
+    BranchDelete(String),
+    /// Supprimer un worktree
+    WorktreeRemove(String),
+    /// Supprimer un stash
+    StashDrop(usize),
+}
+
+impl ConfirmAction {
+    /// Retourne le message de confirmation pour cette action.
+    pub fn message(&self) -> String {
+        match self {
+            ConfirmAction::BranchDelete(name) => {
+                format!("Êtes-vous sûr de vouloir supprimer la branche '{}' ?", name)
+            }
+            ConfirmAction::WorktreeRemove(name) => {
+                format!(
+                    "Êtes-vous sûr de vouloir supprimer le worktree '{}' ?",
+                    name
+                )
+            }
+            ConfirmAction::StashDrop(index) => {
+                format!(
+                    "Êtes-vous sûr de vouloir supprimer le stash @{{{}}} ?",
+                    index
+                )
+            }
+        }
+    }
+
+    /// Retourne le titre du dialogue.
+    pub fn title(&self) -> &'static str {
+        match self {
+            ConfirmAction::BranchDelete(_) => "Confirmer la suppression de branche",
+            ConfirmAction::WorktreeRemove(_) => "Confirmer la suppression de worktree",
+            ConfirmAction::StashDrop(_) => "Confirmer la suppression de stash",
+        }
+    }
+}
+
+/// Rend un dialogue de confirmation en overlay.
+pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
+    // Calculer la zone centrale pour le popup
+    let popup_area = centered_rect(50, 30, area);
+
+    // Effacer la zone sous le popup
+    frame.render_widget(Clear, popup_area);
+
+    // Construire le contenu
+    let message = action.message();
+    let title = action.title();
+
+    let content = vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            message,
+            Style::default().fg(Color::White),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "y",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" - Oui  "),
+            Span::styled(
+                "n",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" - Non  "),
+            Span::styled(
+                "ESC",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" - Annuler"),
+        ]),
+    ];
+
+    let paragraph = Paragraph::new(content)
+        .block(
+            Block::default()
+                .title(title)
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(paragraph, popup_area);
+}
+
+/// Calcule un rectangle centré de dimensions données (en pourcentage).
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}

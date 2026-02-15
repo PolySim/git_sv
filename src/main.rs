@@ -5,6 +5,7 @@ mod git;
 mod state;
 mod terminal;
 mod ui;
+mod utils;
 
 use clap::{Parser, Subcommand};
 

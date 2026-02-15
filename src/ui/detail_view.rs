@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::git::graph::GraphRow;
-use chrono::{DateTime, Local, TimeZone};
+use crate::utils::format_absolute_time;
 
 /// Rend le panneau de détail du commit sélectionné.
 pub fn render(
@@ -19,12 +19,7 @@ pub fn render(
 ) {
     let content: Vec<Line<'static>> = if let Some(row) = graph.get(selected_index) {
         let node = &row.node;
-        let datetime: DateTime<Local> = Local
-            .timestamp_opt(node.timestamp, 0)
-            .single()
-            .unwrap_or_else(Local::now);
-
-        let date_str = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+        let date_str = format_absolute_time(node.timestamp);
         let oid_str = node.oid.to_string();
         let author = node.author.clone();
         let message = node.message.clone();
