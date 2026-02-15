@@ -4,6 +4,7 @@ use super::branch::BranchInfo;
 use super::commit::CommitInfo;
 use super::graph::GraphRow;
 use super::stash::StashEntry;
+use super::worktree::WorktreeInfo;
 use crate::error::Result;
 
 /// Wrapper haut-niveau autour de git2::Repository.
@@ -115,6 +116,21 @@ impl GitRepo {
     /// Checkout une branche existante.
     pub fn checkout_branch(&self, name: &str) -> Result<()> {
         super::branch::checkout_branch(&self.repo, name)
+    }
+
+    /// Retourne la liste des worktrees.
+    pub fn worktrees(&self) -> Result<Vec<WorktreeInfo>> {
+        super::worktree::list_worktrees(&self.repo)
+    }
+
+    /// Crée un nouveau worktree.
+    pub fn create_worktree(&self, name: &str, path: &str, branch: Option<&str>) -> Result<()> {
+        super::worktree::create_worktree(&self.repo, name, path, branch)
+    }
+
+    /// Supprime un worktree.
+    pub fn remove_worktree(&self, name: &str) -> Result<()> {
+        super::worktree::remove_worktree(&self.repo, name)
     }
 }
 

@@ -76,6 +76,30 @@ pub enum AppAction {
     MoveCursorLeft,
     /// Déplacer le curseur à droite.
     MoveCursorRight,
+    /// Basculer vers la section suivante (Branches → Worktrees → Stashes).
+    NextSection,
+    /// Basculer vers la section précédente.
+    PrevSection,
+    /// Renommer la branche sélectionnée (ouvre input).
+    BranchRename,
+    /// Toggle affichage branches remote.
+    ToggleRemoteBranches,
+    /// Créer un worktree (ouvre input).
+    WorktreeCreate,
+    /// Supprimer le worktree sélectionné.
+    WorktreeRemove,
+    /// Appliquer le stash sélectionné (sans supprimer).
+    StashApply,
+    /// Pop le stash sélectionné (appliquer + supprimer).
+    StashPop,
+    /// Supprimer le stash sélectionné.
+    StashDrop,
+    /// Créer un nouveau stash (ouvre input).
+    StashSave,
+    /// Confirmer l'input.
+    ConfirmInput,
+    /// Annuler l'input.
+    CancelInput,
 }
 
 /// Mode d'affichage actif.
@@ -156,6 +180,68 @@ impl Default for StagingState {
     }
 }
 
+/// Section active dans la vue branches.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BranchesSection {
+    Branches,
+    Worktrees,
+    Stashes,
+}
+
+/// Panneau focalisé dans la vue branches.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BranchesFocus {
+    List,
+    Detail,
+    Input,
+}
+
+/// Action d'input en cours.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputAction {
+    CreateBranch,
+    CreateWorktree,
+    RenameBranch,
+    SaveStash,
+}
+
+/// État de la vue branches/worktree/stash.
+pub struct BranchesViewState {
+    pub section: BranchesSection,
+    pub focus: BranchesFocus,
+    pub local_branches: Vec<BranchInfo>,
+    pub remote_branches: Vec<BranchInfo>,
+    pub branch_selected: usize,
+    pub show_remote: bool,
+    pub worktrees: Vec<crate::git::worktree::WorktreeInfo>,
+    pub worktree_selected: usize,
+    pub stashes: Vec<crate::git::stash::StashEntry>,
+    pub stash_selected: usize,
+    pub input_text: String,
+    pub input_cursor: usize,
+    pub input_action: Option<InputAction>,
+}
+
+impl Default for BranchesViewState {
+    fn default() -> Self {
+        Self {
+            section: BranchesSection::Branches,
+            focus: BranchesFocus::List,
+            local_branches: Vec::new(),
+            remote_branches: Vec::new(),
+            branch_selected: 0,
+            show_remote: false,
+            worktrees: Vec::new(),
+            worktree_selected: 0,
+            stashes: Vec::new(),
+            stash_selected: 0,
+            input_text: String::new(),
+            input_cursor: 0,
+            input_action: None,
+        }
+    }
+}
+
 /// État principal de l'application.
 pub struct App {
     pub repo: GitRepo,
@@ -182,6 +268,8 @@ pub struct App {
     pub diff_scroll_offset: usize,
     /// État de la vue staging.
     pub staging_state: StagingState,
+    /// État de la vue branches.
+    pub branches_view_state: BranchesViewState,
 }
 
 impl App {
@@ -211,6 +299,7 @@ impl App {
             selected_file_diff: None,
             diff_scroll_offset: 0,
             staging_state: StagingState::default(),
+            branches_view_state: BranchesViewState::default(),
         };
         app.refresh()?;
         Ok(app)
@@ -500,7 +589,7 @@ impl App {
             }
             AppAction::SwitchToBranches => {
                 self.view_mode = ViewMode::Branches;
-                // TODO: implémenter la vue branches
+                self.refresh_branches_view()?;
             }
             // Actions de staging
             AppAction::StageFile => {
@@ -613,6 +702,223 @@ impl App {
                     self.staging_state.cursor_position += 1;
                 }
             }
+            // Actions de la vue Branches
+            AppAction::NextSection => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.section = match self.branches_view_state.section {
+                        BranchesSection::Branches => BranchesSection::Worktrees,
+                        BranchesSection::Worktrees => BranchesSection::Stashes,
+                        BranchesSection::Stashes => BranchesSection::Branches,
+                    };
+                }
+            }
+            AppAction::PrevSection => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.section = match self.branches_view_state.section {
+                        BranchesSection::Branches => BranchesSection::Stashes,
+                        BranchesSection::Worktrees => BranchesSection::Branches,
+                        BranchesSection::Stashes => BranchesSection::Worktrees,
+                    };
+                }
+            }
+            AppAction::BranchRename => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.focus = BranchesFocus::Input;
+                    self.branches_view_state.input_action = Some(InputAction::RenameBranch);
+                    self.branches_view_state.input_text.clear();
+                    self.branches_view_state.input_cursor = 0;
+                }
+            }
+            AppAction::ToggleRemoteBranches => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.show_remote = !self.branches_view_state.show_remote;
+                }
+            }
+            AppAction::WorktreeCreate => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.focus = BranchesFocus::Input;
+                    self.branches_view_state.input_action = Some(InputAction::CreateWorktree);
+                    self.branches_view_state.input_text.clear();
+                    self.branches_view_state.input_cursor = 0;
+                }
+            }
+            AppAction::WorktreeRemove => {
+                if self.view_mode == ViewMode::Branches {
+                    if let Some(worktree) = self
+                        .branches_view_state
+                        .worktrees
+                        .get(self.branches_view_state.worktree_selected)
+                    {
+                        if !worktree.is_main {
+                            let name = worktree.name.clone();
+                            if let Err(e) = self.repo.remove_worktree(&name) {
+                                self.set_flash_message(format!("Erreur: {}", e));
+                            } else {
+                                self.set_flash_message(format!("Worktree '{}' supprimé", name));
+                                self.refresh_branches_view()?;
+                            }
+                        } else {
+                            self.set_flash_message(
+                                "Impossible de supprimer le worktree principal".into(),
+                            );
+                        }
+                    }
+                }
+            }
+            AppAction::StashApply => {
+                if self.view_mode == ViewMode::Branches {
+                    if let Some(stash) = self
+                        .branches_view_state
+                        .stashes
+                        .get(self.branches_view_state.stash_selected)
+                    {
+                        let idx = stash.index;
+                        if let Err(e) = crate::git::stash::apply_stash(&mut self.repo.repo, idx) {
+                            self.set_flash_message(format!("Erreur: {}", e));
+                        } else {
+                            self.set_flash_message(format!("Stash @{{{}}} appliqué", idx));
+                            self.refresh_branches_view()?;
+                        }
+                    }
+                }
+            }
+            AppAction::StashPop => {
+                if self.view_mode == ViewMode::Branches {
+                    if let Some(stash) = self
+                        .branches_view_state
+                        .stashes
+                        .get(self.branches_view_state.stash_selected)
+                    {
+                        let idx = stash.index;
+                        if let Err(e) = crate::git::stash::pop_stash(&mut self.repo.repo, idx) {
+                            self.set_flash_message(format!("Erreur: {}", e));
+                        } else {
+                            self.set_flash_message(format!(
+                                "Stash @{{{}}} appliqué et supprimé",
+                                idx
+                            ));
+                            self.refresh_branches_view()?;
+                        }
+                    }
+                }
+            }
+            AppAction::StashDrop => {
+                if self.view_mode == ViewMode::Branches {
+                    if let Some(stash) = self
+                        .branches_view_state
+                        .stashes
+                        .get(self.branches_view_state.stash_selected)
+                    {
+                        let idx = stash.index;
+                        if let Err(e) = crate::git::stash::drop_stash(&mut self.repo.repo, idx) {
+                            self.set_flash_message(format!("Erreur: {}", e));
+                        } else {
+                            self.set_flash_message(format!("Stash @{{{}}} supprimé", idx));
+                            self.refresh_branches_view()?;
+                        }
+                    }
+                }
+            }
+            AppAction::StashSave => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.focus = BranchesFocus::Input;
+                    self.branches_view_state.input_action = Some(InputAction::SaveStash);
+                    self.branches_view_state.input_text.clear();
+                    self.branches_view_state.input_cursor = 0;
+                }
+            }
+            AppAction::ConfirmInput => {
+                if self.view_mode == ViewMode::Branches
+                    && self.branches_view_state.focus == BranchesFocus::Input
+                {
+                    match self.branches_view_state.input_action.take() {
+                        Some(InputAction::CreateBranch) => {
+                            let name = self.branches_view_state.input_text.clone();
+                            if !name.is_empty() {
+                                if let Err(e) =
+                                    crate::git::branch::create_branch(&self.repo.repo, &name)
+                                {
+                                    self.set_flash_message(format!("Erreur: {}", e));
+                                } else {
+                                    self.set_flash_message(format!("Branche '{}' créée", name));
+                                    self.refresh_branches_view()?;
+                                }
+                            }
+                        }
+                        Some(InputAction::RenameBranch) => {
+                            if let Some(branch) = self
+                                .branches_view_state
+                                .local_branches
+                                .get(self.branches_view_state.branch_selected)
+                            {
+                                let old_name = branch.name.clone();
+                                let new_name = self.branches_view_state.input_text.clone();
+                                if !new_name.is_empty() && new_name != old_name {
+                                    if let Err(e) = crate::git::branch::rename_branch(
+                                        &self.repo.repo,
+                                        &old_name,
+                                        &new_name,
+                                    ) {
+                                        self.set_flash_message(format!("Erreur: {}", e));
+                                    } else {
+                                        self.set_flash_message(format!(
+                                            "Branche '{}' renommée en '{}'",
+                                            old_name, new_name
+                                        ));
+                                        self.refresh_branches_view()?;
+                                    }
+                                }
+                            }
+                        }
+                        Some(InputAction::CreateWorktree) => {
+                            let input = self.branches_view_state.input_text.clone();
+                            // Format attendu: "nom chemin [branche]"
+                            let parts: Vec<&str> = input.split_whitespace().collect();
+                            if parts.len() >= 2 {
+                                let name = parts[0];
+                                let path = parts[1];
+                                let branch = parts.get(2).map(|s| *s);
+                                if let Err(e) = self.repo.create_worktree(name, path, branch) {
+                                    self.set_flash_message(format!("Erreur: {}", e));
+                                } else {
+                                    self.set_flash_message(format!("Worktree '{}' créé", name));
+                                    self.refresh_branches_view()?;
+                                }
+                            } else {
+                                self.set_flash_message("Format: nom chemin [branche]".into());
+                            }
+                        }
+                        Some(InputAction::SaveStash) => {
+                            let msg = self.branches_view_state.input_text.clone();
+                            let msg_opt = if msg.is_empty() {
+                                None
+                            } else {
+                                Some(msg.as_str())
+                            };
+                            if let Err(e) =
+                                crate::git::stash::save_stash(&mut self.repo.repo, msg_opt)
+                            {
+                                self.set_flash_message(format!("Erreur: {}", e));
+                            } else {
+                                self.set_flash_message("Stash sauvegardé".into());
+                                self.refresh_branches_view()?;
+                            }
+                        }
+                        _ => {}
+                    }
+                    self.branches_view_state.focus = BranchesFocus::List;
+                    self.branches_view_state.input_text.clear();
+                    self.branches_view_state.input_cursor = 0;
+                }
+            }
+            AppAction::CancelInput => {
+                if self.view_mode == ViewMode::Branches {
+                    self.branches_view_state.focus = BranchesFocus::List;
+                    self.branches_view_state.input_action = None;
+                    self.branches_view_state.input_text.clear();
+                    self.branches_view_state.input_cursor = 0;
+                }
+            }
             // Les prompts seront implémentés dans les prochaines itérations.
             AppAction::CommitPrompt | AppAction::StashPrompt | AppAction::MergePrompt => {
                 // TODO: implémenter les modales/prompts interactifs.
@@ -660,6 +966,37 @@ impl App {
         }
     }
 
+    /// Rafraîchit l'état de la vue branches.
+    fn refresh_branches_view(&mut self) -> Result<()> {
+        let (local_branches, remote_branches) =
+            crate::git::branch::list_all_branches(&self.repo.repo)?;
+
+        self.branches_view_state.local_branches = local_branches;
+        self.branches_view_state.remote_branches = remote_branches;
+        self.branches_view_state.worktrees = self.repo.worktrees().unwrap_or_default();
+        self.branches_view_state.stashes = self.repo.stashes().unwrap_or_default();
+
+        // Réajuster les sélections.
+        if self.branches_view_state.branch_selected >= self.branches_view_state.local_branches.len()
+        {
+            self.branches_view_state.branch_selected = self
+                .branches_view_state
+                .local_branches
+                .len()
+                .saturating_sub(1);
+        }
+        if self.branches_view_state.worktree_selected >= self.branches_view_state.worktrees.len() {
+            self.branches_view_state.worktree_selected =
+                self.branches_view_state.worktrees.len().saturating_sub(1);
+        }
+        if self.branches_view_state.stash_selected >= self.branches_view_state.stashes.len() {
+            self.branches_view_state.stash_selected =
+                self.branches_view_state.stashes.len().saturating_sub(1);
+        }
+
+        Ok(())
+    }
+
     /// Lance la boucle événementielle principale de l'application.
     pub fn run(&mut self) -> Result<()> {
         let mut terminal = setup_terminal()?;
@@ -695,6 +1032,7 @@ impl App {
                     self.selected_file_diff.as_ref(),
                     self.diff_scroll_offset,
                     &self.staging_state,
+                    &self.branches_view_state,
                 );
             })?;
 

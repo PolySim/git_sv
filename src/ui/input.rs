@@ -1,7 +1,9 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use crate::app::{App, AppAction, FocusPanel, StagingFocus, ViewMode};
+use crate::app::{
+    App, AppAction, BranchesFocus, BranchesSection, FocusPanel, StagingFocus, ViewMode,
+};
 
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(app: &App) -> std::io::Result<Option<AppAction>> {
@@ -31,6 +33,11 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     // Si on est en mode Staging, utiliser les keybindings spécifiques
     if app.view_mode == ViewMode::Staging {
         return map_staging_key(key, app);
+    }
+
+    // Si on est en mode Branches, utiliser les keybindings spécifiques
+    if app.view_mode == ViewMode::Branches {
+        return map_branches_key(key, app);
     }
 
     // Ctrl+d / Ctrl+u pour page down/up
@@ -126,6 +133,63 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
         KeyCode::Tab => Some(AppAction::SwitchBottomMode),
 
         _ => None,
+    }
+}
+
+/// Mappe les touches pour la vue branches.
+fn map_branches_key(key: KeyEvent, app: &App) -> Option<AppAction> {
+    // Si on est en mode Input.
+    if app.branches_view_state.focus == BranchesFocus::Input {
+        return match key.code {
+            KeyCode::Enter => Some(AppAction::ConfirmInput),
+            KeyCode::Esc => Some(AppAction::CancelInput),
+            KeyCode::Char(c) => Some(AppAction::InsertChar(c)),
+            KeyCode::Backspace => Some(AppAction::DeleteChar),
+            KeyCode::Left => Some(AppAction::MoveCursorLeft),
+            KeyCode::Right => Some(AppAction::MoveCursorRight),
+            _ => None,
+        };
+    }
+
+    // Navigation globale.
+    match key.code {
+        KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
+        KeyCode::Char('2') => return Some(AppAction::SwitchToStaging),
+        KeyCode::Tab => return Some(AppAction::NextSection),
+        KeyCode::BackTab => return Some(AppAction::PrevSection),
+        KeyCode::Char('q') => return Some(AppAction::Quit),
+        KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
+        _ => {}
+    }
+
+    // Actions par section.
+    match app.branches_view_state.section {
+        BranchesSection::Branches => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Enter => Some(AppAction::BranchCheckout),
+            KeyCode::Char('n') => Some(AppAction::BranchCreate),
+            KeyCode::Char('d') => Some(AppAction::BranchDelete),
+            KeyCode::Char('r') => Some(AppAction::BranchRename),
+            KeyCode::Char('R') => Some(AppAction::ToggleRemoteBranches),
+            _ => None,
+        },
+        BranchesSection::Worktrees => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Char('n') => Some(AppAction::WorktreeCreate),
+            KeyCode::Char('d') => Some(AppAction::WorktreeRemove),
+            _ => None,
+        },
+        BranchesSection::Stashes => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Char('a') => Some(AppAction::StashApply),
+            KeyCode::Char('p') => Some(AppAction::StashPop),
+            KeyCode::Char('d') => Some(AppAction::StashDrop),
+            KeyCode::Char('s') => Some(AppAction::StashSave),
+            _ => None,
+        },
     }
 }
 

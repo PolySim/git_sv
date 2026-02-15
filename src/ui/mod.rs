@@ -1,4 +1,6 @@
 pub mod branch_panel;
+pub mod branches_layout;
+pub mod branches_view;
 pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;
@@ -11,7 +13,7 @@ pub mod staging_layout;
 pub mod staging_view;
 pub mod status_bar;
 
-use crate::app::{FocusPanel, StagingState, ViewMode};
+use crate::app::{BranchesViewState, FocusPanel, StagingState, ViewMode};
 use crate::git::diff::FileDiff;
 use ratatui::widgets::ListState;
 use ratatui::Frame;
@@ -38,6 +40,7 @@ pub fn render(
     selected_file_diff: Option<&FileDiff>,
     diff_scroll_offset: usize,
     staging_state: &StagingState,
+    branches_view_state: &BranchesViewState,
 ) {
     // Dispatcher le rendu selon le mode de vue
     match view_mode {
@@ -94,25 +97,12 @@ pub fn render(
             help_overlay::render(frame, frame.area());
         }
         ViewMode::Branches => {
-            // TODO: Vue branches (STEP 4)
-            render_graph_view(
+            branches_view::render(
                 frame,
-                graph,
+                branches_view_state,
                 current_branch,
-                commit_files,
-                status_entries,
-                branches,
-                selected_index,
-                branch_selected,
-                bottom_left_mode,
-                focus,
-                graph_state,
-                show_branch_panel,
                 repo_path,
                 flash_message,
-                file_selected_index,
-                selected_file_diff,
-                diff_scroll_offset,
             );
         }
     }

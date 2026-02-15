@@ -5,5 +5,6 @@ pub mod graph;
 pub mod merge;
 pub mod repo;
 pub mod stash;
+pub mod worktree;
 
 pub use repo::GitRepo;
