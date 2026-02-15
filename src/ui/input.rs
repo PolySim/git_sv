@@ -7,7 +7,15 @@ use crate::state::{
 
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
-    if event::poll(Duration::from_millis(100))? {
+    handle_input_with_timeout(state, 100)
+}
+
+/// Poll un événement clavier avec un timeout configurable.
+pub fn handle_input_with_timeout(
+    state: &AppState,
+    timeout_ms: u64,
+) -> std::io::Result<Option<AppAction>> {
+    if event::poll(Duration::from_millis(timeout_ms))? {
         if let Event::Key(key) = event::read()? {
             return Ok(map_key(key, state));
         }

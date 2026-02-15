@@ -5,6 +5,7 @@ use crate::git::repo::{GitRepo, StatusEntry};
 use crate::git::stash::StashEntry;
 use crate::git::worktree::WorktreeInfo;
 use ratatui::widgets::ListState;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Nombre maximum de commits à charger.
@@ -259,6 +260,93 @@ pub struct AppState {
     pub diff_scroll_offset: usize,
     pub staging_state: StagingState,
     pub branches_view_state: BranchesViewState,
+    /// Flag indiquant si les données ont changé et nécessitent un rafraîchissement.
+    pub dirty: bool,
+    /// Cache pour les diffs de fichiers (LRU simple).
+    pub diff_cache: DiffCache,
+}
+
+/// Cache LRU simple pour les diffs de fichiers.
+/// Clé: (Oid du commit, chemin du fichier)
+/// Valeur: FileDiff
+pub struct DiffCache {
+    cache: std::collections::HashMap<(git2::Oid, String), crate::git::diff::FileDiff>,
+    /// Ordre d'accès pour LRU (dernier = plus récent).
+    access_order: Vec<(git2::Oid, String)>,
+    /// Taille maximale du cache.
+    max_size: usize,
+}
+
+impl DiffCache {
+    /// Crée un nouveau cache avec une taille maximale.
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            cache: std::collections::HashMap::new(),
+            access_order: Vec::new(),
+            max_size,
+        }
+    }
+
+    /// Récupère un diff du cache.
+    pub fn get(&mut self, key: &(git2::Oid, String)) -> Option<&crate::git::diff::FileDiff> {
+        if self.cache.contains_key(key) {
+            // Mettre à jour l'ordre d'accès (LRU)
+            if let Some(pos) = self.access_order.iter().position(|k| k == key) {
+                let key = self.access_order.remove(pos);
+                self.access_order.push(key);
+            }
+            self.cache.get(key)
+        } else {
+            None
+        }
+    }
+
+    /// Insère un diff dans le cache.
+    pub fn insert(&mut self, key: (git2::Oid, String), value: crate::git::diff::FileDiff) {
+        // Si la clé existe déjà, mettre à jour juste la valeur
+        if self.cache.contains_key(&key) {
+            self.cache.insert(key.clone(), value);
+            // Mettre à jour l'ordre d'accès
+            if let Some(pos) = self.access_order.iter().position(|k| k == &key) {
+                let key = self.access_order.remove(pos);
+                self.access_order.push(key);
+            }
+            return;
+        }
+
+        // Éviction LRU si nécessaire
+        if self.cache.len() >= self.max_size && !self.access_order.is_empty() {
+            if let Some(oldest) = self.access_order.first().cloned() {
+                self.cache.remove(&oldest);
+                self.access_order.remove(0);
+            }
+        }
+
+        self.cache.insert(key.clone(), value);
+        self.access_order.push(key);
+    }
+
+    /// Vide le cache.
+    pub fn clear(&mut self) {
+        self.cache.clear();
+        self.access_order.clear();
+    }
+
+    /// Supprime les entrées du working directory (Oid::zero()).
+    pub fn clear_working_directory(&mut self) {
+        let to_remove: Vec<_> = self
+            .cache
+            .keys()
+            .filter(|(oid, _)| *oid == git2::Oid::zero())
+            .cloned()
+            .collect();
+        for key in to_remove {
+            self.cache.remove(&key);
+            if let Some(pos) = self.access_order.iter().position(|k| k == &key) {
+                self.access_order.remove(pos);
+            }
+        }
+    }
 }
 
 impl AppState {
@@ -289,9 +377,25 @@ impl AppState {
             diff_scroll_offset: 0,
             staging_state: StagingState::default(),
             branches_view_state: BranchesViewState::default(),
+            dirty: true,                    // Initialement dirty pour charger les données
+            diff_cache: DiffCache::new(50), // Cache de 50 diffs
         };
 
         Ok(state)
+    }
+
+    /// Marque l'état comme modifié (dirty).
+    /// Vide aussi le cache des diffs du working directory car les opérations git peuvent les invalider.
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+        // Vider le cache des diffs du working directory car ils peuvent être invalidés
+        // Les diffs de commits historiques peuvent rester en cache
+        self.diff_cache.clear_working_directory();
+    }
+
+    /// Marque l'état comme à jour (not dirty).
+    pub fn clear_dirty(&mut self) {
+        self.dirty = false;
     }
 
     /// Définit un message flash qui s'affichera pendant 3 secondes.

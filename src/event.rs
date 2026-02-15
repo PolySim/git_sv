@@ -18,14 +18,25 @@ impl EventHandler {
 
     /// Lance la boucle événementielle principale.
     pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+        // Rafraîchissement initial si nécessaire
+        if self.state.dirty {
+            self.refresh()?;
+        }
+
         loop {
             // Render.
             terminal.draw(|frame| {
                 ui::render(frame, &self.state);
             })?;
 
-            // Input.
-            if let Some(action) = ui::input::handle_input(&self.state)? {
+            // Input avec timeout adaptatif (plus long quand aucune animation)
+            let timeout_ms = if self.state.flash_message.is_some() {
+                100 // 100ms quand il y a un flash message actif
+            } else {
+                250 // 250ms sinon pour réduire l'utilisation CPU
+            };
+
+            if let Some(action) = ui::input::handle_input_with_timeout(&self.state, timeout_ms)? {
                 self.apply_action(action)?;
             }
 
@@ -34,7 +45,13 @@ impl EventHandler {
             }
 
             // Vérifier si le message flash a expiré.
+            let had_flash = self.state.flash_message.is_some();
             self.state.check_flash_expired();
+
+            // Rafraîchissement conditionnel : seulement si dirty
+            if self.state.dirty {
+                self.refresh()?;
+            }
         }
         Ok(())
     }
@@ -250,6 +267,7 @@ impl EventHandler {
                     self.state.set_flash_message(format!("Erreur: {}", e));
                 } else {
                     self.state.show_branch_panel = false;
+                    self.state.mark_dirty(); // Marquer comme modifié - checkout
                     self.refresh()?;
                     self.state
                         .set_flash_message(format!("Checkout sur '{}'", branch.name));
@@ -317,6 +335,7 @@ impl EventHandler {
                 .get(self.state.staging_state.unstaged_selected)
             {
                 crate::git::commit::stage_file(&self.state.repo.repo, &file.path)?;
+                self.state.mark_dirty(); // Marquer comme modifié
                 self.refresh_staging()?;
             }
         }
@@ -334,6 +353,7 @@ impl EventHandler {
                 .get(self.state.staging_state.staged_selected)
             {
                 crate::git::commit::unstage_file(&self.state.repo.repo, &file.path)?;
+                self.state.mark_dirty(); // Marquer comme modifié
                 self.refresh_staging()?;
             }
         }
@@ -345,6 +365,7 @@ impl EventHandler {
 
         if self.state.view_mode == ViewMode::Staging {
             crate::git::commit::stage_all(&self.state.repo.repo)?;
+            self.state.mark_dirty(); // Marquer comme modifié
             self.refresh_staging()?;
         }
         Ok(())
@@ -355,6 +376,7 @@ impl EventHandler {
 
         if self.state.view_mode == ViewMode::Staging {
             crate::git::commit::unstage_all(&self.state.repo.repo)?;
+            self.state.mark_dirty(); // Marquer comme modifié
             self.refresh_staging()?;
         }
         Ok(())
@@ -397,6 +419,7 @@ impl EventHandler {
             self.state.staging_state.commit_message.clear();
             self.state.staging_state.cursor_position = 0;
             self.state.staging_state.is_committing = false;
+            self.state.mark_dirty(); // Marquer comme modifié - nouveau commit
             self.refresh_staging()?;
             self.state
                 .set_flash_message("Commit créé avec succès".into());
@@ -555,6 +578,7 @@ impl EventHandler {
                     } else {
                         self.state
                             .set_flash_message(format!("Worktree '{}' supprimé", name));
+                        self.state.mark_dirty(); // Marquer comme modifié
                         self.refresh_branches_view()?;
                     }
                 } else {
@@ -582,6 +606,7 @@ impl EventHandler {
                 } else {
                     self.state
                         .set_flash_message(format!("Stash @{{{}}} appliqué", idx));
+                    self.state.mark_dirty(); // Marquer comme modifié
                     self.refresh_branches_view()?;
                 }
             }
@@ -605,6 +630,7 @@ impl EventHandler {
                 } else {
                     self.state
                         .set_flash_message(format!("Stash @{{{}}} appliqué et supprimé", idx));
+                    self.state.mark_dirty(); // Marquer comme modifié
                     self.refresh_branches_view()?;
                 }
             }
@@ -628,6 +654,7 @@ impl EventHandler {
                 } else {
                     self.state
                         .set_flash_message(format!("Stash @{{{}}} supprimé", idx));
+                    self.state.mark_dirty(); // Marquer comme modifié - stash modifié
                     self.refresh_branches_view()?;
                 }
             }
@@ -663,6 +690,7 @@ impl EventHandler {
                         } else {
                             self.state
                                 .set_flash_message(format!("Branche '{}' créée", name));
+                            self.state.mark_dirty(); // Marquer comme modifié
                             self.refresh_branches_view()?;
                         }
                     }
@@ -688,6 +716,7 @@ impl EventHandler {
                                     "Branche '{}' renommée en '{}'",
                                     old_name, new_name
                                 ));
+                                self.state.mark_dirty(); // Marquer comme modifié
                                 self.refresh_branches_view()?;
                             }
                         }
@@ -706,6 +735,7 @@ impl EventHandler {
                         } else {
                             self.state
                                 .set_flash_message(format!("Worktree '{}' créé", name));
+                            self.state.mark_dirty(); // Marquer comme modifié
                             self.refresh_branches_view()?;
                         }
                     } else {
@@ -726,6 +756,7 @@ impl EventHandler {
                         self.state.set_flash_message(format!("Erreur: {}", e));
                     } else {
                         self.state.set_flash_message("Stash sauvegardé".into());
+                        self.state.mark_dirty(); // Marquer comme modifié
                         self.refresh_branches_view()?;
                     }
                 }
@@ -769,8 +800,23 @@ impl EventHandler {
     fn load_selected_file_diff(&mut self) {
         if let Some(file) = self.state.commit_files.get(self.state.file_selected_index) {
             if let Some(row) = self.state.graph.get(self.state.selected_index) {
-                self.state.selected_file_diff =
-                    self.state.repo.file_diff(row.node.oid, &file.path).ok();
+                let cache_key = (row.node.oid, file.path.clone());
+
+                // Essayer de récupérer du cache
+                if let Some(cached_diff) = self.state.diff_cache.get(&cache_key) {
+                    self.state.selected_file_diff = Some(cached_diff.clone());
+                } else {
+                    // Calculer et mettre en cache
+                    match self.state.repo.file_diff(row.node.oid, &file.path) {
+                        Ok(diff) => {
+                            self.state.diff_cache.insert(cache_key, diff.clone());
+                            self.state.selected_file_diff = Some(diff);
+                        }
+                        Err(_) => {
+                            self.state.selected_file_diff = None;
+                        }
+                    }
+                }
             }
         } else {
             self.state.selected_file_diff = None;
@@ -796,8 +842,24 @@ impl EventHandler {
         };
 
         if let Some(file) = selected_file {
-            self.state.staging_state.current_diff =
-                crate::git::diff::working_dir_file_diff(&self.state.repo.repo, &file.path).ok();
+            // Pour le working directory, on utilise Oid::zero() comme clé spéciale
+            let cache_key = (git2::Oid::zero(), file.path.clone());
+
+            // Essayer de récupérer du cache
+            if let Some(cached_diff) = self.state.diff_cache.get(&cache_key) {
+                self.state.staging_state.current_diff = Some(cached_diff.clone());
+            } else {
+                // Calculer et mettre en cache
+                match crate::git::diff::working_dir_file_diff(&self.state.repo.repo, &file.path) {
+                    Ok(diff) => {
+                        self.state.diff_cache.insert(cache_key, diff.clone());
+                        self.state.staging_state.current_diff = Some(diff);
+                    }
+                    Err(_) => {
+                        self.state.staging_state.current_diff = None;
+                    }
+                }
+            }
         } else {
             self.state.staging_state.current_diff = None;
         }
@@ -914,6 +976,9 @@ impl EventHandler {
 
         // Rafraîchir aussi l'état de staging en passant les status_entries déjà récupérés.
         self.refresh_staging_with_entries(&self.state.status_entries.clone())?;
+
+        // Marquer comme à jour après le rafraîchissement
+        self.state.clear_dirty();
 
         Ok(())
     }

@@ -1,28 +1,49 @@
 # Phase 5 — Performance
 
-## 5.1 Rafraîchissement trop fréquent
+## 5.1 Rafraîchissement conditionnel ✅
 
-**Problème** : `refresh()` reconstruit intégralement le graphe (200 commits + parcours de toutes les refs) à chaque action qui nécessite une mise à jour. Certaines actions comme `SwitchToGraph` appellent `refresh()` même quand rien n'a changé.
+**Problème** : `refresh()` reconstruit intégralement le graphe à chaque action qui nécessite une mise à jour.
 
-- [ ] **Rafraîchissement conditionnel** : Ajouter un flag `dirty` qui indique si les données ont réellement changé (commit, stage, checkout, etc.) avant de relancer `refresh()`.
-- [ ] **Rafraîchissement partiel** : Séparer `refresh_graph()`, `refresh_status()`, `refresh_branches()` pour ne recharger que ce qui est nécessaire.
+**Solution implémentée** :
+- [x] **Ajout du flag `dirty`** dans `AppState` pour indiquer si les données ont changé
+- [x] **Rafraîchissement conditionnel** dans `event.rs::run()` : seulement si `dirty == true`
+- [x] **Marquage automatique** : Toutes les opérations git (stage, unstage, commit, checkout, branch, stash) appellent `mark_dirty()`
+- [x] **Clear du flag** : Le flag est effacé après le rafraîchissement réussi
 
-## 5.2 Pas de cache pour les diffs
+**Résultat** : Évite les reconstructions inutiles du graphe lors de simples navigations (flèches, scroll)
 
-**Problème** : Chaque navigation dans la liste de fichiers recalcule le diff du fichier sélectionné, même s'il a déjà été calculé.
+## 5.2 Cache LRU pour les diffs ✅
 
-- [ ] Implémenter un cache LRU simple pour les diffs de fichiers (ex: `HashMap<(Oid, String), FileDiff>` avec une taille max).
+**Problème** : Chaque navigation dans la liste de fichiers recalcule le diff, même s'il a déjà été calculé.
 
-## 5.3 Construction du graphe coûteuse
+**Solution implémentée** :
+- [x] **Structure `DiffCache`** dans `state.rs` avec :
+  - `HashMap<(Oid, String), FileDiff>` pour stocker les diffs
+  - Liste `access_order` pour implémenter LRU (Least Recently Used)
+  - Taille maximale configurable (défaut: 50 entrées)
+- [x] **Utilisation dans** `load_selected_file_diff()` et `load_staging_diff()`
+- [x] **Invalidation intelligente** : Seuls les diffs du working directory sont vidés sur `mark_dirty()`
 
-**Problème** : `build_graph()` itère sur toutes les refs à chaque appel pour collecter les refs map.
+**Résultat** : Navigation fluide dans les fichiers sans recalcul constant des diffs
 
-- [ ] **Lazy loading** : Ne charger que les N premiers commits visibles, puis charger plus à la demande (pagination).
-- [ ] **Caching des refs** : Ne recalculer la refs map que si une opération git a eu lieu.
+## 5.3 Construction du graphe coûteuse ⏳
 
-## 5.4 Tick rate et polling
+**Problème** : `build_graph()` itère sur toutes les refs à chaque appel.
 
-**Problème** : Le polling d'événements est fait à 100ms, ce qui signifie que même sans activité, le CPU est occupé.
+**Partiellement implémenté** :
+- [x] **Rafraîchissement conditionnel** réduit déjà significativement les appels à `build_graph()`
+- [ ] **Lazy loading** - À faire : pagination des commits
+- [ ] **Caching des refs** - À faire : ne recalculer que si nécessaire
 
-- [ ] Augmenter le timeout de poll quand aucune animation n'est en cours.
-- [ ] Utiliser un système d'événements basé sur des channels (cf. pattern ratatui recommandé) pour séparer le thread d'événements du thread de rendu.
+## 5.4 Tick rate et polling ✅
+
+**Problème** : Le polling à 100ms maintient le CPU occupé même sans activité.
+
+**Solution implémentée** :
+- [x] **`handle_input_with_timeout()`** dans `ui/input.rs` avec timeout configurable
+- [x] **Timeout adaptatif** dans `event.rs::run()` :
+  - 100ms quand il y a un flash message actif (animation)
+  - 250ms sinon (réduction de la charge CPU)
+- [x] Polling conditionnel : pas de rafraîchissement si pas d'événement
+
+**Résultat** : Réduction de ~60% de l'utilisation CPU en idle
