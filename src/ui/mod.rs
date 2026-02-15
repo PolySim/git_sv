@@ -7,9 +7,11 @@ pub mod help_bar;
 pub mod help_overlay;
 pub mod input;
 pub mod layout;
+pub mod staging_layout;
+pub mod staging_view;
 pub mod status_bar;
 
-use crate::app::{FocusPanel, ViewMode};
+use crate::app::{FocusPanel, StagingState, ViewMode};
 use crate::git::diff::FileDiff;
 use ratatui::widgets::ListState;
 use ratatui::Frame;
@@ -29,6 +31,107 @@ pub fn render(
     focus: crate::app::FocusPanel,
     graph_state: &mut ListState,
     view_mode: crate::app::ViewMode,
+    show_branch_panel: bool,
+    repo_path: &str,
+    flash_message: Option<&str>,
+    file_selected_index: usize,
+    selected_file_diff: Option<&FileDiff>,
+    diff_scroll_offset: usize,
+    staging_state: &StagingState,
+) {
+    // Dispatcher le rendu selon le mode de vue
+    match view_mode {
+        ViewMode::Graph => {
+            render_graph_view(
+                frame,
+                graph,
+                current_branch,
+                commit_files,
+                status_entries,
+                branches,
+                selected_index,
+                branch_selected,
+                bottom_left_mode,
+                focus,
+                graph_state,
+                show_branch_panel,
+                repo_path,
+                flash_message,
+                file_selected_index,
+                selected_file_diff,
+                diff_scroll_offset,
+            );
+        }
+        ViewMode::Staging => {
+            staging_view::render(
+                frame,
+                staging_state,
+                current_branch,
+                repo_path,
+                flash_message,
+            );
+        }
+        ViewMode::Help => {
+            render_graph_view(
+                frame,
+                graph,
+                current_branch,
+                commit_files,
+                status_entries,
+                branches,
+                selected_index,
+                branch_selected,
+                bottom_left_mode,
+                focus,
+                graph_state,
+                show_branch_panel,
+                repo_path,
+                flash_message,
+                file_selected_index,
+                selected_file_diff,
+                diff_scroll_offset,
+            );
+            help_overlay::render(frame, frame.area());
+        }
+        ViewMode::Branches => {
+            // TODO: Vue branches (STEP 4)
+            render_graph_view(
+                frame,
+                graph,
+                current_branch,
+                commit_files,
+                status_entries,
+                branches,
+                selected_index,
+                branch_selected,
+                bottom_left_mode,
+                focus,
+                graph_state,
+                show_branch_panel,
+                repo_path,
+                flash_message,
+                file_selected_index,
+                selected_file_diff,
+                diff_scroll_offset,
+            );
+        }
+    }
+}
+
+/// Rend la vue Graph (vue principale).
+#[allow(clippy::too_many_arguments)]
+fn render_graph_view(
+    frame: &mut Frame,
+    graph: &[crate::git::graph::GraphRow],
+    current_branch: &Option<String>,
+    commit_files: &[crate::git::diff::DiffFile],
+    status_entries: &[crate::git::repo::StatusEntry],
+    branches: &[crate::git::branch::BranchInfo],
+    selected_index: usize,
+    branch_selected: usize,
+    bottom_left_mode: crate::app::BottomLeftMode,
+    focus: crate::app::FocusPanel,
+    graph_state: &mut ListState,
     show_branch_panel: bool,
     repo_path: &str,
     flash_message: Option<&str>,
@@ -113,11 +216,6 @@ pub fn render(
         bottom_left_mode,
         layout.help_bar,
     );
-
-    // Overlay d'aide (si actif).
-    if view_mode == ViewMode::Help {
-        help_overlay::render(frame, frame.area());
-    }
 
     // Panneau de branches (si actif).
     if show_branch_panel {

@@ -78,3 +78,21 @@ pub fn stage_all(repo: &Repository) -> Result<()> {
     index.write()?;
     Ok(())
 }
+
+/// Unstage un fichier (le retirer de l'index, revenir à HEAD).
+pub fn unstage_file(repo: &Repository, path: &str) -> Result<()> {
+    let head = repo.head()?;
+    let head_commit = head.peel_to_commit()?;
+
+    // Réinitialiser ce fichier dans l'index depuis HEAD.
+    repo.reset_default(Some(&head_commit.as_object()), [path])?;
+    Ok(())
+}
+
+/// Unstage tous les fichiers.
+pub fn unstage_all(repo: &Repository) -> Result<()> {
+    let head = repo.head()?;
+    let obj = head.peel(git2::ObjectType::Commit)?;
+    repo.reset(&obj, git2::ResetType::Mixed, None)?;
+    Ok(())
+}

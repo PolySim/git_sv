@@ -234,7 +234,7 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
 }
 
 /// Récupère le diff d'un fichier du working directory (non committé).
-pub fn _working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
+pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
     let head = repo.head()?;
     let head_oid = head
         .target()

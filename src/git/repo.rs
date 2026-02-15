@@ -145,4 +145,24 @@ impl StatusEntry {
             "Inconnu"
         }
     }
+
+    /// Retourne true si le fichier est staged (dans l'index).
+    pub fn is_staged(&self) -> bool {
+        self.status.intersects(
+            git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED,
+        )
+    }
+
+    /// Retourne true si le fichier est unstaged (dans le working directory).
+    pub fn is_unstaged(&self) -> bool {
+        self.status.intersects(
+            git2::Status::WT_MODIFIED
+                | git2::Status::WT_DELETED
+                | git2::Status::WT_NEW
+                | git2::Status::WT_RENAMED,
+        )
+    }
 }

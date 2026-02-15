@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use crate::app::{App, AppAction, FocusPanel};
+use crate::app::{App, AppAction, FocusPanel, StagingFocus, ViewMode};
 
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(app: &App) -> std::io::Result<Option<AppAction>> {
@@ -18,6 +18,19 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     // Ctrl+C quitte toujours.
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(AppAction::Quit);
+    }
+
+    // Navigation entre les vues principales (toujours disponible)
+    match key.code {
+        KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
+        KeyCode::Char('2') => return Some(AppAction::SwitchToStaging),
+        KeyCode::Char('3') => return Some(AppAction::SwitchToBranches),
+        _ => {}
+    }
+
+    // Si on est en mode Staging, utiliser les keybindings spécifiques
+    if app.view_mode == ViewMode::Staging {
+        return map_staging_key(key, app);
     }
 
     // Ctrl+d / Ctrl+u pour page down/up
@@ -40,7 +53,7 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     }
 
     // Escape ferme l'overlay d'aide si actif.
-    if key.code == KeyCode::Esc && app.view_mode == crate::app::ViewMode::Help {
+    if key.code == KeyCode::Esc && app.view_mode == ViewMode::Help {
         return Some(AppAction::ToggleHelp);
     }
 
@@ -113,5 +126,54 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
         KeyCode::Tab => Some(AppAction::SwitchBottomMode),
 
         _ => None,
+    }
+}
+
+/// Mappe les touches pour la vue staging.
+fn map_staging_key(key: KeyEvent, app: &App) -> Option<AppAction> {
+    // Touches globales de la vue staging
+    match key.code {
+        KeyCode::Char('q') => return Some(AppAction::Quit),
+        KeyCode::Char('r') => return Some(AppAction::Refresh),
+        KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
+        _ => {}
+    }
+
+    // Navigation selon le focus dans la vue staging
+    match app.staging_state.focus {
+        StagingFocus::Unstaged => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Char('s') | KeyCode::Enter => Some(AppAction::StageFile),
+            KeyCode::Char('a') => Some(AppAction::StageAll),
+            KeyCode::Tab => Some(AppAction::SwitchStagingFocus),
+            KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
+            _ => None,
+        },
+        StagingFocus::Staged => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Char('u') | KeyCode::Enter => Some(AppAction::UnstageFile),
+            KeyCode::Char('U') => Some(AppAction::UnstageAll),
+            KeyCode::Tab => Some(AppAction::SwitchStagingFocus),
+            KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
+            _ => None,
+        },
+        StagingFocus::Diff => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::DiffScrollDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::DiffScrollUp),
+            KeyCode::Tab | KeyCode::Esc => Some(AppAction::SwitchStagingFocus),
+            KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
+            _ => None,
+        },
+        StagingFocus::CommitMessage => match key.code {
+            KeyCode::Enter => Some(AppAction::ConfirmCommit),
+            KeyCode::Esc => Some(AppAction::CancelCommitMessage),
+            KeyCode::Char(c) => Some(AppAction::InsertChar(c)),
+            KeyCode::Backspace => Some(AppAction::DeleteChar),
+            KeyCode::Left => Some(AppAction::MoveCursorLeft),
+            KeyCode::Right => Some(AppAction::MoveCursorRight),
+            _ => None,
+        },
     }
 }

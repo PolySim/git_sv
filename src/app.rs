@@ -46,6 +46,36 @@ pub enum AppAction {
     DiffScrollUp,
     /// Scroller vers le bas dans le diff.
     DiffScrollDown,
+    /// Basculer vers la vue Graph.
+    SwitchToGraph,
+    /// Basculer vers la vue Staging.
+    SwitchToStaging,
+    /// Basculer vers la vue Branches.
+    SwitchToBranches,
+    /// Stage le fichier sélectionné.
+    StageFile,
+    /// Unstage le fichier sélectionné.
+    UnstageFile,
+    /// Stage tous les fichiers.
+    StageAll,
+    /// Unstage tous les fichiers.
+    UnstageAll,
+    /// Changer le focus dans la vue staging.
+    SwitchStagingFocus,
+    /// Activer le mode saisie de message de commit.
+    StartCommitMessage,
+    /// Valider le commit.
+    ConfirmCommit,
+    /// Annuler la saisie du message.
+    CancelCommitMessage,
+    /// Insérer un caractère dans le message de commit.
+    InsertChar(char),
+    /// Supprimer un caractère dans le message de commit.
+    DeleteChar,
+    /// Déplacer le curseur à gauche.
+    MoveCursorLeft,
+    /// Déplacer le curseur à droite.
+    MoveCursorRight,
 }
 
 /// Mode d'affichage actif.
@@ -53,6 +83,8 @@ pub enum AppAction {
 pub enum ViewMode {
     Graph,
     Help,
+    Staging,
+    Branches,
 }
 
 /// Mode du panneau bas-gauche.
@@ -68,6 +100,60 @@ pub enum FocusPanel {
     Graph,
     Files,
     Detail,
+}
+
+/// Panneau focalisé dans la vue staging.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StagingFocus {
+    /// Liste des fichiers non staged (working directory).
+    Unstaged,
+    /// Liste des fichiers staged (index).
+    Staged,
+    /// Panneau de diff (droite).
+    Diff,
+    /// Champ de saisie du message de commit.
+    CommitMessage,
+}
+
+/// État de la vue staging.
+pub struct StagingState {
+    /// Fichiers non staged.
+    pub unstaged_files: Vec<StatusEntry>,
+    /// Fichiers staged.
+    pub staged_files: Vec<StatusEntry>,
+    /// Index sélectionné dans le panneau unstaged.
+    pub unstaged_selected: usize,
+    /// Index sélectionné dans le panneau staged.
+    pub staged_selected: usize,
+    /// Panneau actuellement focalisé.
+    pub focus: StagingFocus,
+    /// Diff du fichier survolé.
+    pub current_diff: Option<FileDiff>,
+    /// Offset de scroll dans le diff.
+    pub diff_scroll: usize,
+    /// Message de commit en cours de saisie.
+    pub commit_message: String,
+    /// Position du curseur dans le message.
+    pub cursor_position: usize,
+    /// Mode saisie de message activé.
+    pub is_committing: bool,
+}
+
+impl Default for StagingState {
+    fn default() -> Self {
+        Self {
+            unstaged_files: Vec::new(),
+            staged_files: Vec::new(),
+            unstaged_selected: 0,
+            staged_selected: 0,
+            focus: StagingFocus::Unstaged,
+            current_diff: None,
+            diff_scroll: 0,
+            commit_message: String::new(),
+            cursor_position: 0,
+            is_committing: false,
+        }
+    }
 }
 
 /// État principal de l'application.
@@ -94,6 +180,8 @@ pub struct App {
     pub selected_file_diff: Option<FileDiff>,
     /// Offset de scroll dans le panneau de diff.
     pub diff_scroll_offset: usize,
+    /// État de la vue staging.
+    pub staging_state: StagingState,
 }
 
 impl App {
@@ -122,6 +210,7 @@ impl App {
             file_selected_index: 0,
             selected_file_diff: None,
             diff_scroll_offset: 0,
+            staging_state: StagingState::default(),
         };
         app.refresh()?;
         Ok(app)
@@ -146,7 +235,67 @@ impl App {
         self.selected_file_diff = None;
         self.diff_scroll_offset = 0;
 
+        // Rafraîchir aussi l'état de staging.
+        self.refresh_staging()?;
+
         Ok(())
+    }
+
+    /// Rafraîchit l'état de la vue staging.
+    fn refresh_staging(&mut self) -> Result<()> {
+        let all_entries = self.repo.status().unwrap_or_default();
+
+        self.staging_state.staged_files = all_entries
+            .iter()
+            .filter(|e| e.is_staged())
+            .cloned()
+            .collect();
+
+        self.staging_state.unstaged_files = all_entries
+            .iter()
+            .filter(|e| e.is_unstaged())
+            .cloned()
+            .collect();
+
+        // Réajuster les sélections.
+        if self.staging_state.unstaged_selected >= self.staging_state.unstaged_files.len() {
+            self.staging_state.unstaged_selected =
+                self.staging_state.unstaged_files.len().saturating_sub(1);
+        }
+        if self.staging_state.staged_selected >= self.staging_state.staged_files.len() {
+            self.staging_state.staged_selected =
+                self.staging_state.staged_files.len().saturating_sub(1);
+        }
+
+        // Charger le diff du fichier survolé.
+        self.load_staging_diff();
+
+        Ok(())
+    }
+
+    /// Charge le diff du fichier sélectionné dans la vue staging.
+    fn load_staging_diff(&mut self) {
+        let selected_file = match self.staging_state.focus {
+            StagingFocus::Unstaged => self
+                .staging_state
+                .unstaged_files
+                .get(self.staging_state.unstaged_selected),
+            StagingFocus::Staged => self
+                .staging_state
+                .staged_files
+                .get(self.staging_state.staged_selected),
+            _ => None,
+        };
+
+        if let Some(file) = selected_file {
+            // Utiliser le working directory diff pour les fichiers unstaged
+            // et le HEAD diff pour les fichiers staged
+            self.staging_state.current_diff =
+                crate::git::diff::working_dir_file_diff(&self.repo.repo, &file.path).ok();
+        } else {
+            self.staging_state.current_diff = None;
+        }
+        self.staging_state.diff_scroll = 0;
     }
 
     /// Met à jour la liste des fichiers du commit sélectionné.
@@ -204,6 +353,8 @@ impl App {
                     if self.branch_selected > 0 {
                         self.branch_selected -= 1;
                     }
+                } else if self.view_mode == ViewMode::Staging {
+                    self.handle_staging_navigation(-1);
                 } else if self.selected_index > 0 {
                     self.selected_index -= 1;
                     self.graph_state.select(Some(self.selected_index * 2));
@@ -215,6 +366,8 @@ impl App {
                     if self.branch_selected + 1 < self.branches.len() {
                         self.branch_selected += 1;
                     }
+                } else if self.view_mode == ViewMode::Staging {
+                    self.handle_staging_navigation(1);
                 } else if self.selected_index + 1 < self.graph.len() {
                     self.selected_index += 1;
                     self.graph_state.select(Some(self.selected_index * 2));
@@ -324,11 +477,140 @@ impl App {
             AppAction::DiffScrollUp => {
                 if self.focus == FocusPanel::Detail && self.diff_scroll_offset > 0 {
                     self.diff_scroll_offset -= 1;
+                } else if self.view_mode == ViewMode::Staging && self.staging_state.diff_scroll > 0
+                {
+                    self.staging_state.diff_scroll -= 1;
                 }
             }
             AppAction::DiffScrollDown => {
                 if self.focus == FocusPanel::Detail {
                     self.diff_scroll_offset += 1;
+                } else if self.view_mode == ViewMode::Staging {
+                    self.staging_state.diff_scroll += 1;
+                }
+            }
+            // Actions de changement de vue
+            AppAction::SwitchToGraph => {
+                self.view_mode = ViewMode::Graph;
+                self.refresh()?;
+            }
+            AppAction::SwitchToStaging => {
+                self.view_mode = ViewMode::Staging;
+                self.refresh_staging()?;
+            }
+            AppAction::SwitchToBranches => {
+                self.view_mode = ViewMode::Branches;
+                // TODO: implémenter la vue branches
+            }
+            // Actions de staging
+            AppAction::StageFile => {
+                if self.view_mode == ViewMode::Staging {
+                    if let Some(file) = self
+                        .staging_state
+                        .unstaged_files
+                        .get(self.staging_state.unstaged_selected)
+                    {
+                        crate::git::commit::stage_file(&self.repo.repo, &file.path)?;
+                        self.refresh_staging()?;
+                    }
+                }
+            }
+            AppAction::UnstageFile => {
+                if self.view_mode == ViewMode::Staging {
+                    if let Some(file) = self
+                        .staging_state
+                        .staged_files
+                        .get(self.staging_state.staged_selected)
+                    {
+                        crate::git::commit::unstage_file(&self.repo.repo, &file.path)?;
+                        self.refresh_staging()?;
+                    }
+                }
+            }
+            AppAction::StageAll => {
+                if self.view_mode == ViewMode::Staging {
+                    crate::git::commit::stage_all(&self.repo.repo)?;
+                    self.refresh_staging()?;
+                }
+            }
+            AppAction::UnstageAll => {
+                if self.view_mode == ViewMode::Staging {
+                    crate::git::commit::unstage_all(&self.repo.repo)?;
+                    self.refresh_staging()?;
+                }
+            }
+            AppAction::SwitchStagingFocus => {
+                if self.view_mode == ViewMode::Staging {
+                    self.staging_state.focus = match self.staging_state.focus {
+                        StagingFocus::Unstaged => StagingFocus::Staged,
+                        StagingFocus::Staged => StagingFocus::Diff,
+                        StagingFocus::Diff => StagingFocus::Unstaged,
+                        StagingFocus::CommitMessage => StagingFocus::Unstaged,
+                    };
+                    self.load_staging_diff();
+                }
+            }
+            AppAction::StartCommitMessage => {
+                if self.view_mode == ViewMode::Staging {
+                    self.staging_state.is_committing = true;
+                    self.staging_state.focus = StagingFocus::CommitMessage;
+                }
+            }
+            AppAction::ConfirmCommit => {
+                if self.view_mode == ViewMode::Staging
+                    && !self.staging_state.commit_message.is_empty()
+                    && !self.staging_state.staged_files.is_empty()
+                {
+                    crate::git::commit::create_commit(
+                        &self.repo.repo,
+                        &self.staging_state.commit_message,
+                    )?;
+                    self.staging_state.commit_message.clear();
+                    self.staging_state.cursor_position = 0;
+                    self.staging_state.is_committing = false;
+                    self.refresh_staging()?;
+                    self.set_flash_message("Commit créé avec succès".into());
+                }
+            }
+            AppAction::CancelCommitMessage => {
+                if self.view_mode == ViewMode::Staging {
+                    self.staging_state.is_committing = false;
+                    self.staging_state.focus = StagingFocus::Unstaged;
+                }
+            }
+            AppAction::InsertChar(c) => {
+                if self.view_mode == ViewMode::Staging && self.staging_state.is_committing {
+                    self.staging_state
+                        .commit_message
+                        .insert(self.staging_state.cursor_position, c);
+                    self.staging_state.cursor_position += 1;
+                }
+            }
+            AppAction::DeleteChar => {
+                if self.view_mode == ViewMode::Staging
+                    && self.staging_state.is_committing
+                    && self.staging_state.cursor_position > 0
+                {
+                    self.staging_state.cursor_position -= 1;
+                    self.staging_state
+                        .commit_message
+                        .remove(self.staging_state.cursor_position);
+                }
+            }
+            AppAction::MoveCursorLeft => {
+                if self.view_mode == ViewMode::Staging
+                    && self.staging_state.is_committing
+                    && self.staging_state.cursor_position > 0
+                {
+                    self.staging_state.cursor_position -= 1;
+                }
+            }
+            AppAction::MoveCursorRight => {
+                if self.view_mode == ViewMode::Staging
+                    && self.staging_state.is_committing
+                    && self.staging_state.cursor_position < self.staging_state.commit_message.len()
+                {
+                    self.staging_state.cursor_position += 1;
                 }
             }
             // Les prompts seront implémentés dans les prochaines itérations.
@@ -337,6 +619,45 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Gère la navigation dans la vue staging.
+    fn handle_staging_navigation(&mut self, direction: i32) {
+        match self.staging_state.focus {
+            StagingFocus::Unstaged => {
+                let max = self.staging_state.unstaged_files.len();
+                if max > 0 {
+                    let new_idx = if direction > 0 {
+                        (self.staging_state.unstaged_selected + 1).min(max - 1)
+                    } else {
+                        self.staging_state.unstaged_selected.saturating_sub(1)
+                    };
+                    self.staging_state.unstaged_selected = new_idx;
+                    self.load_staging_diff();
+                }
+            }
+            StagingFocus::Staged => {
+                let max = self.staging_state.staged_files.len();
+                if max > 0 {
+                    let new_idx = if direction > 0 {
+                        (self.staging_state.staged_selected + 1).min(max - 1)
+                    } else {
+                        self.staging_state.staged_selected.saturating_sub(1)
+                    };
+                    self.staging_state.staged_selected = new_idx;
+                    self.load_staging_diff();
+                }
+            }
+            StagingFocus::Diff => {
+                // Navigation dans le diff avec scroll
+                if direction > 0 {
+                    self.staging_state.diff_scroll += 1;
+                } else if self.staging_state.diff_scroll > 0 {
+                    self.staging_state.diff_scroll -= 1;
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Lance la boucle événementielle principale de l'application.
@@ -373,6 +694,7 @@ impl App {
                     self.file_selected_index,
                     self.selected_file_diff.as_ref(),
                     self.diff_scroll_offset,
+                    &self.staging_state,
                 );
             })?;
 
