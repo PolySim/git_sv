@@ -380,7 +380,7 @@ impl EventHandler {
         use crate::state::ViewMode;
 
         if self.state.show_branch_panel {
-            // Panneau legacy (overlay dans la vue Graph)
+            // Panneau legacy (vue Graph, touche 'b')
             if let Some(branch) = self.state.branches.get(self.state.branch_selected).cloned() {
                 if let Err(e) = self.state.repo.checkout_branch(&branch.name) {
                     self.state.set_flash_message(format!("Erreur: {}", e));
@@ -393,7 +393,7 @@ impl EventHandler {
                 }
             }
         } else if self.state.view_mode == ViewMode::Branches {
-            // Vue Branches dédiée
+            // Vue Branches dédiée (touche '3')
             if let Some(branch) = self
                 .state
                 .branches_view_state
@@ -406,6 +406,7 @@ impl EventHandler {
                 } else {
                     self.state.mark_dirty(); // Marquer comme modifié - checkout
                     self.refresh()?;
+                    self.refresh_branches_view()?; // Rafraîchir la vue Branches
                     self.state
                         .set_flash_message(format!("Checkout sur '{}'", branch.name));
                 }
