@@ -120,6 +120,16 @@ pub enum AppAction {
     DiscardFile,
     /// Discard toutes les modifications non stagées.
     DiscardAll,
+    /// Ouvrir la vue blame pour le fichier sélectionné.
+    OpenBlame,
+    /// Fermer la vue blame.
+    CloseBlame,
+    /// Naviguer vers le commit du blame sélectionné.
+    JumpToBlameCommit,
+    /// Cherry-pick le commit sélectionné.
+    CherryPick,
+    /// Amender le dernier commit.
+    AmendCommit,
 }
 
 /// Mode d'affichage actif.
@@ -129,6 +139,7 @@ pub enum ViewMode {
     Help,
     Staging,
     Branches,
+    Blame,
 }
 
 /// Mode du panneau bas-gauche.
@@ -181,6 +192,8 @@ pub struct StagingState {
     pub cursor_position: usize,
     /// Mode saisie de message activé.
     pub is_committing: bool,
+    /// Mode amendement activé (amender le dernier commit au lieu de créer un nouveau).
+    pub is_amending: bool,
 }
 
 impl Default for StagingState {
@@ -196,6 +209,7 @@ impl Default for StagingState {
             commit_message: String::new(),
             cursor_position: 0,
             is_committing: false,
+            is_amending: false,
         }
     }
 }
@@ -292,6 +306,32 @@ impl Default for SearchState {
     }
 }
 
+/// État de la vue blame.
+pub struct BlameState {
+    /// Fichier actuellement "blâmé".
+    pub file_path: String,
+    /// Commit Oid du commit à partir duquel on fait le blame.
+    pub commit_oid: git2::Oid,
+    /// Résultat du blame.
+    pub blame: Option<crate::git::blame::FileBlame>,
+    /// Ligne sélectionnée (0-indexed).
+    pub selected_line: usize,
+    /// Offset de scroll.
+    pub scroll_offset: usize,
+}
+
+impl BlameState {
+    pub fn new(file_path: String, commit_oid: git2::Oid) -> Self {
+        Self {
+            file_path,
+            commit_oid,
+            blame: None,
+            selected_line: 0,
+            scroll_offset: 0,
+        }
+    }
+}
+
 /// État principal de l'application.
 pub struct AppState {
     pub repo: GitRepo,
@@ -317,6 +357,8 @@ pub struct AppState {
     pub branches_view_state: BranchesViewState,
     /// État de la recherche de commits.
     pub search_state: SearchState,
+    /// État de la vue blame.
+    pub blame_state: Option<BlameState>,
     /// Flag indiquant si les données ont changé et nécessitent un rafraîchissement.
     pub dirty: bool,
     /// Cache pour les diffs de fichiers (LRU simple).
@@ -439,6 +481,7 @@ impl AppState {
             staging_state: StagingState::default(),
             branches_view_state: BranchesViewState::default(),
             search_state: SearchState::default(),
+            blame_state: None,
             dirty: true,                    // Initialement dirty pour charger les données
             diff_cache: DiffCache::new(50), // Cache de 50 diffs
             pending_confirmation: None,

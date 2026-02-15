@@ -1,3 +1,4 @@
+pub mod blame_view;
 pub mod branch_panel;
 pub mod branches_layout;
 pub mod branches_view;
@@ -50,6 +51,11 @@ pub fn render(frame: &mut Frame, state: &AppState) {
                 &state.repo_path,
                 state.current_flash_message(),
             );
+        }
+        ViewMode::Blame => {
+            if let Some(ref blame_state) = state.blame_state {
+                frame.render_widget(blame_view::BlameView::new(blame_state), frame.area());
+            }
         }
     }
 

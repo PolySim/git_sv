@@ -65,6 +65,33 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
     Ok(oid)
 }
 
+/// Amende le dernier commit avec le message donné et l'index courant.
+pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
+    let sig = repo
+        .signature()
+        .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
+
+    let mut index = repo.index()?;
+    let tree_oid = index.write_tree()?;
+    let tree = repo.find_tree(tree_oid)?;
+
+    // Récupérer le commit HEAD
+    let head = repo.head()?;
+    let head_commit = head.peel_to_commit()?;
+
+    // Amender le commit (remplace HEAD)
+    let oid = head_commit.amend(
+        Some("HEAD"),  // Mettre à jour HEAD
+        None,          // Ne pas changer l'auteur
+        None,          // Ne pas changer le committer
+        None,          // Ne pas changer l'encodage
+        Some(message), // Nouveau message
+        Some(&tree),   // Nouveau tree
+    )?;
+
+    Ok(oid)
+}
+
 /// Stage un fichier dans l'index.
 pub fn stage_file(repo: &Repository, path: &str) -> Result<()> {
     let mut index = repo.index()?;
@@ -96,6 +123,46 @@ pub fn unstage_all(repo: &Repository) -> Result<()> {
     let head = repo.head()?;
     let obj = head.peel(git2::ObjectType::Commit)?;
     repo.reset(&obj, git2::ResetType::Mixed, None)?;
+    Ok(())
+}
+
+/// Cherry-pick un commit sur la branche courante.
+pub fn cherry_pick(repo: &Repository, commit_oid: Oid) -> Result<()> {
+    let commit = repo.find_commit(commit_oid)?;
+
+    // Effectuer le cherry-pick
+    repo.cherrypick(&commit, None)?;
+
+    // Vérifier s'il y a des conflits
+    let mut index = repo.index()?;
+    if index.has_conflicts() {
+        return Err(crate::error::GitSvError::Other(
+            "Cherry-pick a échoué: conflits détectés".into(),
+        ));
+    }
+
+    // Si pas de conflits, créer le commit
+    let sig = repo
+        .signature()
+        .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
+
+    let tree_oid = index.write_tree()?;
+    let tree = repo.find_tree(tree_oid)?;
+
+    let head = repo.head()?;
+    let parent_commit = head.peel_to_commit()?;
+
+    let message = format!(
+        "{}\n\n(cherry picked from commit {})",
+        commit.message().unwrap_or(""),
+        commit_oid
+    );
+
+    repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &[&parent_commit])?;
+
+    // Nettoyer l'état de cherry-pick
+    repo.cleanup_state()?;
+
     Ok(())
 }
 

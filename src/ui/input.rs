@@ -79,6 +79,11 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return map_branches_key(key, state);
     }
 
+    // Si on est en mode Blame, utiliser les keybindings spécifiques
+    if state.view_mode == ViewMode::Blame {
+        return map_blame_key(key, state);
+    }
+
     // Ctrl+d / Ctrl+u pour page down/up
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
@@ -169,6 +174,12 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('/') => Some(AppAction::OpenSearch),
         KeyCode::Char('n') => Some(AppAction::NextSearchResult),
         KeyCode::Char('N') => Some(AppAction::PrevSearchResult),
+
+        // Vue blame
+        KeyCode::Char('B') => Some(AppAction::OpenBlame),
+
+        // Cherry-pick
+        KeyCode::Char('x') => Some(AppAction::CherryPick),
 
         // Aide
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
@@ -270,6 +281,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('U') => Some(AppAction::UnstageAll),
             KeyCode::Tab => Some(AppAction::SwitchStagingFocus),
             KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
+            KeyCode::Char('A') => Some(AppAction::AmendCommit),
             _ => None,
         },
         StagingFocus::Diff => match key.code {
@@ -288,6 +300,21 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Right => Some(AppAction::MoveCursorRight),
             _ => None,
         },
+    }
+}
+
+/// Mappe les keybindings pour la vue Blame.
+fn map_blame_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
+    match key.code {
+        KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::CloseBlame),
+        KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
+        KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+        KeyCode::Char('g') | KeyCode::Home => Some(AppAction::GoTop),
+        KeyCode::Char('G') | KeyCode::End => Some(AppAction::GoBottom),
+        KeyCode::PageUp => Some(AppAction::PageUp),
+        KeyCode::PageDown => Some(AppAction::PageDown),
+        KeyCode::Enter => Some(AppAction::JumpToBlameCommit),
+        _ => None,
     }
 }
 
@@ -319,6 +346,7 @@ fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
                 }
                 ViewMode::Staging => Some(AppAction::MoveUp),
                 ViewMode::Branches => Some(AppAction::MoveUp),
+                ViewMode::Blame => Some(AppAction::MoveUp),
                 _ => None,
             }
         }
@@ -336,6 +364,7 @@ fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
                 }
                 ViewMode::Staging => Some(AppAction::MoveDown),
                 ViewMode::Branches => Some(AppAction::MoveDown),
+                ViewMode::Blame => Some(AppAction::MoveDown),
                 _ => None,
             }
         }

@@ -128,6 +128,11 @@ impl EventHandler {
             AppAction::PrevSearchResult => self.handle_prev_search_result(),
             AppAction::DiscardFile => self.handle_discard_file()?,
             AppAction::DiscardAll => self.handle_discard_all()?,
+            AppAction::OpenBlame => self.handle_open_blame()?,
+            AppAction::CloseBlame => self.handle_close_blame(),
+            AppAction::JumpToBlameCommit => self.handle_jump_to_blame_commit()?,
+            AppAction::CherryPick => self.handle_cherry_pick()?,
+            AppAction::AmendCommit => self.handle_amend_commit()?,
         }
         Ok(())
     }
@@ -152,6 +157,9 @@ impl EventHandler {
                 }
                 ConfirmAction::DiscardAll => {
                     self.execute_discard_all()?;
+                }
+                ConfirmAction::CherryPick(oid) => {
+                    self.execute_cherry_pick(oid)?;
                 }
             }
         }
@@ -214,6 +222,8 @@ impl EventHandler {
             self.handle_staging_navigation(-1);
         } else if self.state.view_mode == ViewMode::Branches {
             self.handle_branches_navigation(-1);
+        } else if self.state.view_mode == ViewMode::Blame {
+            self.handle_blame_navigation(-1);
         } else if self.state.selected_index > 0 {
             self.state.selected_index -= 1;
             self.state
@@ -235,6 +245,8 @@ impl EventHandler {
             self.handle_staging_navigation(1);
         } else if self.state.view_mode == ViewMode::Branches {
             self.handle_branches_navigation(1);
+        } else if self.state.view_mode == ViewMode::Blame {
+            self.handle_blame_navigation(1);
         } else if self.state.selected_index + 1 < self.state.graph.len() {
             self.state.selected_index += 1;
             self.state
@@ -246,7 +258,11 @@ impl EventHandler {
     }
 
     fn handle_page_up(&mut self) -> Result<()> {
-        if !self.state.show_branch_panel && !self.state.graph.is_empty() {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Blame {
+            self.handle_blame_navigation(-10);
+        } else if !self.state.show_branch_panel && !self.state.graph.is_empty() {
             let page_size = 10;
             self.state.selected_index = self.state.selected_index.saturating_sub(page_size);
             self.state
@@ -258,7 +274,11 @@ impl EventHandler {
     }
 
     fn handle_page_down(&mut self) -> Result<()> {
-        if !self.state.show_branch_panel && !self.state.graph.is_empty() {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Blame {
+            self.handle_blame_navigation(10);
+        } else if !self.state.show_branch_panel && !self.state.graph.is_empty() {
             let page_size = 10;
             self.state.selected_index =
                 (self.state.selected_index + page_size).min(self.state.graph.len() - 1);
@@ -271,7 +291,14 @@ impl EventHandler {
     }
 
     fn handle_go_top(&mut self) -> Result<()> {
-        if !self.state.show_branch_panel && !self.state.graph.is_empty() {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Blame {
+            if let Some(ref mut blame_state) = self.state.blame_state {
+                blame_state.selected_line = 0;
+                blame_state.scroll_offset = 0;
+            }
+        } else if !self.state.show_branch_panel && !self.state.graph.is_empty() {
             self.state.selected_index = 0;
             self.state.graph_state.select(Some(0));
             self.update_commit_files();
@@ -280,7 +307,17 @@ impl EventHandler {
     }
 
     fn handle_go_bottom(&mut self) -> Result<()> {
-        if !self.state.show_branch_panel && !self.state.graph.is_empty() {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Blame {
+            if let Some(ref mut blame_state) = self.state.blame_state {
+                if let Some(ref blame) = blame_state.blame {
+                    if !blame.lines.is_empty() {
+                        blame_state.selected_line = blame.lines.len() - 1;
+                    }
+                }
+            }
+        } else if !self.state.show_branch_panel && !self.state.graph.is_empty() {
             self.state.selected_index = self.state.graph.len() - 1;
             self.state
                 .graph_state
@@ -489,19 +526,39 @@ impl EventHandler {
 
         if self.state.view_mode == ViewMode::Staging
             && !self.state.staging_state.commit_message.is_empty()
-            && !self.state.staging_state.staged_files.is_empty()
         {
-            crate::git::commit::create_commit(
-                &self.state.repo.repo,
-                &self.state.staging_state.commit_message,
-            )?;
+            let is_amending = self.state.staging_state.is_amending;
+
+            if is_amending {
+                // Mode amendement
+                crate::git::commit::amend_commit(
+                    &self.state.repo.repo,
+                    &self.state.staging_state.commit_message,
+                )?;
+                self.state
+                    .set_flash_message("Commit amendé avec succès".into());
+            } else {
+                // Mode création de commit normal
+                if self.state.staging_state.staged_files.is_empty() {
+                    self.state
+                        .set_flash_message("Aucun fichier staged pour le commit".into());
+                    return Ok(());
+                }
+
+                crate::git::commit::create_commit(
+                    &self.state.repo.repo,
+                    &self.state.staging_state.commit_message,
+                )?;
+                self.state
+                    .set_flash_message("Commit créé avec succès".into());
+            }
+
             self.state.staging_state.commit_message.clear();
             self.state.staging_state.cursor_position = 0;
             self.state.staging_state.is_committing = false;
-            self.state.mark_dirty(); // Marquer comme modifié - nouveau commit
+            self.state.staging_state.is_amending = false;
+            self.state.mark_dirty(); // Marquer comme modifié
             self.refresh_staging()?;
-            self.state
-                .set_flash_message("Commit créé avec succès".into());
         }
         Ok(())
     }
@@ -1591,6 +1648,200 @@ impl EventHandler {
                     .set_flash_message(format!("Erreur lors du discard: {}", e));
             }
         }
+        Ok(())
+    }
+
+    /// Gère la navigation dans la vue blame.
+    fn handle_blame_navigation(&mut self, delta: i32) {
+        if let Some(ref mut blame_state) = self.state.blame_state {
+            if let Some(ref blame) = blame_state.blame {
+                if blame.lines.is_empty() {
+                    return;
+                }
+
+                let max_index = blame.lines.len() - 1;
+                let new_index = if delta < 0 {
+                    blame_state
+                        .selected_line
+                        .saturating_sub(delta.abs() as usize)
+                } else {
+                    (blame_state.selected_line + delta as usize).min(max_index)
+                };
+
+                blame_state.selected_line = new_index;
+
+                // Ajuster le scroll si nécessaire
+                // (La logique de scroll sera gérée par le widget de rendu)
+            }
+        }
+    }
+
+    /// Ouvre la vue blame pour le fichier sélectionné.
+    fn handle_open_blame(&mut self) -> Result<()> {
+        use crate::state::{BlameState, ViewMode};
+
+        // Seulement depuis la vue Graph avec le focus sur Files
+        if !matches!(self.state.view_mode, ViewMode::Graph) {
+            return Ok(());
+        }
+
+        if !matches!(self.state.focus, crate::state::FocusPanel::Files) {
+            return Ok(());
+        }
+
+        // Récupérer le fichier sélectionné
+        if self.state.commit_files.is_empty() {
+            self.state
+                .set_flash_message("Aucun fichier sélectionné".into());
+            return Ok(());
+        }
+
+        let selected_file = &self.state.commit_files[self.state.file_selected_index];
+        let file_path = selected_file.path.clone();
+
+        // Récupérer le commit sélectionné
+        let commit_oid = if let Some(row) = self.state.graph.get(self.state.selected_index) {
+            row.node.oid
+        } else {
+            self.state
+                .set_flash_message("Aucun commit sélectionné".into());
+            return Ok(());
+        };
+
+        // Créer l'état du blame
+        let mut blame_state = BlameState::new(file_path.clone(), commit_oid);
+
+        // Générer le blame
+        match crate::git::blame::blame_file(&self.state.repo.repo, commit_oid, &file_path) {
+            Ok(blame) => {
+                blame_state.blame = Some(blame);
+                self.state.blame_state = Some(blame_state);
+                self.state.view_mode = ViewMode::Blame;
+            }
+            Err(e) => {
+                self.state.set_flash_message(format!("Erreur blame: {}", e));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Ferme la vue blame.
+    fn handle_close_blame(&mut self) {
+        self.state.blame_state = None;
+        self.state.view_mode = crate::state::ViewMode::Graph;
+    }
+
+    /// Navigue vers le commit du blame sélectionné.
+    fn handle_jump_to_blame_commit(&mut self) -> Result<()> {
+        use crate::state::ViewMode;
+
+        // Vérifier qu'on est bien en mode blame
+        if !matches!(self.state.view_mode, ViewMode::Blame) {
+            return Ok(());
+        }
+
+        // Récupérer le commit de la ligne sélectionnée
+        if let Some(ref blame_state) = self.state.blame_state {
+            if let Some(ref blame) = blame_state.blame {
+                if let Some(line) = blame.lines.get(blame_state.selected_line) {
+                    let target_oid = line.commit_oid;
+
+                    // Fermer la vue blame
+                    self.state.blame_state = None;
+                    self.state.view_mode = ViewMode::Graph;
+
+                    // Trouver l'index du commit dans le graphe
+                    if let Some(index) = self
+                        .state
+                        .graph
+                        .iter()
+                        .position(|row| row.node.oid == target_oid)
+                    {
+                        self.state.selected_index = index;
+                        self.state.graph_state.select(Some(index));
+                        self.update_commit_files();
+                    } else {
+                        self.state.set_flash_message(format!(
+                            "Commit {} non trouvé dans le graphe",
+                            format!("{:.7}", target_oid)
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Cherry-pick le commit sélectionné.
+    fn handle_cherry_pick(&mut self) -> Result<()> {
+        use crate::state::ViewMode;
+
+        // Seulement depuis la vue Graph
+        if !matches!(self.state.view_mode, ViewMode::Graph) {
+            return Ok(());
+        }
+
+        // Récupérer le commit sélectionné
+        let commit_oid = if let Some(row) = self.state.graph.get(self.state.selected_index) {
+            row.node.oid
+        } else {
+            self.state
+                .set_flash_message("Aucun commit sélectionné".into());
+            return Ok(());
+        };
+
+        // Demander confirmation via un dialogue
+        self.state.pending_confirmation = Some(ConfirmAction::CherryPick(commit_oid));
+
+        Ok(())
+    }
+
+    /// Exécute le cherry-pick.
+    fn execute_cherry_pick(&mut self, commit_oid: git2::Oid) -> Result<()> {
+        match crate::git::commit::cherry_pick(&self.state.repo.repo, commit_oid) {
+            Ok(_) => {
+                self.state.set_flash_message(format!(
+                    "Cherry-pick de {} réussi ✓",
+                    format!("{:.7}", commit_oid)
+                ));
+                self.state.mark_dirty();
+                self.refresh()?;
+            }
+            Err(e) => {
+                self.state
+                    .set_flash_message(format!("Erreur cherry-pick: {}", e));
+            }
+        }
+        Ok(())
+    }
+
+    /// Amender le dernier commit.
+    fn handle_amend_commit(&mut self) -> Result<()> {
+        use crate::state::{StagingFocus, ViewMode};
+
+        // Seulement depuis la vue Staging
+        if !matches!(self.state.view_mode, ViewMode::Staging) {
+            return Ok(());
+        }
+
+        // Récupérer le message du dernier commit
+        let commit_message = {
+            let head_commit = self.state.repo.repo.head()?.peel_to_commit()?;
+            head_commit.message().unwrap_or("").to_string()
+        };
+
+        // Pré-remplir le message de commit
+        self.state.staging_state.commit_message = commit_message;
+        self.state.staging_state.cursor_position = self.state.staging_state.commit_message.len();
+        self.state.staging_state.is_committing = true;
+        self.state.staging_state.is_amending = true;
+        self.state.staging_state.focus = StagingFocus::CommitMessage;
+
+        self.state
+            .set_flash_message("Mode amendement activé - éditez le message et validez".into());
+
         Ok(())
     }
 }

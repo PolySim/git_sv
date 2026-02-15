@@ -21,6 +21,8 @@ pub enum ConfirmAction {
     DiscardFile(String),
     /// Discard toutes les modifications
     DiscardAll,
+    /// Cherry-pick un commit
+    CherryPick(git2::Oid),
 }
 
 impl ConfirmAction {
@@ -52,6 +54,12 @@ impl ConfirmAction {
                 "Êtes-vous sûr de vouloir discard TOUTES les modifications non stagées ?"
                     .to_string()
             }
+            ConfirmAction::CherryPick(oid) => {
+                format!(
+                    "Êtes-vous sûr de vouloir cherry-pick le commit {} ?",
+                    format!("{:.7}", oid)
+                )
+            }
         }
     }
 
@@ -63,6 +71,7 @@ impl ConfirmAction {
             ConfirmAction::StashDrop(_) => "Confirmer la suppression de stash",
             ConfirmAction::DiscardFile(_) => "Confirmer le discard de fichier",
             ConfirmAction::DiscardAll => "Confirmer le discard de tous les fichiers",
+            ConfirmAction::CherryPick(_) => "Confirmer le cherry-pick",
         }
     }
 }
