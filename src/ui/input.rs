@@ -1,22 +1,22 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use crate::app::{
-    App, AppAction, BranchesFocus, BranchesSection, FocusPanel, StagingFocus, ViewMode,
+use crate::state::{
+    AppAction, AppState, BranchesFocus, BranchesSection, FocusPanel, StagingFocus, ViewMode,
 };
 
 /// Poll un événement clavier et retourne l'action correspondante.
-pub fn handle_input(app: &App) -> std::io::Result<Option<AppAction>> {
+pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
     if event::poll(Duration::from_millis(100))? {
         if let Event::Key(key) = event::read()? {
-            return Ok(map_key(key, app));
+            return Ok(map_key(key, state));
         }
     }
     Ok(None)
 }
 
 /// Mappe un événement clavier à une action de l'application.
-fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
+fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Ctrl+C quitte toujours.
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(AppAction::Quit);
@@ -31,26 +31,26 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     }
 
     // Si on est en mode Staging, utiliser les keybindings spécifiques
-    if app.view_mode == ViewMode::Staging {
-        return map_staging_key(key, app);
+    if state.view_mode == ViewMode::Staging {
+        return map_staging_key(key, state);
     }
 
     // Si on est en mode Branches, utiliser les keybindings spécifiques
-    if app.view_mode == ViewMode::Branches {
-        return map_branches_key(key, app);
+    if state.view_mode == ViewMode::Branches {
+        return map_branches_key(key, state);
     }
 
     // Ctrl+d / Ctrl+u pour page down/up
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('d') => {
-                if app.focus == FocusPanel::Detail {
+                if state.focus == FocusPanel::Detail {
                     return Some(AppAction::DiffScrollDown);
                 }
                 return Some(AppAction::PageDown);
             }
             KeyCode::Char('u') => {
-                if app.focus == FocusPanel::Detail {
+                if state.focus == FocusPanel::Detail {
                     return Some(AppAction::DiffScrollUp);
                 }
                 return Some(AppAction::PageUp);
@@ -60,19 +60,19 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     }
 
     // Escape ferme l'overlay d'aide si actif.
-    if key.code == KeyCode::Esc && app.view_mode == ViewMode::Help {
+    if key.code == KeyCode::Esc && state.view_mode == ViewMode::Help {
         return Some(AppAction::ToggleHelp);
     }
 
     // Escape pour revenir au panneau précédent quand on est dans Files ou Detail.
     if key.code == KeyCode::Esc {
-        if app.focus == FocusPanel::Detail {
+        if state.focus == FocusPanel::Detail {
             return Some(AppAction::SwitchBottomMode);
         }
     }
 
     // Contexte: panneau de branches ouvert
-    if app.show_branch_panel {
+    if state.show_branch_panel {
         return match key.code {
             KeyCode::Esc | KeyCode::Char('b') => Some(AppAction::CloseBranchPanel),
             KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
@@ -85,7 +85,7 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     }
 
     // Navigation contextuelle selon le focus.
-    match app.focus {
+    match state.focus {
         FocusPanel::Files => {
             // Quand focus sur Files, j/k naviguent dans la liste des fichiers.
             match key.code {
@@ -137,9 +137,9 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
 }
 
 /// Mappe les touches pour la vue branches.
-fn map_branches_key(key: KeyEvent, app: &App) -> Option<AppAction> {
+fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Si on est en mode Input.
-    if app.branches_view_state.focus == BranchesFocus::Input {
+    if state.branches_view_state.focus == BranchesFocus::Input {
         return match key.code {
             KeyCode::Enter => Some(AppAction::ConfirmInput),
             KeyCode::Esc => Some(AppAction::CancelInput),
@@ -163,7 +163,7 @@ fn map_branches_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     }
 
     // Actions par section.
-    match app.branches_view_state.section {
+    match state.branches_view_state.section {
         BranchesSection::Branches => match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
@@ -194,7 +194,7 @@ fn map_branches_key(key: KeyEvent, app: &App) -> Option<AppAction> {
 }
 
 /// Mappe les touches pour la vue staging.
-fn map_staging_key(key: KeyEvent, app: &App) -> Option<AppAction> {
+fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Touches globales de la vue staging
     match key.code {
         KeyCode::Char('q') => return Some(AppAction::Quit),
@@ -204,7 +204,7 @@ fn map_staging_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     }
 
     // Navigation selon le focus dans la vue staging
-    match app.staging_state.focus {
+    match state.staging_state.focus {
         StagingFocus::Unstaged => match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),

@@ -1,6 +1,9 @@
 mod app;
 mod error;
+mod event;
 mod git;
+mod state;
+mod terminal;
 mod ui;
 
 use clap::{Parser, Subcommand};
@@ -43,7 +46,7 @@ fn main() -> anyhow::Result<()> {
         }
         None => {
             // Mode par défaut : lance la TUI interactive.
-            let mut app = App::new(repo, cli.path)?;
+            let app = App::new(repo, cli.path)?;
             app.run()?;
         }
     }
