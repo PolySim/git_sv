@@ -43,6 +43,24 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
 
+    // Si la recherche est active, gérer les inputs de recherche
+    if state.search_state.is_active {
+        return match key.code {
+            KeyCode::Esc => Some(AppAction::CloseSearch),
+            KeyCode::Enter => Some(AppAction::NextSearchResult),
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(AppAction::NextSearchResult)
+            }
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(AppAction::PrevSearchResult)
+            }
+            KeyCode::Tab => Some(AppAction::ChangeSearchType),
+            KeyCode::Char(c) => Some(AppAction::InsertChar(c)),
+            KeyCode::Backspace => Some(AppAction::DeleteChar),
+            _ => None,
+        };
+    }
+
     // Navigation entre les vues principales (toujours disponible)
     match key.code {
         KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
@@ -143,6 +161,14 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('s') => Some(AppAction::StashPrompt),
         KeyCode::Char('m') => Some(AppAction::MergePrompt),
         KeyCode::Char('b') => Some(AppAction::BranchList),
+        KeyCode::Char('P') => Some(AppAction::GitPush),
+        KeyCode::Char('p') => Some(AppAction::GitPull),
+        KeyCode::Char('f') => Some(AppAction::GitFetch),
+
+        // Recherche
+        KeyCode::Char('/') => Some(AppAction::OpenSearch),
+        KeyCode::Char('n') => Some(AppAction::NextSearchResult),
+        KeyCode::Char('N') => Some(AppAction::PrevSearchResult),
 
         // Aide
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
@@ -231,6 +257,8 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
             KeyCode::Char('s') | KeyCode::Enter => Some(AppAction::StageFile),
             KeyCode::Char('a') => Some(AppAction::StageAll),
+            KeyCode::Char('d') => Some(AppAction::DiscardFile),
+            KeyCode::Char('D') => Some(AppAction::DiscardAll),
             KeyCode::Tab => Some(AppAction::SwitchStagingFocus),
             KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
             _ => None,

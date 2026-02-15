@@ -60,6 +60,13 @@ pub struct CommitNode {
     pub color_index: usize,
 }
 
+impl CommitNode {
+    /// Retourne le hash court du commit (7 premiers caractères).
+    pub fn short_hash(&self) -> String {
+        self.oid.to_string()[..7].to_string()
+    }
+}
+
 /// Rangée du graphe contenant le commit et les segments de connexion.
 #[derive(Debug, Clone)]
 pub struct GraphRow {

@@ -17,6 +17,10 @@ pub enum ConfirmAction {
     WorktreeRemove(String),
     /// Supprimer un stash
     StashDrop(usize),
+    /// Discard les modifications d'un fichier
+    DiscardFile(String),
+    /// Discard toutes les modifications
+    DiscardAll,
 }
 
 impl ConfirmAction {
@@ -38,6 +42,16 @@ impl ConfirmAction {
                     index
                 )
             }
+            ConfirmAction::DiscardFile(path) => {
+                format!(
+                    "Êtes-vous sûr de vouloir discard les modifications de '{}' ?",
+                    path
+                )
+            }
+            ConfirmAction::DiscardAll => {
+                "Êtes-vous sûr de vouloir discard TOUTES les modifications non stagées ?"
+                    .to_string()
+            }
         }
     }
 
@@ -47,6 +61,8 @@ impl ConfirmAction {
             ConfirmAction::BranchDelete(_) => "Confirmer la suppression de branche",
             ConfirmAction::WorktreeRemove(_) => "Confirmer la suppression de worktree",
             ConfirmAction::StashDrop(_) => "Confirmer la suppression de stash",
+            ConfirmAction::DiscardFile(_) => "Confirmer le discard de fichier",
+            ConfirmAction::DiscardAll => "Confirmer le discard de tous les fichiers",
         }
     }
 }

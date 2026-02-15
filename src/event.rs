@@ -118,6 +118,16 @@ impl EventHandler {
             AppAction::CommitPrompt => self.handle_commit_prompt()?,
             AppAction::StashPrompt => self.handle_stash_prompt()?,
             AppAction::MergePrompt => self.handle_merge_prompt()?,
+            AppAction::GitPush => self.handle_git_push()?,
+            AppAction::GitPull => self.handle_git_pull()?,
+            AppAction::GitFetch => self.handle_git_fetch()?,
+            AppAction::OpenSearch => self.handle_open_search(),
+            AppAction::CloseSearch => self.handle_close_search(),
+            AppAction::ChangeSearchType => self.handle_change_search_type(),
+            AppAction::NextSearchResult => self.handle_next_search_result(),
+            AppAction::PrevSearchResult => self.handle_prev_search_result(),
+            AppAction::DiscardFile => self.handle_discard_file()?,
+            AppAction::DiscardAll => self.handle_discard_all()?,
         }
         Ok(())
     }
@@ -136,6 +146,12 @@ impl EventHandler {
                 }
                 ConfirmAction::StashDrop(index) => {
                     self.execute_stash_drop(index)?;
+                }
+                ConfirmAction::DiscardFile(path) => {
+                    self.execute_discard_file(&path)?;
+                }
+                ConfirmAction::DiscardAll => {
+                    self.execute_discard_all()?;
                 }
             }
         }
@@ -503,6 +519,19 @@ impl EventHandler {
     fn handle_insert_char(&mut self, c: char) {
         use crate::state::ViewMode;
 
+        // Gérer la saisie dans la recherche
+        if self.state.search_state.is_active {
+            let byte_pos = self.char_to_byte_position(
+                &self.state.search_state.query,
+                self.state.search_state.cursor,
+            );
+            self.state.search_state.query.insert(byte_pos, c);
+            self.state.search_state.cursor += 1;
+            // Effectuer la recherche à chaque caractère
+            self.perform_search();
+            return;
+        }
+
         if self.state.view_mode == ViewMode::Staging && self.state.staging_state.is_committing {
             // Utiliser char_indices pour trouver la position d'octet correcte
             let byte_pos = self.char_to_byte_position(
@@ -516,6 +545,23 @@ impl EventHandler {
 
     fn handle_delete_char(&mut self) {
         use crate::state::ViewMode;
+
+        // Gérer la suppression dans la recherche
+        if self.state.search_state.is_active && self.state.search_state.cursor > 0 {
+            self.state.search_state.cursor -= 1;
+            let byte_pos = self.char_to_byte_position(
+                &self.state.search_state.query,
+                self.state.search_state.cursor,
+            );
+            let end_byte_pos = self.char_to_byte_position(
+                &self.state.search_state.query,
+                self.state.search_state.cursor + 1,
+            );
+            self.state.search_state.query.drain(byte_pos..end_byte_pos);
+            // Effectuer la recherche après suppression
+            self.perform_search();
+            return;
+        }
 
         if self.state.view_mode == ViewMode::Staging
             && self.state.staging_state.is_committing
@@ -1295,6 +1341,256 @@ impl EventHandler {
                 .saturating_sub(1);
         }
 
+        Ok(())
+    }
+
+    /// Gère l'opération Git Push.
+    fn handle_git_push(&mut self) -> Result<()> {
+        // Vérifier si un remote est configuré
+        match crate::git::remote::has_remote(&self.state.repo.repo) {
+            Ok(true) => {
+                // Lancer le push
+                match crate::git::remote::push_current_branch(&self.state.repo.repo) {
+                    Ok(_) => {
+                        self.state.set_flash_message("Push réussi ✓".into());
+                    }
+                    Err(e) => {
+                        self.state
+                            .set_flash_message(format!("Erreur lors du push: {}", e));
+                    }
+                }
+            }
+            Ok(false) => {
+                self.state
+                    .set_flash_message("Aucun remote configuré".into());
+            }
+            Err(e) => {
+                self.state.set_flash_message(format!("Erreur: {}", e));
+            }
+        }
+        Ok(())
+    }
+
+    /// Gère l'opération Git Pull.
+    fn handle_git_pull(&mut self) -> Result<()> {
+        // Vérifier si un remote est configuré
+        match crate::git::remote::has_remote(&self.state.repo.repo) {
+            Ok(true) => {
+                // Lancer le pull
+                match crate::git::remote::pull_current_branch(&self.state.repo.repo) {
+                    Ok(_) => {
+                        self.state.set_flash_message("Pull réussi ✓".into());
+                        self.state.mark_dirty();
+                        self.refresh()?;
+                    }
+                    Err(e) => {
+                        let msg = format!("{}", e);
+                        if msg.contains("Conflits") {
+                            self.state
+                                .set_flash_message("Conflits détectés lors du pull".into());
+                        } else {
+                            self.state
+                                .set_flash_message(format!("Erreur lors du pull: {}", e));
+                        }
+                    }
+                }
+            }
+            Ok(false) => {
+                self.state
+                    .set_flash_message("Aucun remote configuré".into());
+            }
+            Err(e) => {
+                self.state.set_flash_message(format!("Erreur: {}", e));
+            }
+        }
+        Ok(())
+    }
+
+    /// Gère l'opération Git Fetch.
+    fn handle_git_fetch(&mut self) -> Result<()> {
+        // Vérifier si un remote est configuré
+        match crate::git::remote::has_remote(&self.state.repo.repo) {
+            Ok(true) => {
+                // Lancer le fetch
+                match crate::git::remote::fetch_all(&self.state.repo.repo) {
+                    Ok(_) => {
+                        self.state.set_flash_message("Fetch réussi ✓".into());
+                        self.state.mark_dirty();
+                        self.refresh()?;
+                    }
+                    Err(e) => {
+                        self.state
+                            .set_flash_message(format!("Erreur lors du fetch: {}", e));
+                    }
+                }
+            }
+            Ok(false) => {
+                self.state
+                    .set_flash_message("Aucun remote configuré".into());
+            }
+            Err(e) => {
+                self.state.set_flash_message(format!("Erreur: {}", e));
+            }
+        }
+        Ok(())
+    }
+
+    /// Ouvre le mode recherche.
+    fn handle_open_search(&mut self) {
+        self.state.search_state.is_active = true;
+        self.state.search_state.query.clear();
+        self.state.search_state.cursor = 0;
+        self.state.search_state.results.clear();
+        self.state.search_state.current_result = 0;
+    }
+
+    /// Ferme le mode recherche.
+    fn handle_close_search(&mut self) {
+        self.state.search_state.is_active = false;
+        self.state.search_state.query.clear();
+        self.state.search_state.results.clear();
+    }
+
+    /// Change le type de recherche (message → auteur → hash → message...).
+    fn handle_change_search_type(&mut self) {
+        use crate::git::search::SearchType;
+
+        self.state.search_state.search_type = match self.state.search_state.search_type {
+            SearchType::Message => SearchType::Author,
+            SearchType::Author => SearchType::Hash,
+            SearchType::Hash => SearchType::Message,
+        };
+
+        // Relancer la recherche avec le nouveau type
+        self.perform_search();
+    }
+
+    /// Va au résultat de recherche suivant.
+    fn handle_next_search_result(&mut self) {
+        if !self.state.search_state.results.is_empty() {
+            self.state.search_state.current_result = (self.state.search_state.current_result + 1)
+                % self.state.search_state.results.len();
+
+            // Mettre à jour la sélection du graphe
+            let idx = self.state.search_state.results[self.state.search_state.current_result];
+            self.state.selected_index = idx;
+            self.state.graph_state.select(Some(idx * 2));
+            self.update_commit_files();
+        }
+    }
+
+    /// Va au résultat de recherche précédent.
+    fn handle_prev_search_result(&mut self) {
+        if !self.state.search_state.results.is_empty() {
+            if self.state.search_state.current_result == 0 {
+                self.state.search_state.current_result = self.state.search_state.results.len() - 1;
+            } else {
+                self.state.search_state.current_result -= 1;
+            }
+
+            // Mettre à jour la sélection du graphe
+            let idx = self.state.search_state.results[self.state.search_state.current_result];
+            self.state.selected_index = idx;
+            self.state.graph_state.select(Some(idx * 2));
+            self.update_commit_files();
+        }
+    }
+
+    /// Effectue la recherche sur le graphe.
+    fn perform_search(&mut self) {
+        self.state.search_state.results = crate::git::search::filter_commits(
+            &self.state.graph,
+            &self.state.search_state.query,
+            self.state.search_state.search_type.clone(),
+        );
+        self.state.search_state.current_result = 0;
+
+        // Si on a des résultats, naviguer vers le premier
+        if !self.state.search_state.results.is_empty() {
+            let idx = self.state.search_state.results[0];
+            self.state.selected_index = idx;
+            self.state.graph_state.select(Some(idx * 2));
+            self.update_commit_files();
+        }
+    }
+
+    /// Déclenche le discard d'un fichier (demande confirmation).
+    fn handle_discard_file(&mut self) -> Result<()> {
+        use crate::state::StagingFocus;
+
+        // Seulement dans la vue Staging et focus sur unstaged
+        if !matches!(self.state.view_mode, crate::state::ViewMode::Staging) {
+            return Ok(());
+        }
+
+        if !matches!(self.state.staging_state.focus, StagingFocus::Unstaged) {
+            return Ok(());
+        }
+
+        // Récupérer le fichier sélectionné
+        let selected = self.state.staging_state.unstaged_selected;
+        if selected < self.state.staging_state.unstaged_files.len() {
+            let file = &self.state.staging_state.unstaged_files[selected];
+            let path = file.path.clone();
+
+            // Demander confirmation
+            self.state.pending_confirmation = Some(ConfirmAction::DiscardFile(path));
+        }
+
+        Ok(())
+    }
+
+    /// Déclenche le discard de tous les fichiers (demande confirmation).
+    fn handle_discard_all(&mut self) -> Result<()> {
+        // Seulement dans la vue Staging
+        if !matches!(self.state.view_mode, crate::state::ViewMode::Staging) {
+            return Ok(());
+        }
+
+        // Vérifier qu'il y a des fichiers unstaged
+        if self.state.staging_state.unstaged_files.is_empty() {
+            self.state
+                .set_flash_message("Aucune modification à discard".into());
+            return Ok(());
+        }
+
+        // Demander confirmation
+        self.state.pending_confirmation = Some(ConfirmAction::DiscardAll);
+
+        Ok(())
+    }
+
+    /// Exécute le discard d'un fichier.
+    fn execute_discard_file(&mut self, path: &str) -> Result<()> {
+        match crate::git::discard::discard_file(&self.state.repo.repo, path) {
+            Ok(_) => {
+                self.state
+                    .set_flash_message(format!("Fichier '{}' restauré ✓", path));
+                self.state.mark_dirty();
+                self.refresh()?;
+            }
+            Err(e) => {
+                self.state
+                    .set_flash_message(format!("Erreur lors du discard: {}", e));
+            }
+        }
+        Ok(())
+    }
+
+    /// Exécute le discard de tous les fichiers.
+    fn execute_discard_all(&mut self) -> Result<()> {
+        match crate::git::discard::discard_all(&self.state.repo.repo) {
+            Ok(_) => {
+                self.state
+                    .set_flash_message("Toutes les modifications ont été restaurées ✓".into());
+                self.state.mark_dirty();
+                self.refresh()?;
+            }
+            Err(e) => {
+                self.state
+                    .set_flash_message(format!("Erreur lors du discard: {}", e));
+            }
+        }
         Ok(())
     }
 }

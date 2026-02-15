@@ -100,6 +100,26 @@ pub enum AppAction {
     ConfirmAction,
     /// Annuler une action destructive (non).
     CancelAction,
+    /// Pousser la branche courante vers le remote.
+    GitPush,
+    /// Tirer les changements depuis le remote.
+    GitPull,
+    /// Récupérer les refs du remote sans merger.
+    GitFetch,
+    /// Ouvrir le mode recherche.
+    OpenSearch,
+    /// Fermer le mode recherche.
+    CloseSearch,
+    /// Changer le type de recherche (message/auteur/hash).
+    ChangeSearchType,
+    /// Aller au résultat suivant.
+    NextSearchResult,
+    /// Aller au résultat précédent.
+    PrevSearchResult,
+    /// Discard les modifications d'un fichier.
+    DiscardFile,
+    /// Discard toutes les modifications non stagées.
+    DiscardAll,
 }
 
 /// Mode d'affichage actif.
@@ -243,6 +263,35 @@ impl Default for BranchesViewState {
     }
 }
 
+/// État de la recherche de commits.
+pub struct SearchState {
+    /// Recherche activée ou non.
+    pub is_active: bool,
+    /// Texte de recherche.
+    pub query: String,
+    /// Position du curseur dans le texte de recherche.
+    pub cursor: usize,
+    /// Type de recherche en cours.
+    pub search_type: crate::git::search::SearchType,
+    /// Indices des commits correspondant à la recherche.
+    pub results: Vec<usize>,
+    /// Index du résultat actuellement sélectionné dans results.
+    pub current_result: usize,
+}
+
+impl Default for SearchState {
+    fn default() -> Self {
+        Self {
+            is_active: false,
+            query: String::new(),
+            cursor: 0,
+            search_type: crate::git::search::SearchType::Message,
+            results: Vec::new(),
+            current_result: 0,
+        }
+    }
+}
+
 /// État principal de l'application.
 pub struct AppState {
     pub repo: GitRepo,
@@ -266,6 +315,8 @@ pub struct AppState {
     pub diff_scroll_offset: usize,
     pub staging_state: StagingState,
     pub branches_view_state: BranchesViewState,
+    /// État de la recherche de commits.
+    pub search_state: SearchState,
     /// Flag indiquant si les données ont changé et nécessitent un rafraîchissement.
     pub dirty: bool,
     /// Cache pour les diffs de fichiers (LRU simple).
@@ -387,6 +438,7 @@ impl AppState {
             diff_scroll_offset: 0,
             staging_state: StagingState::default(),
             branches_view_state: BranchesViewState::default(),
+            search_state: SearchState::default(),
             dirty: true,                    // Initialement dirty pour charger les données
             diff_cache: DiffCache::new(50), // Cache de 50 diffs
             pending_confirmation: None,
