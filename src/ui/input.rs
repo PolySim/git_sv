@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use crate::app::{App, AppAction};
+use crate::app::{App, AppAction, FocusPanel};
 
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(app: &App) -> std::io::Result<Option<AppAction>> {
@@ -23,8 +23,18 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     // Ctrl+d / Ctrl+u pour page down/up
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
-            KeyCode::Char('d') => return Some(AppAction::PageDown),
-            KeyCode::Char('u') => return Some(AppAction::PageUp),
+            KeyCode::Char('d') => {
+                if app.focus == FocusPanel::Detail {
+                    return Some(AppAction::DiffScrollDown);
+                }
+                return Some(AppAction::PageDown);
+            }
+            KeyCode::Char('u') => {
+                if app.focus == FocusPanel::Detail {
+                    return Some(AppAction::DiffScrollUp);
+                }
+                return Some(AppAction::PageUp);
+            }
             _ => {}
         }
     }
@@ -32,6 +42,13 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
     // Escape ferme l'overlay d'aide si actif.
     if key.code == KeyCode::Esc && app.view_mode == crate::app::ViewMode::Help {
         return Some(AppAction::ToggleHelp);
+    }
+
+    // Escape pour revenir au panneau précédent quand on est dans Files ou Detail.
+    if key.code == KeyCode::Esc {
+        if app.focus == FocusPanel::Detail {
+            return Some(AppAction::SwitchBottomMode);
+        }
     }
 
     // Contexte: panneau de branches ouvert
@@ -45,6 +62,28 @@ fn map_key(key: KeyEvent, app: &App) -> Option<AppAction> {
             KeyCode::Char('d') => Some(AppAction::BranchDelete),
             _ => None,
         };
+    }
+
+    // Navigation contextuelle selon le focus.
+    match app.focus {
+        FocusPanel::Files => {
+            // Quand focus sur Files, j/k naviguent dans la liste des fichiers.
+            match key.code {
+                KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::FileDown),
+                KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::FileUp),
+                KeyCode::Enter => return Some(AppAction::SwitchBottomMode), // Passer au diff
+                _ => {}
+            }
+        }
+        FocusPanel::Detail => {
+            // Quand focus sur Detail, j/k scrollent le diff.
+            match key.code {
+                KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::DiffScrollDown),
+                KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::DiffScrollUp),
+                _ => {}
+            }
+        }
+        _ => {}
     }
 
     match key.code {

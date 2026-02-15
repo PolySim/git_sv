@@ -1,8 +1,8 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, ListState},
     Frame,
 };
 
@@ -22,6 +22,7 @@ pub fn render(
     mode: BottomLeftMode,
     area: Rect,
     is_focused: bool,
+    file_selected_index: usize,
 ) {
     let (items, title) = match mode {
         BottomLeftMode::CommitFiles => {
@@ -43,14 +44,23 @@ pub fn render(
         Style::default()
     };
 
-    let list = List::new(items).block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(border_style),
-    );
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        );
 
-    frame.render_widget(list, area);
+    let mut state = ListState::default();
+    state.select(Some(file_selected_index));
+
+    frame.render_stateful_widget(list, area, &mut state);
 }
 
 /// Construit les items pour les fichiers d'un commit.

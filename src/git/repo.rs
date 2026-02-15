@@ -107,6 +107,11 @@ impl GitRepo {
         super::diff::commit_diff(&self.repo, oid)
     }
 
+    /// Retourne le diff détaillé d'un fichier spécifique dans un commit.
+    pub fn file_diff(&self, oid: git2::Oid, file_path: &str) -> Result<super::diff::FileDiff> {
+        super::diff::get_file_diff(&self.repo, oid, file_path)
+    }
+
     /// Checkout une branche existante.
     pub fn checkout_branch(&self, name: &str) -> Result<()> {
         super::branch::checkout_branch(&self.repo, name)

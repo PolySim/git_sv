@@ -1,5 +1,6 @@
 pub mod branch_panel;
 pub mod detail_view;
+pub mod diff_view;
 pub mod files_view;
 pub mod graph_view;
 pub mod help_bar;
@@ -8,11 +9,13 @@ pub mod input;
 pub mod layout;
 pub mod status_bar;
 
-use crate::app::ViewMode;
+use crate::app::{FocusPanel, ViewMode};
+use crate::git::diff::FileDiff;
 use ratatui::widgets::ListState;
 use ratatui::Frame;
 
 /// Point d'entrée du rendu : dessine tous les panneaux.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     graph: &[crate::git::graph::GraphRow],
@@ -29,6 +32,9 @@ pub fn render(
     show_branch_panel: bool,
     repo_path: &str,
     flash_message: Option<&str>,
+    file_selected_index: usize,
+    selected_file_diff: Option<&FileDiff>,
+    diff_scroll_offset: usize,
 ) {
     let layout = layout::build_layout(frame.area());
 
@@ -70,17 +76,34 @@ pub fn render(
         bottom_left_mode.clone(),
         layout.bottom_left,
         is_files_focused,
+        file_selected_index,
     );
 
-    // Rendu du panneau de détail.
+    // Rendu du panneau bas-droit (contextuel selon le focus).
     let is_detail_focused = focus == crate::app::FocusPanel::Detail;
-    detail_view::render(
-        frame,
-        graph,
-        selected_index,
-        layout.bottom_right,
-        is_detail_focused,
-    );
+
+    match focus {
+        FocusPanel::Graph | FocusPanel::Detail => {
+            // Afficher les métadonnées du commit.
+            detail_view::render(
+                frame,
+                graph,
+                selected_index,
+                layout.bottom_right,
+                is_detail_focused,
+            );
+        }
+        FocusPanel::Files => {
+            // Afficher le diff du fichier sélectionné.
+            diff_view::render(
+                frame,
+                selected_file_diff,
+                diff_scroll_offset,
+                layout.bottom_right,
+                false,
+            );
+        }
+    }
 
     // Rendu de la barre d'aide.
     help_bar::render(

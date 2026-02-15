@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::error::Result;
 use crate::git::branch::BranchInfo;
-use crate::git::diff::DiffFile;
+use crate::git::diff::{DiffFile, FileDiff};
 use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
 use crate::ui;
@@ -38,6 +38,14 @@ pub enum AppAction {
     BranchCreate,
     BranchDelete,
     CloseBranchPanel,
+    /// Naviguer vers le haut dans le panneau de fichiers.
+    FileUp,
+    /// Naviguer vers le bas dans le panneau de fichiers.
+    FileDown,
+    /// Scroller vers le haut dans le diff.
+    DiffScrollUp,
+    /// Scroller vers le bas dans le diff.
+    DiffScrollDown,
 }
 
 /// Mode d'affichage actif.
@@ -80,6 +88,12 @@ pub struct App {
     pub branch_selected: usize,
     pub flash_message: Option<(String, Instant)>,
     pub should_quit: bool,
+    /// Index du fichier sélectionné dans le panneau de fichiers.
+    pub file_selected_index: usize,
+    /// Diff du fichier sélectionné (chargé à la demande).
+    pub selected_file_diff: Option<FileDiff>,
+    /// Offset de scroll dans le panneau de diff.
+    pub diff_scroll_offset: usize,
 }
 
 impl App {
@@ -105,6 +119,9 @@ impl App {
             branch_selected: 0,
             flash_message: None,
             should_quit: false,
+            file_selected_index: 0,
+            selected_file_diff: None,
+            diff_scroll_offset: 0,
         };
         app.refresh()?;
         Ok(app)
@@ -124,6 +141,11 @@ impl App {
         // Charger les fichiers du commit sélectionné.
         self.update_commit_files();
 
+        // Réinitialiser la sélection de fichier.
+        self.file_selected_index = 0;
+        self.selected_file_diff = None;
+        self.diff_scroll_offset = 0;
+
         Ok(())
     }
 
@@ -134,6 +156,22 @@ impl App {
         } else {
             self.commit_files.clear();
         }
+        // Réinitialiser le diff sélectionné quand on change de commit.
+        self.file_selected_index = 0;
+        self.selected_file_diff = None;
+        self.diff_scroll_offset = 0;
+    }
+
+    /// Charge le diff du fichier sélectionné.
+    fn load_selected_file_diff(&mut self) {
+        if let Some(file) = self.commit_files.get(self.file_selected_index) {
+            if let Some(row) = self.graph.get(self.selected_index) {
+                self.selected_file_diff = self.repo.file_diff(row.node.oid, &file.path).ok();
+            }
+        } else {
+            self.selected_file_diff = None;
+        }
+        self.diff_scroll_offset = 0;
     }
 
     /// Définit un message flash qui s'affichera pendant 3 secondes.
@@ -267,6 +305,32 @@ impl App {
             AppAction::BranchDelete => {
                 // TODO: implémenter la confirmation et suppression
             }
+            AppAction::FileUp => {
+                if self.focus == FocusPanel::Files && !self.commit_files.is_empty() {
+                    if self.file_selected_index > 0 {
+                        self.file_selected_index -= 1;
+                        self.load_selected_file_diff();
+                    }
+                }
+            }
+            AppAction::FileDown => {
+                if self.focus == FocusPanel::Files && !self.commit_files.is_empty() {
+                    if self.file_selected_index + 1 < self.commit_files.len() {
+                        self.file_selected_index += 1;
+                        self.load_selected_file_diff();
+                    }
+                }
+            }
+            AppAction::DiffScrollUp => {
+                if self.focus == FocusPanel::Detail && self.diff_scroll_offset > 0 {
+                    self.diff_scroll_offset -= 1;
+                }
+            }
+            AppAction::DiffScrollDown => {
+                if self.focus == FocusPanel::Detail {
+                    self.diff_scroll_offset += 1;
+                }
+            }
             // Les prompts seront implémentés dans les prochaines itérations.
             AppAction::CommitPrompt | AppAction::StashPrompt | AppAction::MergePrompt => {
                 // TODO: implémenter les modales/prompts interactifs.
@@ -306,6 +370,9 @@ impl App {
                     self.show_branch_panel,
                     &self.repo_path,
                     self.flash_message.as_ref().map(|(msg, _)| msg.as_str()),
+                    self.file_selected_index,
+                    self.selected_file_diff.as_ref(),
+                    self.diff_scroll_offset,
                 );
             })?;
 
