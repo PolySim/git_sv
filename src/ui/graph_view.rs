@@ -201,8 +201,8 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
             let color = get_branch_color(cell.color_index);
             let ch = match cell.edge_type {
                 EdgeType::Vertical => "│",
-                EdgeType::ForkRight => "╭",
-                EdgeType::ForkLeft => "╮",
+                EdgeType::ForkRight => "╮",
+                EdgeType::ForkLeft => "╭",
                 EdgeType::MergeFromRight => "╰",
                 EdgeType::MergeFromLeft => "╯",
                 EdgeType::Horizontal => "─",
