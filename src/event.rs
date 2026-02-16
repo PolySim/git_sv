@@ -1430,8 +1430,8 @@ impl EventHandler {
             Ok(true) => {
                 // Lancer le push
                 match crate::git::remote::push_current_branch(&self.state.repo.repo) {
-                    Ok(_) => {
-                        self.state.set_flash_message("Push réussi ✓".into());
+                    Ok(msg) => {
+                        self.state.set_flash_message(format!("{} ✓", msg));
                     }
                     Err(e) => {
                         self.state

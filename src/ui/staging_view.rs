@@ -233,12 +233,14 @@ fn render_commit_input(
 fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect) {
     let help_text = match focus {
         StagingFocus::Unstaged => {
-            "j/k:nav  s/Enter:stage  a:stage all  Tab:→Staged  c:commit  1:graph  q:quit"
+            "j/k:nav  s/Enter:stage  a:stage all  Tab:→Staged  c:commit  P:push  1:graph  q:quit"
         }
         StagingFocus::Staged => {
-            "j/k:nav  u/Enter:unstage  U:unstage all  Tab:→Diff  c:commit  1:graph  q:quit"
+            "j/k:nav  u/Enter:unstage  U:unstage all  Tab:→Diff  c:commit  P:push  1:graph  q:quit"
         }
-        StagingFocus::Diff => "j/k:scroll  Tab:→Unstaged  Esc:Unstaged  c:commit  1:graph  q:quit",
+        StagingFocus::Diff => {
+            "j/k:scroll  Tab:→Unstaged  Esc:Unstaged  c:commit  P:push  1:graph  q:quit"
+        }
         StagingFocus::CommitMessage => "Enter:confirmer  Esc:annuler  ←→:curseur",
     };
 

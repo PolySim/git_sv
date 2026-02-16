@@ -217,6 +217,7 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::BackTab => return Some(AppAction::PrevSection),
         KeyCode::Char('q') => return Some(AppAction::Quit),
         KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
+        KeyCode::Char('P') => return Some(AppAction::GitPush),
         _ => {}
     }
 
@@ -271,6 +272,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('q') => return Some(AppAction::Quit),
         KeyCode::Char('r') => return Some(AppAction::Refresh),
         KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
+        KeyCode::Char('P') => return Some(AppAction::GitPush),
         _ => {}
     }
 

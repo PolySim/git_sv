@@ -24,6 +24,7 @@ pub fn render(
         ("c", "commit"),
         ("s", "stash"),
         ("m", "merge"),
+        ("P", "push"),
     ];
 
     // Ajouter le contexte du panneau bas.

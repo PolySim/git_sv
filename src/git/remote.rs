@@ -256,14 +256,20 @@ fn resolve_remote_url(url: &str) -> String {
 }
 
 /// Push la branche courante vers le remote.
-pub fn push_current_branch(repo: &Repository) -> Result<()> {
+/// Retourne un message décrivant l'action effectuée.
+pub fn push_current_branch(repo: &Repository) -> Result<String> {
     // Récupérer la branche courante
     let head = repo.head()?;
     let branch_name = head
         .shorthand()
         .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?;
 
-    // Récupérer le nom du remote associé à la branche
+    // Vérifier si la branche a un upstream configuré
+    let has_upstream = repo
+        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
+        .is_ok();
+
+    // Récupérer le nom du remote (fallback vers "origin")
     let remote_name = repo
         .branch_upstream_name(&format!("refs/heads/{}", branch_name))
         .ok()
@@ -299,6 +305,11 @@ pub fn push_current_branch(repo: &Repository) -> Result<()> {
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(build_remote_callbacks());
 
+    // Configurer le push avec --set-upstream si pas d'upstream configuré
+    if !has_upstream {
+        push_options.remote_push_options(&["--set-upstream"]);
+    }
+
     // Pousser la branche courante
     let push_refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
     let result = resolved_remote.push(&[&push_refspec], Some(&mut push_options));
@@ -308,7 +319,16 @@ pub fn push_current_branch(repo: &Repository) -> Result<()> {
     let _ = repo.remote_delete(&temp_remote_name);
 
     result?;
-    Ok(())
+
+    // Retourner un message descriptif
+    if has_upstream {
+        Ok(format!("Push de '{}' vers {}", branch_name, remote_name))
+    } else {
+        Ok(format!(
+            "Push de '{}' vers {}/{} (upstream configuré)",
+            branch_name, remote_name, branch_name
+        ))
+    }
 }
 
 /// Pull (fetch + merge) depuis le remote.
