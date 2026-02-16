@@ -253,6 +253,19 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 
 /// Mappe les touches pour la vue staging.
 fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    // Vérifier d'abord si on est en mode saisie de commit
+    if state.staging_state.focus == StagingFocus::CommitMessage {
+        return match key.code {
+            KeyCode::Enter => Some(AppAction::ConfirmCommit),
+            KeyCode::Esc => Some(AppAction::CancelCommitMessage),
+            KeyCode::Char(c) => Some(AppAction::InsertChar(c)),
+            KeyCode::Backspace => Some(AppAction::DeleteChar),
+            KeyCode::Left => Some(AppAction::MoveCursorLeft),
+            KeyCode::Right => Some(AppAction::MoveCursorRight),
+            _ => None,
+        };
+    }
+
     // Touches globales de la vue staging
     match key.code {
         KeyCode::Char('q') => return Some(AppAction::Quit),
@@ -291,15 +304,8 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
             _ => None,
         },
-        StagingFocus::CommitMessage => match key.code {
-            KeyCode::Enter => Some(AppAction::ConfirmCommit),
-            KeyCode::Esc => Some(AppAction::CancelCommitMessage),
-            KeyCode::Char(c) => Some(AppAction::InsertChar(c)),
-            KeyCode::Backspace => Some(AppAction::DeleteChar),
-            KeyCode::Left => Some(AppAction::MoveCursorLeft),
-            KeyCode::Right => Some(AppAction::MoveCursorRight),
-            _ => None,
-        },
+        // StagingFocus::CommitMessage est géré en priorité au début de la fonction
+        StagingFocus::CommitMessage => unreachable!(),
     }
 }
 
