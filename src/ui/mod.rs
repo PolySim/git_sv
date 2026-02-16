@@ -14,6 +14,7 @@ pub mod help_overlay;
 pub mod input;
 pub mod layout;
 pub mod loading;
+pub mod merge_picker;
 pub mod nav_bar;
 pub mod staging_layout;
 pub mod staging_view;
@@ -56,6 +57,13 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             if let Some(ref blame_state) = state.blame_state {
                 frame.render_widget(blame_view::BlameView::new(blame_state), frame.area());
             }
+        }
+    }
+
+    // Rendre le merge picker si actif
+    if let Some(ref picker) = state.merge_picker {
+        if picker.is_active {
+            merge_picker::render(frame, picker, &state.current_branch, frame.area());
         }
     }
 

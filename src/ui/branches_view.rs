@@ -398,7 +398,7 @@ fn render_branches_help(
     } else {
         match section {
             BranchesSection::Branches => {
-                "Tab:section  Enter:checkout  n:new  d:delete  r:rename  R:remote  P:push  1:graph  2:staging"
+                "Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  1:graph  2:staging"
             }
             BranchesSection::Worktrees => {
                 "Tab:section  n:new  d:delete  1:graph  2:staging"
@@ -427,7 +427,6 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
         Some(InputAction::RenameBranch) => " Renommer la branche ",
         Some(InputAction::CreateWorktree) => " Nouveau worktree (nom chemin [branche]) ",
         Some(InputAction::SaveStash) => " Message du stash ",
-        Some(InputAction::MergeBranch) => " Merger la branche (nom de branche) ",
         None => " Input ",
     };
 

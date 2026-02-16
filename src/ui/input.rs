@@ -33,6 +33,17 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return Some(AppAction::Quit);
     }
 
+    // Si le merge picker est actif, gérer ses keybindings
+    if state.merge_picker.as_ref().map_or(false, |p| p.is_active) {
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MergePickerDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MergePickerUp),
+            KeyCode::Enter => Some(AppAction::MergePickerConfirm),
+            KeyCode::Esc => Some(AppAction::MergePickerCancel),
+            _ => None,
+        };
+    }
+
     // Si une confirmation est en attente, gérer y/n/ESC
     if state.pending_confirmation.is_some() {
         return match key.code {
@@ -231,6 +242,7 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('d') => Some(AppAction::BranchDelete),
             KeyCode::Char('r') => Some(AppAction::BranchRename),
             KeyCode::Char('R') => Some(AppAction::ToggleRemoteBranches),
+            KeyCode::Char('m') => Some(AppAction::MergePrompt),
             _ => None,
         },
         BranchesSection::Worktrees => match key.code {

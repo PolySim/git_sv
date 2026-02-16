@@ -23,6 +23,8 @@ pub enum ConfirmAction {
     DiscardAll,
     /// Cherry-pick un commit
     CherryPick(git2::Oid),
+    /// Merger une branche (source, cible)
+    MergeBranch(String, String),
 }
 
 impl ConfirmAction {
@@ -60,6 +62,9 @@ impl ConfirmAction {
                     format!("{:.7}", oid)
                 )
             }
+            ConfirmAction::MergeBranch(source, target) => {
+                format!("Merger '{}' dans '{}' ?", source, target)
+            }
         }
     }
 
@@ -72,6 +77,7 @@ impl ConfirmAction {
             ConfirmAction::DiscardFile(_) => "Confirmer le discard de fichier",
             ConfirmAction::DiscardAll => "Confirmer le discard de tous les fichiers",
             ConfirmAction::CherryPick(_) => "Confirmer le cherry-pick",
+            ConfirmAction::MergeBranch(_, _) => "Confirmer le merge",
         }
     }
 }
@@ -79,21 +85,17 @@ impl ConfirmAction {
 /// Rend un dialogue de confirmation en overlay.
 pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
     // Calculer la zone centrale pour le popup
-    let popup_area = centered_rect(50, 30, area);
+    let popup_area = centered_rect(60, 30, area);
 
     // Effacer la zone sous le popup
     frame.render_widget(Clear, popup_area);
 
     // Construire le contenu
-    let message = action.message();
-    let title = action.title();
+    let msg = action.message();
 
     let content = vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            message,
-            Style::default().fg(Color::White),
-        )]),
+        Line::from(msg.as_str()),
         Line::from(""),
         Line::from(vec![
             Span::styled(
@@ -121,13 +123,12 @@ pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(title)
+                .title(action.title())
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow)),
         )
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true });
+        .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, popup_area);
 }

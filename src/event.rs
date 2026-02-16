@@ -133,6 +133,10 @@ impl EventHandler {
             AppAction::JumpToBlameCommit => self.handle_jump_to_blame_commit()?,
             AppAction::CherryPick => self.handle_cherry_pick()?,
             AppAction::AmendCommit => self.handle_amend_commit()?,
+            AppAction::MergePickerUp => self.handle_merge_picker_up(),
+            AppAction::MergePickerDown => self.handle_merge_picker_down(),
+            AppAction::MergePickerConfirm => self.handle_merge_picker_confirm()?,
+            AppAction::MergePickerCancel => self.handle_merge_picker_cancel(),
         }
         Ok(())
     }
@@ -160,6 +164,9 @@ impl EventHandler {
                 }
                 ConfirmAction::CherryPick(oid) => {
                     self.execute_cherry_pick(oid)?;
+                }
+                ConfirmAction::MergeBranch(source, _target) => {
+                    self.execute_merge(&source)?;
                 }
             }
         }
@@ -1006,25 +1013,6 @@ impl EventHandler {
                         self.refresh_branches_view()?;
                     }
                 }
-                Some(InputAction::MergeBranch) => {
-                    let branch_name = self.state.branches_view_state.input_text.clone();
-                    if !branch_name.is_empty() {
-                        if let Err(e) =
-                            crate::git::merge::merge_branch(&self.state.repo.repo, &branch_name)
-                        {
-                            self.state.set_flash_message(format!("Erreur: {}", e));
-                        } else {
-                            self.state.set_flash_message(format!(
-                                "Branche '{}' mergée avec succès",
-                                branch_name
-                            ));
-                            self.state.mark_dirty(); // Marquer comme modifié
-                            self.refresh()?;
-                        }
-                    } else {
-                        self.state.set_flash_message("Nom de branche requis".into());
-                    }
-                }
                 _ => {}
             }
             self.state.branches_view_state.focus = BranchesFocus::List;
@@ -1115,17 +1103,34 @@ impl EventHandler {
     }
 
     fn handle_merge_prompt(&mut self) -> Result<()> {
-        use crate::state::{BranchesFocus, BranchesSection, InputAction, ViewMode};
+        use crate::state::ViewMode;
 
-        // Ouvrir un overlay pour choisir la branche à merger
-        self.state.view_mode = ViewMode::Branches;
-        self.state.branches_view_state.section = BranchesSection::Branches;
-        self.state.branches_view_state.focus = BranchesFocus::Input;
-        self.state.branches_view_state.input_action = Some(InputAction::MergeBranch);
-        self.state.branches_view_state.input_text.clear();
-        self.state.branches_view_state.input_cursor = 0;
-        self.refresh_branches_view()?;
-
+        if self.state.view_mode == ViewMode::Branches {
+            // Cas 1 : Vue Branches → merge direct de la branche focusée
+            let branch = self
+                .state
+                .branches_view_state
+                .local_branches
+                .get(self.state.branches_view_state.branch_selected)
+                .cloned();
+            if let Some(branch) = branch {
+                if branch.is_head {
+                    self.state.set_flash_message(
+                        "Impossible de merger la branche courante dans elle-même".into(),
+                    );
+                } else {
+                    // Demander confirmation
+                    let current_branch = self.state.current_branch.clone().unwrap_or_default();
+                    self.state.pending_confirmation = Some(ConfirmAction::MergeBranch(
+                        branch.name.clone(),
+                        current_branch,
+                    ));
+                }
+            }
+        } else {
+            // Cas 2 : Autres vues → ouvrir le sélecteur de branches
+            self.open_merge_picker()?;
+        }
         Ok(())
     }
 
@@ -1864,6 +1869,104 @@ impl EventHandler {
         self.state
             .set_flash_message("Mode amendement activé - éditez le message et validez".into());
 
+        Ok(())
+    }
+
+    /// Ouvre le sélecteur de branches pour le merge.
+    fn open_merge_picker(&mut self) -> Result<()> {
+        use crate::state::MergePickerState;
+
+        // Charger les branches si elles ne le sont pas déjà
+        if self.state.branches_view_state.local_branches.is_empty() {
+            let (local_branches, _) = crate::git::branch::list_all_branches(&self.state.repo.repo)?;
+            self.state.branches_view_state.local_branches = local_branches;
+        }
+
+        // Récupérer la liste des branches locales (hors branche courante)
+        let current_branch = self.state.current_branch.clone();
+        let branches: Vec<String> = self
+            .state
+            .branches_view_state
+            .local_branches
+            .iter()
+            .filter(|b| {
+                if let Some(ref current) = current_branch {
+                    b.name != *current
+                } else {
+                    true
+                }
+            })
+            .map(|b| b.name.clone())
+            .collect();
+
+        if branches.is_empty() {
+            self.state
+                .set_flash_message("Aucune branche disponible pour le merge".into());
+            return Ok(());
+        }
+
+        self.state.merge_picker = Some(MergePickerState {
+            branches,
+            selected: 0,
+            is_active: true,
+        });
+
+        Ok(())
+    }
+
+    /// Navigation vers le haut dans le merge picker.
+    fn handle_merge_picker_up(&mut self) {
+        if let Some(ref mut picker) = self.state.merge_picker {
+            if picker.selected > 0 {
+                picker.selected -= 1;
+            }
+        }
+    }
+
+    /// Navigation vers le bas dans le merge picker.
+    fn handle_merge_picker_down(&mut self) {
+        if let Some(ref mut picker) = self.state.merge_picker {
+            if !picker.branches.is_empty() && picker.selected + 1 < picker.branches.len() {
+                picker.selected += 1;
+            }
+        }
+    }
+
+    /// Confirme la sélection dans le merge picker.
+    fn handle_merge_picker_confirm(&mut self) -> Result<()> {
+        let branch_to_merge = self
+            .state
+            .merge_picker
+            .as_ref()
+            .and_then(|picker| picker.branches.get(picker.selected))
+            .cloned();
+
+        if let Some(branch_name) = branch_to_merge {
+            self.execute_merge(&branch_name)?;
+        }
+
+        self.state.merge_picker = None;
+        Ok(())
+    }
+
+    /// Annule le merge picker.
+    fn handle_merge_picker_cancel(&mut self) {
+        self.state.merge_picker = None;
+    }
+
+    /// Exécute le merge d'une branche.
+    fn execute_merge(&mut self, branch_name: &str) -> Result<()> {
+        match crate::git::merge::merge_branch(&self.state.repo.repo, branch_name) {
+            Ok(_) => {
+                self.state
+                    .set_flash_message(format!("Branche '{}' mergée avec succès", branch_name));
+                self.state.mark_dirty();
+                self.refresh()?;
+            }
+            Err(e) => {
+                self.state.set_flash_message(format!("Erreur: {}", e));
+            }
+        }
         Ok(())
     }
 }

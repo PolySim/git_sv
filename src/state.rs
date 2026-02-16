@@ -130,6 +130,14 @@ pub enum AppAction {
     CherryPick,
     /// Amender le dernier commit.
     AmendCommit,
+    /// Navigation vers le haut dans le merge picker.
+    MergePickerUp,
+    /// Navigation vers le bas dans le merge picker.
+    MergePickerDown,
+    /// Confirmer la sélection dans le merge picker.
+    MergePickerConfirm,
+    /// Annuler le merge picker.
+    MergePickerCancel,
 }
 
 /// Mode d'affichage actif.
@@ -237,7 +245,6 @@ pub enum InputAction {
     CreateWorktree,
     RenameBranch,
     SaveStash,
-    MergeBranch,
 }
 
 /// État de la vue branches/worktree/stash.
@@ -320,6 +327,16 @@ pub struct BlameState {
     pub scroll_offset: usize,
 }
 
+/// État du sélecteur de branche pour le merge.
+pub struct MergePickerState {
+    /// Liste des branches disponibles (hors branche courante).
+    pub branches: Vec<String>,
+    /// Index de la branche sélectionnée.
+    pub selected: usize,
+    /// Actif ou non.
+    pub is_active: bool,
+}
+
 impl BlameState {
     pub fn new(file_path: String, commit_oid: git2::Oid) -> Self {
         Self {
@@ -367,6 +384,8 @@ pub struct AppState {
     pub pending_confirmation: Option<ConfirmAction>,
     /// Spinner de chargement actif (None si pas de chargement).
     pub loading_spinner: Option<LoadingSpinner>,
+    /// État du sélecteur de branche pour le merge.
+    pub merge_picker: Option<MergePickerState>,
 }
 
 /// Cache LRU simple pour les diffs de fichiers.
@@ -486,6 +505,7 @@ impl AppState {
             diff_cache: DiffCache::new(50), // Cache de 50 diffs
             pending_confirmation: None,
             loading_spinner: None,
+            merge_picker: None,
         };
 
         Ok(state)
