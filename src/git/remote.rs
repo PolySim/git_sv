@@ -400,6 +400,81 @@ pub fn pull_current_branch(repo: &Repository) -> Result<()> {
     }
 }
 
+/// Pull avec résultat typé pour gérer les conflits.
+pub fn pull_current_branch_with_result(
+    repo: &Repository,
+) -> crate::error::Result<crate::git::conflict::MergeResult> {
+    use crate::git::conflict::{list_conflict_files, MergeResult};
+
+    // D'abord, faire un fetch
+    fetch_all(repo)?;
+
+    // Récupérer la branche courante
+    let head = repo.head()?;
+    let branch_name = head
+        .shorthand()
+        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pull"))?;
+
+    // Récupérer le nom complet de la branche upstream
+    let upstream_name = repo.branch_upstream_name(&format!("refs/heads/{}", branch_name))?;
+    let upstream_name = upstream_name
+        .as_str()
+        .ok_or_else(|| git2::Error::from_str("Nom de branche upstream invalide"))?;
+
+    // Trouver le commit de l'upstream et créer un AnnotatedCommit
+    let upstream_ref = repo.find_reference(upstream_name)?;
+    let upstream_oid = upstream_ref.peel_to_commit()?.id();
+    let upstream_commit = repo.find_annotated_commit(upstream_oid)?;
+
+    // Merge avec fast-forward si possible
+    let analysis = repo.merge_analysis(&[&upstream_commit])?;
+
+    if analysis.0.is_up_to_date() {
+        // Déjà à jour
+        Ok(MergeResult::UpToDate)
+    } else if analysis.0.is_fast_forward() {
+        // Fast-forward possible
+        let mut reference = repo.find_reference(&format!("refs/heads/{}", branch_name))?;
+        reference.set_target(upstream_oid, &format!("Fast-forward to {}", upstream_oid))?;
+        repo.set_head(&format!("refs/heads/{}", branch_name))?;
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+        Ok(MergeResult::FastForward)
+    } else {
+        // Merge nécessaire (conflits possibles)
+        repo.merge(
+            &[&upstream_commit],
+            Some(&mut git2::MergeOptions::default()),
+            Some(&mut git2::build::CheckoutBuilder::default()),
+        )?;
+
+        // Vérifier s'il y a des conflits
+        let mut index = repo.index()?;
+        if index.has_conflicts() {
+            // Lister les fichiers en conflit
+            let conflict_files = list_conflict_files(repo)?;
+            return Ok(MergeResult::Conflicts(conflict_files));
+        }
+
+        // Créer le commit de merge
+        let signature = repo.signature()?;
+        let head_commit = head.peel_to_commit()?;
+        let tree_id = index.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
+        let upstream_real_commit = repo.find_commit(upstream_oid)?;
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            &format!("Merge {}", upstream_name),
+            &tree,
+            &[&head_commit, &upstream_real_commit],
+        )?;
+
+        Ok(MergeResult::Success)
+    }
+}
+
 /// Fetch toutes les refs depuis le remote.
 pub fn fetch_all(repo: &Repository) -> Result<()> {
     // Récupérer le remote par défaut (généralement "origin")

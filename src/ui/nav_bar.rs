@@ -11,24 +11,39 @@ use ratatui::{
 use crate::state::ViewMode;
 
 /// Rend la barre de navigation avec les onglets.
-pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect) {
-    let tabs = vec![
+pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, has_conflicts: bool) {
+    let mut tabs = vec![
         ("1", "Graph", ViewMode::Graph),
         ("2", "Staging", ViewMode::Staging),
         ("3", "Branches", ViewMode::Branches),
     ];
 
+    // Ajouter l'onglet Conflits s'il y a des conflits
+    if has_conflicts {
+        tabs.push(("4", "Conflits", ViewMode::Conflicts));
+    }
+
     let mut spans: Vec<Span> = vec![Span::raw(" ")];
 
     for (i, (key, label, mode)) in tabs.iter().enumerate() {
         let is_active = *mode == current_view;
+        let is_conflicts = *mode == ViewMode::Conflicts;
 
         // Style pour l'onglet
         let style = if is_active {
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD)
+            if is_conflicts {
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            }
+        } else if is_conflicts {
+            Style::default().fg(Color::Red)
         } else {
             Style::default().fg(Color::Gray)
         };
@@ -55,22 +70,34 @@ pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect) {
 }
 
 /// Rend une version compacte de la barre de navigation (pour les status bar).
-pub fn render_compact(current_view: ViewMode) -> Line<'static> {
-    let tabs = vec![
+pub fn render_compact(current_view: ViewMode, has_conflicts: bool) -> Line<'static> {
+    let mut tabs = vec![
         ("1:Graph", ViewMode::Graph),
         ("2:Staging", ViewMode::Staging),
         ("3:Branches", ViewMode::Branches),
     ];
 
+    // Ajouter l'onglet Conflits s'il y a des conflits
+    if has_conflicts {
+        tabs.push(("4:Conflits", ViewMode::Conflicts));
+    }
+
     let mut spans: Vec<Span> = Vec::new();
 
     for (i, (label, mode)) in tabs.iter().enumerate() {
         let is_active = *mode == current_view;
+        let is_conflicts = *mode == ViewMode::Conflicts;
 
         let style = if is_active {
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD)
+            if is_conflicts {
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            }
+        } else if is_conflicts {
+            Style::default().fg(Color::Red)
         } else {
             Style::default().fg(Color::DarkGray)
         };

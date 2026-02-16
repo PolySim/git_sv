@@ -4,6 +4,7 @@ pub mod branches_layout;
 pub mod branches_view;
 pub mod common;
 pub mod confirm_dialog;
+pub mod conflicts_view;
 pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;
@@ -41,8 +42,22 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             );
         }
         ViewMode::Help => {
-            render_graph_view(frame, state);
-            help_overlay::render(frame, frame.area());
+            // Si des conflits sont en cours, afficher l'aide de résolution de conflits
+            if state.conflicts_state.is_some() {
+                if let Some(ref conflicts_state) = state.conflicts_state {
+                    conflicts_view::render(
+                        frame,
+                        conflicts_state,
+                        &state.current_branch,
+                        &state.repo_path,
+                        state.current_flash_message(),
+                    );
+                }
+                conflicts_view::render_help_overlay(frame, frame.area());
+            } else {
+                render_graph_view(frame, state);
+                help_overlay::render(frame, frame.area());
+            }
         }
         ViewMode::Branches => {
             branches_view::render(
@@ -56,6 +71,17 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         ViewMode::Blame => {
             if let Some(ref blame_state) = state.blame_state {
                 frame.render_widget(blame_view::BlameView::new(blame_state), frame.area());
+            }
+        }
+        ViewMode::Conflicts => {
+            if let Some(ref conflicts_state) = state.conflicts_state {
+                conflicts_view::render(
+                    frame,
+                    conflicts_state,
+                    &state.current_branch,
+                    &state.repo_path,
+                    state.current_flash_message(),
+                );
             }
         }
     }
@@ -88,7 +114,8 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
     );
 
     // Rendu de la barre de navigation.
-    nav_bar::render(frame, state.view_mode, layout.nav_bar);
+    let has_conflicts = state.conflicts_state.is_some();
+    nav_bar::render(frame, state.view_mode, layout.nav_bar, has_conflicts);
 
     // Rendu du graphe.
     let is_graph_focused = state.focus == FocusPanel::Graph;

@@ -1,6 +1,7 @@
 pub mod blame;
 pub mod branch;
 pub mod commit;
+pub mod conflict;
 pub mod diff;
 pub mod discard;
 pub mod graph;

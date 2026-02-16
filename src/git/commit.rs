@@ -166,6 +166,51 @@ pub fn cherry_pick(repo: &Repository, commit_oid: Oid) -> Result<()> {
     Ok(())
 }
 
+/// Cherry-pick avec résultat typé pour gérer les conflits.
+pub fn cherry_pick_with_result(
+    repo: &Repository,
+    commit_oid: Oid,
+) -> crate::error::Result<crate::git::conflict::MergeResult> {
+    use crate::git::conflict::{list_conflict_files, MergeResult};
+
+    let commit = repo.find_commit(commit_oid)?;
+
+    // Effectuer le cherry-pick
+    repo.cherrypick(&commit, None)?;
+
+    // Vérifier s'il y a des conflits
+    let mut index = repo.index()?;
+    if index.has_conflicts() {
+        // Lister les fichiers en conflit
+        let conflict_files = list_conflict_files(repo)?;
+        return Ok(MergeResult::Conflicts(conflict_files));
+    }
+
+    // Si pas de conflits, créer le commit
+    let sig = repo
+        .signature()
+        .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
+
+    let tree_oid = index.write_tree()?;
+    let tree = repo.find_tree(tree_oid)?;
+
+    let head = repo.head()?;
+    let parent_commit = head.peel_to_commit()?;
+
+    let message = format!(
+        "{}\n\n(cherry picked from commit {})",
+        commit.message().unwrap_or(""),
+        commit_oid
+    );
+
+    repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &[&parent_commit])?;
+
+    // Nettoyer l'état de cherry-pick
+    repo.cleanup_state()?;
+
+    Ok(MergeResult::Success)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

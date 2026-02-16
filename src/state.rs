@@ -1,4 +1,5 @@
 use crate::git::branch::BranchInfo;
+use crate::git::conflict::ConflictFile;
 use crate::git::diff::{DiffFile, FileDiff};
 use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
@@ -138,6 +139,28 @@ pub enum AppAction {
     MergePickerConfirm,
     /// Annuler le merge picker.
     MergePickerCancel,
+    /// Basculer vers la vue conflits.
+    SwitchToConflicts,
+    /// Résoudre la section avec "ours".
+    ConflictChooseOurs,
+    /// Résoudre la section avec "theirs".
+    ConflictChooseTheirs,
+    /// Résoudre la section avec les deux.
+    ConflictChooseBoth,
+    /// Passer au fichier en conflit suivant.
+    ConflictNextFile,
+    /// Passer au fichier en conflit précédent.
+    ConflictPrevFile,
+    /// Passer à la section de conflit suivante.
+    ConflictNextSection,
+    /// Passer à la section de conflit précédente.
+    ConflictPrevSection,
+    /// Valider la résolution du fichier courant.
+    ConflictResolveFile,
+    /// Finaliser le merge (tous les conflits résolus).
+    ConflictFinalize,
+    /// Annuler le merge en cours.
+    ConflictAbort,
 }
 
 /// Mode d'affichage actif.
@@ -148,6 +171,7 @@ pub enum ViewMode {
     Staging,
     Branches,
     Blame,
+    Conflicts,
 }
 
 /// Mode du panneau bas-gauche.
@@ -337,6 +361,33 @@ pub struct MergePickerState {
     pub is_active: bool,
 }
 
+/// État de la vue de résolution de conflits.
+pub struct ConflictsState {
+    /// Liste des fichiers en conflit.
+    pub files: Vec<ConflictFile>,
+    /// Index du fichier sélectionné.
+    pub file_selected: usize,
+    /// Index de la section de conflit sélectionnée dans le fichier courant.
+    pub section_selected: usize,
+    /// Offset de scroll dans le panneau de résolution.
+    pub scroll_offset: usize,
+    /// Description de l'opération en cours (ex: "Merge de 'feature/x' dans 'main'").
+    pub operation_description: String,
+}
+
+impl ConflictsState {
+    /// Crée un nouvel état de conflits.
+    pub fn new(files: Vec<ConflictFile>, operation_description: String) -> Self {
+        Self {
+            files,
+            file_selected: 0,
+            section_selected: 0,
+            scroll_offset: 0,
+            operation_description,
+        }
+    }
+}
+
 impl BlameState {
     pub fn new(file_path: String, commit_oid: git2::Oid) -> Self {
         Self {
@@ -386,6 +437,8 @@ pub struct AppState {
     pub loading_spinner: Option<LoadingSpinner>,
     /// État du sélecteur de branche pour le merge.
     pub merge_picker: Option<MergePickerState>,
+    /// État de la vue de résolution de conflits (None si pas de conflits).
+    pub conflicts_state: Option<ConflictsState>,
 }
 
 /// Cache LRU simple pour les diffs de fichiers.
@@ -506,6 +559,7 @@ impl AppState {
             pending_confirmation: None,
             loading_spinner: None,
             merge_picker: None,
+            conflicts_state: None,
         };
 
         Ok(state)

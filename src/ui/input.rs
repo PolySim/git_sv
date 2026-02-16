@@ -77,7 +77,17 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
         KeyCode::Char('2') => return Some(AppAction::SwitchToStaging),
         KeyCode::Char('3') => return Some(AppAction::SwitchToBranches),
+        KeyCode::Char('4') => {
+            if state.conflicts_state.is_some() {
+                return Some(AppAction::SwitchToConflicts);
+            }
+        }
         _ => {}
+    }
+
+    // Si on est en mode Conflicts, utiliser les keybindings spécifiques
+    if state.view_mode == ViewMode::Conflicts {
+        return map_conflicts_key(key, state);
     }
 
     // Si on est en mode Staging, utiliser les keybindings spécifiques
@@ -334,6 +344,29 @@ fn map_blame_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
         KeyCode::PageUp => Some(AppAction::PageUp),
         KeyCode::PageDown => Some(AppAction::PageDown),
         KeyCode::Enter => Some(AppAction::JumpToBlameCommit),
+        _ => None,
+    }
+}
+
+/// Mappe les keybindings pour la vue de résolution de conflits.
+fn map_conflicts_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
+    match key.code {
+        // Navigation entre fichiers
+        KeyCode::Tab => Some(AppAction::ConflictNextFile),
+        KeyCode::BackTab => Some(AppAction::ConflictPrevFile),
+        // Navigation entre sections de conflit
+        KeyCode::Char('j') | KeyCode::Down => Some(AppAction::ConflictNextSection),
+        KeyCode::Char('k') | KeyCode::Up => Some(AppAction::ConflictPrevSection),
+        // Résolution
+        KeyCode::Char('o') => Some(AppAction::ConflictChooseOurs),
+        KeyCode::Char('t') => Some(AppAction::ConflictChooseTheirs),
+        KeyCode::Char('b') => Some(AppAction::ConflictChooseBoth),
+        // Validation / Annulation
+        KeyCode::Enter => Some(AppAction::ConflictResolveFile),
+        KeyCode::Char('F') => Some(AppAction::ConflictFinalize),
+        KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::ConflictAbort),
+        // Vues
+        KeyCode::Char('?') => Some(AppAction::ToggleHelp),
         _ => None,
     }
 }
