@@ -185,14 +185,64 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         );
 
     let mut list_state = ListState::default();
-    // Offset de +1 pour le header "Local".
-    list_state.select(Some(state.branch_selected + 1));
+    let local_count = state.local_branches.len();
+    let remote_count = state.remote_branches.len();
+    let show_remote = state.show_remote;
+
+    let visual_index = if show_remote && remote_count > 0 {
+        if local_count > 0 {
+            if state.branch_selected < local_count {
+                state.branch_selected + 1
+            } else {
+                state.branch_selected + 3
+            }
+        } else {
+            state.branch_selected + 1
+        }
+    } else {
+        state.branch_selected + 1
+    };
+    list_state.select(Some(visual_index));
     frame.render_stateful_widget(list, area, &mut list_state);
 }
 
 /// Rend le détail d'une branche.
 fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let content = if let Some(branch) = state.local_branches.get(state.branch_selected) {
+    let local_count = state.local_branches.len();
+    let is_remote = state.show_remote
+        && !state.remote_branches.is_empty()
+        && state.branch_selected >= local_count;
+
+    let content = if is_remote {
+        if let Some(branch) = state
+            .remote_branches
+            .get(state.branch_selected - local_count)
+        {
+            let mut lines = vec![
+                Line::from(vec![
+                    Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(&branch.name),
+                ]),
+                Line::from(vec![
+                    Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled("distante", Style::default().fg(Color::DarkGray)),
+                ]),
+            ];
+
+            if let Some(ref msg) = branch.last_commit_message {
+                lines.push(Line::from(""));
+                lines.push(Line::from(vec![Span::styled(
+                    "Dernier commit:",
+                    Style::default().add_modifier(Modifier::BOLD),
+                )]));
+                lines.push(Line::from(msg.as_str()));
+            }
+
+            lines
+        } else {
+            vec![Line::from("Aucune branche distante sélectionnée")]
+        }
+    } else if let Some(branch) = state.local_branches.get(state.branch_selected) {
         let mut lines = vec![
             Line::from(vec![
                 Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),

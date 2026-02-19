@@ -1294,7 +1294,16 @@ impl EventHandler {
 
         match self.state.branches_view_state.section {
             BranchesSection::Branches => {
-                let max = self.state.branches_view_state.local_branches.len();
+                let local_count = self.state.branches_view_state.local_branches.len();
+                let remote_count = self.state.branches_view_state.remote_branches.len();
+                let show_remote = self.state.branches_view_state.show_remote;
+
+                let max = if show_remote && remote_count > 0 {
+                    local_count + remote_count
+                } else {
+                    local_count
+                };
+
                 if max > 0 {
                     let new_idx = if direction > 0 {
                         (self.state.branches_view_state.branch_selected + 1).min(max - 1)
