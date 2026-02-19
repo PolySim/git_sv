@@ -224,6 +224,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         // Rafraîchir
         KeyCode::Char('r') => Some(AppAction::Refresh),
 
+        // Copier le contenu du panneau actif dans le clipboard
+        KeyCode::Char('y') => Some(AppAction::CopyPanelContent),
+
         // Basculer entre les modes du panneau bas-gauche
         KeyCode::Tab => Some(AppAction::SwitchBottomMode),
 
@@ -253,6 +256,7 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Tab => return Some(AppAction::NextSection),
         KeyCode::BackTab => return Some(AppAction::PrevSection),
         KeyCode::Char('q') => return Some(AppAction::Quit),
+        KeyCode::Char('y') => return Some(AppAction::CopyPanelContent),
         KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
         KeyCode::Char('P') => return Some(AppAction::GitPush),
         _ => {}
@@ -311,6 +315,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     match key.code {
         KeyCode::Char('q') => return Some(AppAction::Quit),
         KeyCode::Char('r') => return Some(AppAction::Refresh),
+        KeyCode::Char('y') => return Some(AppAction::CopyPanelContent),
         KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
         KeyCode::Char('P') => return Some(AppAction::GitPush),
         _ => {}
@@ -368,6 +373,7 @@ fn map_blame_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
         KeyCode::PageUp => Some(AppAction::PageUp),
         KeyCode::PageDown => Some(AppAction::PageDown),
         KeyCode::Enter => Some(AppAction::JumpToBlameCommit),
+        KeyCode::Char('y') => Some(AppAction::CopyPanelContent),
         _ => None,
     }
 }

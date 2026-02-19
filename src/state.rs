@@ -175,6 +175,8 @@ pub enum AppAction {
     ConflictSwitchPanel,
     /// Valider le merge final (tous les conflits résolus).
     ConflictValidateMerge,
+    /// Copier le contenu du panneau actif dans le clipboard.
+    CopyPanelContent,
 }
 
 /// Mode d'affichage actif.

@@ -1,10 +1,20 @@
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
 
-use crate::error::Result;
+use crate::error::{GitSvError, Result};
 use crate::state::{AppAction, AppState};
 use crate::ui;
 use crate::ui::confirm_dialog::ConfirmAction;
+
+/// Copie le texte dans le clipboard système.
+fn copy_to_clipboard(text: &str) -> Result<()> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| GitSvError::Clipboard(e.to_string()))?;
+    clipboard
+        .set_text(text)
+        .map_err(|e| GitSvError::Clipboard(e.to_string()))?;
+    Ok(())
+}
 
 /// Gestionnaire de la boucle événementielle.
 pub struct EventHandler {
@@ -155,6 +165,7 @@ impl EventHandler {
             AppAction::ConflictValidateMerge => self.handle_conflict_validate_merge()?,
             AppAction::StashSelectedFile => self.handle_stash_selected_file()?,
             AppAction::StashUnstagedFiles => self.handle_stash_unstaged_files()?,
+            AppAction::CopyPanelContent => self.handle_copy_panel_content()?,
         }
         Ok(())
     }
@@ -2489,6 +2500,185 @@ impl EventHandler {
             self.state.pending_confirmation =
                 Some(ConfirmAction::MergeBranch(desc, "merge".to_string()));
         }
+        Ok(())
+    }
+
+    /// Copie le contenu du panneau actif dans le clipboard.
+    fn handle_copy_panel_content(&mut self) -> Result<()> {
+        use crate::state::{FocusPanel, StagingFocus, ViewMode};
+
+        let mut text_to_copy = String::new();
+
+        match self.state.view_mode {
+            ViewMode::Graph => {
+                // Graph view: copier hash + message du commit sélectionné
+                if let Some(row) = self.state.graph.get(self.state.selected_index) {
+                    let oid_str = row.node.oid.to_string();
+                    let message = row.node.message.lines().next().unwrap_or("");
+                    text_to_copy = format!("{} {}", oid_str, message);
+                } else {
+                    return Ok(());
+                }
+
+                // Ajouter le contenu du panneau Detail si focus est sur Files ou Detail
+                match self.state.focus {
+                    FocusPanel::Files => {
+                        // Copier le chemin du fichier
+                        if let Some(file) =
+                            self.state.commit_files.get(self.state.file_selected_index)
+                        {
+                            text_to_copy = file.path.clone();
+                            // Ajouter le diff si disponible
+                            if let Some(ref diff) = self.state.selected_file_diff {
+                                let diff_text = diff
+                                    .lines
+                                    .iter()
+                                    .map(|line| line.content.trim_end_matches('\n').to_string())
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                text_to_copy = format!("{}\n\n{}", text_to_copy, diff_text);
+                            }
+                        }
+                    }
+                    FocusPanel::Detail => {
+                        // Copier le diff
+                        if let Some(ref diff) = self.state.selected_file_diff {
+                            text_to_copy = diff
+                                .lines
+                                .iter()
+                                .map(|line| line.content.trim_end_matches('\n').to_string())
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ViewMode::Staging => {
+                // Staging view: copier selon le focus
+                match self.state.staging_state.focus {
+                    StagingFocus::Unstaged => {
+                        // Copier le chemin du fichier unstaged
+                        text_to_copy = self
+                            .state
+                            .staging_state
+                            .unstaged_files
+                            .get(self.state.staging_state.unstaged_selected)
+                            .map(|f| f.path.clone())
+                            .unwrap_or_default();
+                    }
+                    StagingFocus::Staged => {
+                        // Copier le chemin du fichier staged
+                        text_to_copy = self
+                            .state
+                            .staging_state
+                            .staged_files
+                            .get(self.state.staging_state.staged_selected)
+                            .map(|f| f.path.clone())
+                            .unwrap_or_default();
+                    }
+                    StagingFocus::Diff => {
+                        // Copier le contenu du diff
+                        text_to_copy = self
+                            .state
+                            .staging_state
+                            .current_diff
+                            .as_ref()
+                            .map(|diff| {
+                                diff.lines
+                                    .iter()
+                                    .map(|line| line.content.trim_end_matches('\n').to_string())
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            })
+                            .unwrap_or_default();
+                    }
+                    StagingFocus::CommitMessage => {
+                        // Copier le message de commit
+                        text_to_copy = self.state.staging_state.commit_message.clone();
+                    }
+                }
+            }
+            ViewMode::Branches => {
+                // Branches view: copier selon la section
+                match self.state.branches_view_state.section {
+                    crate::state::BranchesSection::Branches => {
+                        text_to_copy = self
+                            .state
+                            .branches_view_state
+                            .local_branches
+                            .get(self.state.branches_view_state.branch_selected)
+                            .map(|b| b.name.clone())
+                            .unwrap_or_default();
+                    }
+                    crate::state::BranchesSection::Worktrees => {
+                        text_to_copy = self
+                            .state
+                            .branches_view_state
+                            .worktrees
+                            .get(self.state.branches_view_state.worktree_selected)
+                            .map(|w| format!("{} -> {}", w.name, w.path))
+                            .unwrap_or_default();
+                    }
+                    crate::state::BranchesSection::Stashes => {
+                        text_to_copy = self
+                            .state
+                            .branches_view_state
+                            .stashes
+                            .get(self.state.branches_view_state.stash_selected)
+                            .map(|s| s.message.clone())
+                            .unwrap_or_default();
+                    }
+                }
+            }
+            ViewMode::Blame => {
+                // Blame view: copier le contenu de la ligne sélectionnée
+                if let Some(ref blame_state) = self.state.blame_state {
+                    if let Some(ref blame) = blame_state.blame {
+                        text_to_copy = blame
+                            .lines
+                            .get(blame_state.selected_line)
+                            .map(|l| l.content.clone())
+                            .unwrap_or_default();
+                    } else {
+                        return Ok(());
+                    }
+                } else {
+                    return Ok(());
+                }
+            }
+            ViewMode::Conflicts => {
+                // Conflicts view: copier le chemin du fichier
+                if let Some(ref conflicts_state) = self.state.conflicts_state {
+                    text_to_copy = conflicts_state
+                        .all_files
+                        .get(conflicts_state.file_selected)
+                        .map(|f| f.path.clone())
+                        .unwrap_or_default();
+                } else {
+                    return Ok(());
+                }
+            }
+            ViewMode::Help => {
+                // Pas de contenu à copier dans l'aide
+                return Ok(());
+            }
+        };
+
+        // Copier dans le clipboard
+        if !text_to_copy.is_empty() {
+            match copy_to_clipboard(&text_to_copy) {
+                Ok(_) => {
+                    self.state
+                        .set_flash_message("Copié dans le clipboard ✓".into());
+                }
+                Err(e) => {
+                    self.state
+                        .set_flash_message(format!("Erreur clipboard: {}", e));
+                }
+            }
+        }
+
         Ok(())
     }
 }

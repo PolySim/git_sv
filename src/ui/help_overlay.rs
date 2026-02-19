@@ -99,15 +99,22 @@ fn build_help_content() -> Vec<Line<'static>> {
             Span::styled("r", Style::default().fg(Color::Cyan)),
             Span::raw("           Rafraîchir"),
         ]),
-        Line::from(vec![
-            Span::styled("?", Style::default().fg(Color::Cyan)),
-            Span::raw("           Aide"),
-        ]),
-        Line::from(vec![
-            Span::styled("q", Style::default().fg(Color::Cyan)),
-            Span::raw("           Quitter"),
-        ]),
         Line::from(""),
+        Line::from(vec![Span::styled(
+            "Sélection & Clipboard",
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Yellow),
+        )]),
+        Line::from("─".repeat(40)),
+        Line::from(vec![
+            Span::styled("Shift+clic", Style::default().fg(Color::Cyan)),
+            Span::raw("    Sélection native du terminal"),
+        ]),
+        Line::from(vec![
+            Span::styled("y", Style::default().fg(Color::Cyan)),
+            Span::raw("           Copier dans le clipboard"),
+        ]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Esc ou ? pour fermer",

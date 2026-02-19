@@ -12,6 +12,9 @@ pub enum GitSvError {
     #[error("Erreur terminal : {0}")]
     Terminal(String),
 
+    #[error("Erreur clipboard : {0}")]
+    Clipboard(String),
+
     #[error("{0}")]
     Other(String),
 }
