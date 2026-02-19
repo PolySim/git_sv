@@ -426,6 +426,70 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
             ]));
         }
 
+        if !stash.files.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![Span::styled(
+                "Fichiers modifiés:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]));
+
+            for (i, file) in stash.files.iter().enumerate() {
+                let status_color = match file.status_char() {
+                    'A' => Color::Green,
+                    'M' => Color::Yellow,
+                    'D' => Color::Red,
+                    'R' => Color::Cyan,
+                    _ => Color::White,
+                };
+                let is_selected = i == state.stash_file_selected;
+                let prefix = if is_selected { "→ " } else { "  " };
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("{}{} ", prefix, file.status_char()),
+                        Style::default()
+                            .fg(status_color)
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
+                    ),
+                    Span::raw(&file.path),
+                ]));
+            }
+
+            // Afficher le diff du fichier sélectionné
+            if let Some(ref diff_lines) = state.stash_file_diff {
+                if !diff_lines.is_empty() {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![Span::styled(
+                        "Diff:",
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )]));
+
+                    // Limiter le nombre de lignes affichées
+                    let max_lines = 30;
+                    for line in diff_lines.iter().take(max_lines) {
+                        let styled_line = if line.starts_with('+') {
+                            Span::styled(line, Style::default().fg(Color::Green))
+                        } else if line.starts_with('-') {
+                            Span::styled(line, Style::default().fg(Color::Red))
+                        } else {
+                            Span::raw(line)
+                        };
+                        lines.push(Line::from(styled_line));
+                    }
+
+                    if diff_lines.len() > max_lines {
+                        lines.push(Line::from(Span::styled(
+                            format!("... ({} lignes masquées)", diff_lines.len() - max_lines),
+                            Style::default().fg(Color::DarkGray),
+                        )));
+                    }
+                }
+            }
+        }
+
         lines
     } else {
         vec![Line::from("Aucun stash sélectionné")]
@@ -454,7 +518,7 @@ fn render_branches_help(
                 "Tab:section  n:new  d:delete  1:graph  2:staging"
             }
             BranchesSection::Stashes => {
-                "Tab:section  a:apply  p:pop  d:drop  s:save  1:graph  2:staging"
+                "Tab:section  h/l:fichiers  a:apply  p:pop  d:drop  s:save  1:graph  2:staging"
             }
         }
     };

@@ -454,23 +454,43 @@ impl EventHandler {
 
     // File navigation handlers
     fn handle_file_up(&mut self) {
-        if self.state.focus == crate::state::FocusPanel::Files
-            && !self.state.commit_files.is_empty()
-        {
+        use crate::state::{FocusPanel, ViewMode};
+
+        if self.state.focus == FocusPanel::Files && !self.state.commit_files.is_empty() {
             if self.state.file_selected_index > 0 {
                 self.state.file_selected_index -= 1;
                 self.load_selected_file_diff();
+            }
+        } else if self.state.view_mode == ViewMode::Branches
+            && self.state.branches_view_state.section == crate::state::BranchesSection::Stashes
+        {
+            let state = &mut self.state.branches_view_state;
+            if let Some(stash) = state.stashes.get(state.stash_selected) {
+                if !stash.files.is_empty() && state.stash_file_selected > 0 {
+                    state.stash_file_selected -= 1;
+                    self.load_stash_file_diff();
+                }
             }
         }
     }
 
     fn handle_file_down(&mut self) {
-        if self.state.focus == crate::state::FocusPanel::Files
-            && !self.state.commit_files.is_empty()
-        {
+        use crate::state::{FocusPanel, ViewMode};
+
+        if self.state.focus == FocusPanel::Files && !self.state.commit_files.is_empty() {
             if self.state.file_selected_index + 1 < self.state.commit_files.len() {
                 self.state.file_selected_index += 1;
                 self.load_selected_file_diff();
+            }
+        } else if self.state.view_mode == ViewMode::Branches
+            && self.state.branches_view_state.section == crate::state::BranchesSection::Stashes
+        {
+            let state = &mut self.state.branches_view_state;
+            if let Some(stash) = state.stashes.get(state.stash_selected) {
+                if !stash.files.is_empty() && state.stash_file_selected + 1 < stash.files.len() {
+                    state.stash_file_selected += 1;
+                    self.load_stash_file_diff();
+                }
             }
         }
     }
@@ -1208,6 +1228,27 @@ impl EventHandler {
         self.state.diff_scroll_offset = 0;
     }
 
+    fn load_stash_file_diff(&mut self) {
+        let state = &mut self.state.branches_view_state;
+
+        if let Some(stash) = state.stashes.get(state.stash_selected) {
+            if let Some(file) = stash.files.get(state.stash_file_selected) {
+                match self.state.repo.stash_file_diff(stash.oid, &file.path) {
+                    Ok(diff_lines) => {
+                        state.stash_file_diff = Some(diff_lines);
+                    }
+                    Err(_) => {
+                        state.stash_file_diff = None;
+                    }
+                }
+            } else {
+                state.stash_file_diff = None;
+            }
+        } else {
+            state.stash_file_diff = None;
+        }
+    }
+
     fn load_staging_diff(&mut self) {
         use crate::state::StagingFocus;
 
@@ -1342,6 +1383,9 @@ impl EventHandler {
                             .saturating_sub(1)
                     };
                     self.state.branches_view_state.stash_selected = new_idx;
+
+                    // Charger le diff du fichier sélectionné
+                    self.load_stash_file_diff();
                 }
             }
         }
@@ -1463,6 +1507,9 @@ impl EventHandler {
                 .len()
                 .saturating_sub(1);
         }
+
+        // Charger le diff du fichier de stash sélectionné
+        self.load_stash_file_diff();
 
         Ok(())
     }

@@ -103,6 +103,11 @@ impl GitRepo {
         super::stash::list_stashes(&mut self.repo)
     }
 
+    /// Retourne le diff d'un fichier dans un stash.
+    pub fn stash_file_diff(&self, stash_oid: git2::Oid, file_path: &str) -> Result<Vec<String>> {
+        super::stash::stash_file_diff(&self.repo, stash_oid, file_path)
+    }
+
     /// Retourne le diff d'un commit.
     pub fn commit_diff(&self, oid: git2::Oid) -> Result<Vec<super::diff::DiffFile>> {
         super::diff::commit_diff(&self.repo, oid)

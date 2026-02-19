@@ -1,6 +1,26 @@
-use git2::Repository;
+use git2::{Oid, Repository};
 
 use crate::error::Result;
+use crate::git::diff::DiffStatus;
+
+/// Fichier modifié dans un stash.
+#[derive(Debug, Clone)]
+pub struct StashFile {
+    pub path: String,
+    pub status: DiffStatus,
+}
+
+impl StashFile {
+    /// Retourne le caractère représentant le statut du fichier.
+    pub fn status_char(&self) -> char {
+        match self.status {
+            DiffStatus::Added => 'A',
+            DiffStatus::Modified => 'M',
+            DiffStatus::Deleted => 'D',
+            DiffStatus::Renamed => 'R',
+        }
+    }
+}
 
 /// Entrée de stash.
 #[derive(Debug, Clone)]
@@ -11,24 +31,36 @@ pub struct StashEntry {
     pub branch: Option<String>,
     /// Date de création du stash.
     pub timestamp: Option<i64>,
+    /// Fichiers modifiés dans ce stash.
+    pub files: Vec<StashFile>,
+    /// Oid du commit du stash (pour récupérer les diffs).
+    pub oid: Oid,
 }
 
 /// Liste tous les stashes.
 pub fn list_stashes(repo: &mut Repository) -> Result<Vec<StashEntry>> {
-    let mut entries = Vec::new();
+    // D'abord, collecter les infos de base des stashes (sans les fichiers)
+    let mut temp_entries: Vec<(usize, String, Option<String>, Oid)> = Vec::new();
 
-    repo.stash_foreach(|index, message, _oid| {
-        // Essayer d'extraire la branche depuis le message (format: "WIP on <branch>: ...")
+    repo.stash_foreach(|index, message, oid| {
         let branch = extract_branch_from_message(message);
+        temp_entries.push((index, message.to_string(), branch, *oid));
+        true
+    })?;
 
+    // Maintenant charger les fichiers pour chaque stash
+    let mut entries = Vec::new();
+    for (index, message, branch, oid) in temp_entries {
+        let files = stash_files(repo, oid).unwrap_or_default();
         entries.push(StashEntry {
             index,
-            message: message.to_string(),
+            message,
             branch,
-            timestamp: None, // git2 ne fournit pas directement la date du stash
+            timestamp: None,
+            files,
+            oid,
         });
-        true // continuer l'itération
-    })?;
+    }
 
     Ok(entries)
 }
@@ -43,6 +75,87 @@ fn extract_branch_from_message(message: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Récupère la liste des fichiers modifiés dans un stash.
+pub fn stash_files(repo: &Repository, stash_oid: Oid) -> Result<Vec<StashFile>> {
+    let stash_commit = repo.find_commit(stash_oid)?;
+    let stash_tree = stash_commit.tree()?;
+
+    // Le parent du stash est le commit sur lequel il a été créé
+    let parent = stash_commit.parent(0)?;
+    let parent_tree = parent.tree()?;
+
+    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)?;
+
+    let mut files = Vec::new();
+    diff.foreach(
+        &mut |delta, _| {
+            if let Some(path) = delta.new_file().path() {
+                let status = match delta.status() {
+                    git2::Delta::Added => DiffStatus::Added,
+                    git2::Delta::Modified => DiffStatus::Modified,
+                    git2::Delta::Deleted => DiffStatus::Deleted,
+                    git2::Delta::Renamed => DiffStatus::Renamed,
+                    _ => return true,
+                };
+                files.push(StashFile {
+                    path: path.to_string_lossy().to_string(),
+                    status,
+                });
+            }
+            true
+        },
+        None,
+        None,
+        None,
+    )?;
+
+    Ok(files)
+}
+
+/// Récupère le diff complet d'un fichier dans un stash.
+pub fn stash_file_diff(repo: &Repository, stash_oid: Oid, file_path: &str) -> Result<Vec<String>> {
+    let stash_commit = repo.find_commit(stash_oid)?;
+    let stash_tree = stash_commit.tree()?;
+
+    let parent = stash_commit.parent(0)?;
+    let parent_tree = parent.tree()?;
+
+    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)?;
+
+    let mut file_lines = Vec::new();
+    let target_path = file_path.to_string();
+
+    diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
+        let is_target = delta
+            .new_file()
+            .path()
+            .map(|p| p.to_string_lossy() == target_path)
+            .unwrap_or(false)
+            || delta
+                .old_file()
+                .path()
+                .map(|p| p.to_string_lossy() == target_path)
+                .unwrap_or(false);
+
+        if is_target {
+            let prefix = match line.origin() {
+                '+' => "+",
+                '-' => "-",
+                ' ' => " ",
+                _ => "",
+            };
+            file_lines.push(format!(
+                "{}{}",
+                prefix,
+                String::from_utf8_lossy(line.content()).trim_end_matches('\n')
+            ));
+        }
+        true
+    })?;
+
+    Ok(file_lines)
 }
 
 /// Sauvegarde le working directory dans un stash.

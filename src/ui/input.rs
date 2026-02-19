@@ -281,6 +281,8 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         BranchesSection::Stashes => match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
+            KeyCode::Char('l') | KeyCode::Right => Some(AppAction::FileDown),
+            KeyCode::Char('h') | KeyCode::Left => Some(AppAction::FileUp),
             KeyCode::Char('a') => Some(AppAction::StashApply),
             KeyCode::Char('p') => Some(AppAction::StashPop),
             KeyCode::Char('d') => Some(AppAction::StashDrop),
