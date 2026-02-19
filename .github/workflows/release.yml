@@ -22,15 +22,15 @@ jobs:
         include:
           - target: x86_64-apple-darwin
             os: macos-15
-            archive: tar
+            archive: tar.gz
             binary: git_sv
           - target: aarch64-apple-darwin
             os: macos-15
-            archive: tar
+            archive: tar.gz
             binary: git_sv
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            archive: tar
+            archive: tar.gz
             binary: git_sv
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -53,7 +53,11 @@ jobs:
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          ${{ matrix.archive }} czf ../../../${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }} ${{ matrix.binary }}
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            powershell -Command "Compress-Archive -Path ${{ matrix.binary }} -DestinationPath ../../../${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}"
+          else
+            tar czf ../../../${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }} ${{ matrix.binary }}
+          fi
           cd ../../..
 
       - name: Upload artifact
