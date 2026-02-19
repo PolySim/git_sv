@@ -418,7 +418,7 @@ impl EventHandler {
 
         self.state.focus = match self.state.focus {
             FocusPanel::Graph => FocusPanel::Files,
-            FocusPanel::Files => FocusPanel::Detail,
+            FocusPanel::Files => FocusPanel::Graph,
             FocusPanel::Detail => FocusPanel::Graph,
         };
 
