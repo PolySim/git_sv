@@ -23,12 +23,19 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-15
             archive: tar.gz
+            binary: git_sv
           - target: aarch64-apple-darwin
             os: macos-15
             archive: tar.gz
+            binary: git_sv
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             archive: tar.gz
+            binary: git_sv
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+            binary: git_sv.exe
 
     steps:
       - name: Checkout
@@ -46,7 +53,7 @@ jobs:
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }} ${{ env.BINARY_NAME }}
+          ${{ matrix.archive }} czf ../../../${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }} ${{ matrix.binary }}
           cd ../../..
 
       - name: Upload artifact
@@ -70,7 +77,7 @@ jobs:
 
       - name: Generate SHA256 checksums
         run: |
-          for file in ${{ env.BINARY_NAME }}-*.tar.gz; do
+          for file in ${{ env.BINARY_NAME }}-*.tar.gz ${{ env.BINARY_NAME }}-*.zip; do
             sha256sum "$file" >> checksums.txt
           done
           cat checksums.txt
@@ -81,6 +88,7 @@ jobs:
           generate_release_notes: true
           files: |
             ${{ env.BINARY_NAME }}-*.tar.gz
+            ${{ env.BINARY_NAME }}-*.zip
             checksums.txt
 
   update-homebrew:
@@ -147,5 +155,61 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/git_sv.rb
+          git commit -m "Update git_sv to ${VERSION}"
+          git push
+
+  update-scoop:
+    name: Update Scoop Manifest
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-x86_64-pc-windows-msvc
+          path: .
+
+      - name: Compute SHA256 and update Scoop manifest
+        env:
+          GH_TOKEN: ${{ secrets.SCOOP_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA_WIN=$(sha256sum ${{ env.BINARY_NAME }}-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip | awk '{print $1}')
+
+          git clone https://x-access-token:${GH_TOKEN}@github.com/PolySim/scoop-git_sv.git
+          cd scoop-git_sv
+
+          cat > bucket/git_sv.json << MANIFEST
+          {
+            "version": "${VERSION}",
+            "description": "Visualize git graph in your terminal with a beautiful TUI",
+            "homepage": "https://github.com/PolySim/git_sv",
+            "license": "MIT",
+            "architecture": {
+              "64bit": {
+                "url": "https://github.com/PolySim/git_sv/releases/download/v${VERSION}/git_sv-v${VERSION}-x86_64-pc-windows-msvc.zip",
+                "hash": "${SHA_WIN}"
+              }
+            },
+            "bin": "git_sv.exe",
+            "checkver": {
+              "github": "https://github.com/PolySim/git_sv"
+            },
+            "autoupdate": {
+              "architecture": {
+                "64bit": {
+                  "url": "https://github.com/PolySim/git_sv/releases/download/v$version/git_sv-v$version-x86_64-pc-windows-msvc.zip"
+                }
+              }
+            }
+          }
+          MANIFEST
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/git_sv.json
           git commit -m "Update git_sv to ${VERSION}"
           git push
