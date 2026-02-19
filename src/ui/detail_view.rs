@@ -57,6 +57,13 @@ pub fn render(
             ]));
         }
 
+        if let Some(branch) = &node.branch_name {
+            lines.push(Line::from(vec![
+                Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(branch.clone(), Style::default().fg(Color::Green)),
+            ]));
+        }
+
         if has_parents {
             lines.push(Line::from(vec![
                 Span::styled("Parents: ", Style::default().add_modifier(Modifier::BOLD)),

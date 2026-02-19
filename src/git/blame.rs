@@ -91,15 +91,16 @@ pub fn blame_file(repo: &Repository, commit_oid: Oid, file_path: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::tests::test_utils::setup_test_repo;
+    use crate::git::tests::test_utils::create_test_repo;
 
     #[test]
     fn test_blame_file() {
-        let (_temp_dir, repo) = setup_test_repo();
+        let (_temp_dir, repo) = create_test_repo();
 
         // Créer un fichier de test avec plusieurs commits
         let file_path = "test.txt";
-        let file_full_path: std::path::PathBuf = repo.path().parent().unwrap().join(file_path);
+        let repo_path = repo.path().parent().unwrap();
+        let file_full_path: std::path::PathBuf = repo_path.join(file_path);
 
         // Premier commit
         std::fs::write(&file_full_path, "line 1\n").unwrap();

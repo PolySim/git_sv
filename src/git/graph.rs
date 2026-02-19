@@ -54,6 +54,8 @@ pub struct CommitNode {
     pub parents: Vec<Oid>,
     /// Noms des refs pointant vers ce commit (branches, tags).
     pub refs: Vec<String>,
+    /// Nom de la branche à laquelle appartient ce commit dans le graphe.
+    pub branch_name: Option<String>,
     /// Colonne assignée pour le rendu du graphe.
     pub column: usize,
     /// Index de couleur stable pour cette branche.
@@ -85,6 +87,8 @@ struct ColumnState {
     expected_oid: Option<Oid>,
     /// Index de couleur associé à cette colonne.
     color_index: usize,
+    /// Nom de la branche associée à cette colonne.
+    branch_name: Option<String>,
 }
 
 /// Construit le graphe de commits avec placement en colonnes et edges de connexion.
@@ -119,9 +123,15 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
             &active_columns,
         );
 
-        // Mettre à jour la couleur de la colonne.
+        // Déterminer le nom de la branche pour ce commit.
+        let branch_name = determine_branch_name(column, &refs, &active_columns);
+
+        // Mettre à jour la couleur et le nom de la branche de la colonne.
         if column < active_columns.len() {
             active_columns[column].color_index = color_index;
+            if active_columns[column].branch_name.is_none() && branch_name.is_some() {
+                active_columns[column].branch_name = branch_name.clone();
+            }
         }
 
         // Créer le noeud.
@@ -132,6 +142,7 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
             timestamp: ci.timestamp,
             parents: ci.parents.clone(),
             refs,
+            branch_name: branch_name.clone(),
             column,
             color_index,
         };
@@ -220,6 +231,7 @@ fn assign_parent_columns(
                     active_columns.push(ColumnState {
                         expected_oid: None,
                         color_index: 0,
+                        branch_name: None,
                     });
                 }
                 active_columns[commit_col].expected_oid = Some(parent_oid);
@@ -389,6 +401,32 @@ fn determine_color_index(
     column
 }
 
+/// Détermine le nom de la branche pour un commit.
+fn determine_branch_name(
+    column: usize,
+    refs: &[String],
+    active_columns: &[ColumnState],
+) -> Option<String> {
+    // Si le commit a des refs, utiliser la première comme nom de branche.
+    // On filtre pour ne garder que les branches (pas les tags).
+    if let Some(first_ref) = refs.first() {
+        if first_ref.starts_with("refs/heads/") {
+            return Some(first_ref.strip_prefix("refs/heads/").unwrap().to_string());
+        }
+        if !first_ref.contains('/') {
+            return Some(first_ref.clone());
+        }
+        return Some(first_ref.clone());
+    }
+
+    // Sinon, hériter du nom de la colonne si elle existe.
+    if column < active_columns.len() {
+        return active_columns[column].branch_name.clone();
+    }
+
+    None
+}
+
 /// Collecte toutes les références (branches, tags) et les associe à leur OID.
 fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<String>>> {
     let mut map = HashMap::new();
@@ -431,6 +469,7 @@ fn assign_new_column(active_columns: &mut Vec<ColumnState>, oid: Oid) -> usize {
     active_columns.push(ColumnState {
         expected_oid: Some(oid),
         color_index: 0,
+        branch_name: None,
     });
     active_columns.len() - 1
 }
@@ -495,14 +534,17 @@ mod tests {
             ColumnState {
                 expected_oid: Some(Oid::from_bytes(&[1; 20]).unwrap()),
                 color_index: 0,
+                branch_name: None,
             },
             ColumnState {
                 expected_oid: None,
                 color_index: 0,
+                branch_name: None,
             }, // Libre
             ColumnState {
                 expected_oid: Some(Oid::from_bytes(&[2; 20]).unwrap()),
                 color_index: 0,
+                branch_name: None,
             },
         ];
 

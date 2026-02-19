@@ -53,6 +53,7 @@ mod tests {
             timestamp: 0,
             parents: Vec::new(),
             refs: Vec::new(),
+            branch_name: None,
             column: 0,
             color_index: 0,
         }
