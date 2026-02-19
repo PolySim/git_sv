@@ -257,6 +257,7 @@ fn resolve_remote_url(url: &str) -> String {
 
 /// Push la branche courante vers le remote.
 /// Retourne un message décrivant l'action effectuée.
+/// Utilise le remote configuré directement pour supporter les alias SSH.
 pub fn push_current_branch(repo: &Repository) -> Result<String> {
     // Récupérer la branche courante
     let head = repo.head()?;
@@ -283,42 +284,30 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
         .unwrap_or("origin")
         .to_string();
 
-    // Récupérer le remote configuré
-    let remote = repo.find_remote(&remote_name)?;
+    // Récupérer le remote configuré directement (sans URL résolue)
+    let mut remote = repo.find_remote(&remote_name)?;
     let remote_url = remote.url().unwrap_or("");
-    eprintln!("[DEBUG] Original remote URL: {}", remote_url);
+    eprintln!(
+        "[DEBUG] Using remote '{}' with URL: {}",
+        remote_name, remote_url
+    );
 
-    // Résoudre l'URL (remplacer l'alias SSH par le vrai hostname)
-    let resolved_url = resolve_remote_url(remote_url);
-    eprintln!("[DEBUG] Resolved remote URL: {}", resolved_url);
-
-    // Créer un remote temporaire avec l'URL résolue
-    let temp_remote_name = format!("__temp_remote_{}", std::process::id());
-
-    // Supprimer le remote temporaire s'il existe déjà
-    let _ = repo.remote_delete(&temp_remote_name);
-
-    // Créer le remote avec l'URL résolue
-    let mut resolved_remote = repo.remote(&temp_remote_name, &resolved_url)?;
-
-    // Options de push avec callbacks SSH améliorés
+    // Options de push avec callbacks SSH
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(build_remote_callbacks());
 
-    // Configurer le push avec --set-upstream si pas d'upstream configuré
-    if !has_upstream {
-        push_options.remote_push_options(&["--set-upstream"]);
-    }
-
     // Pousser la branche courante
     let push_refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
-    let result = resolved_remote.push(&[&push_refspec], Some(&mut push_options));
+    let result = remote.push(&[&push_refspec], Some(&mut push_options));
 
-    // Nettoyer le remote temporaire
-    drop(resolved_remote);
-    let _ = repo.remote_delete(&temp_remote_name);
-
-    result?;
+    // Si le push échoue, essayer avec git CLI en fallback
+    if let Err(e) = result {
+        eprintln!(
+            "[DEBUG] Push via libgit2 failed: {}, trying CLI fallback",
+            e
+        );
+        return push_current_branch_cli(repo);
+    }
 
     // Retourner un message descriptif
     if has_upstream {
@@ -476,42 +465,43 @@ pub fn pull_current_branch_with_result(
 }
 
 /// Fetch toutes les refs depuis le remote.
+/// Utilise le remote configuré directement pour supporter les alias SSH.
 pub fn fetch_all(repo: &Repository) -> Result<()> {
     // Récupérer le remote par défaut (généralement "origin")
-    let remote_name = "origin";
-    let remote = repo.find_remote(remote_name)?;
+    let mut remote_name = "origin".to_string();
+
+    // Essayer de trouver le remote configuré pour la branche courante
+    if let Ok(head) = repo.head() {
+        if let Some(branch_name) = head.shorthand() {
+            if let Ok(upstream) = repo.branch_upstream_name(&format!("refs/heads/{}", branch_name))
+            {
+                if let Some(name) = upstream.as_str() {
+                    if let Some(first_part) = name.split('/').next() {
+                        remote_name = first_part.to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    let mut remote = repo.find_remote(&remote_name)?;
     let remote_url = remote.url().unwrap_or("");
-    eprintln!("[DEBUG] Fetch - Original remote URL: {}", remote_url);
+    eprintln!(
+        "[DEBUG] Fetch - Using remote '{}' with URL: {}",
+        remote_name, remote_url
+    );
 
-    // Résoudre l'URL (remplacer l'alias SSH par le vrai hostname)
-    let resolved_url = resolve_remote_url(remote_url);
-    eprintln!("[DEBUG] Fetch - Resolved remote URL: {}", resolved_url);
-
-    // Créer un remote temporaire avec l'URL résolue
-    let temp_remote_name = format!("__temp_fetch_{}", std::process::id());
-
-    // Supprimer le remote temporaire s'il existe déjà
-    let _ = repo.remote_delete(&temp_remote_name);
-
-    // Créer le remote avec l'URL résolue
-    let mut resolved_remote = repo.remote(&temp_remote_name, &resolved_url)?;
-
-    // Options de fetch avec callbacks SSH améliorés
+    // Options de fetch avec callbacks SSH
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(build_remote_callbacks());
 
     // Fetch toutes les branches
-    let result = resolved_remote.fetch(
+    remote.fetch(
         &["refs/heads/*:refs/remotes/origin/*"],
         Some(&mut fetch_options),
         None,
-    );
+    )?;
 
-    // Nettoyer le remote temporaire
-    drop(resolved_remote);
-    let _ = repo.remote_delete(&temp_remote_name);
-
-    result?;
     Ok(())
 }
 
@@ -543,4 +533,67 @@ pub fn get_default_remote(repo: &Repository) -> Result<String> {
         .to_string();
 
     Ok(remote_name)
+}
+
+/// Push la branche courante en utilisant git CLI (fallback).
+/// Utilise le processus git standard qui gère correctement les alias SSH.
+pub fn push_current_branch_cli(repo: &Repository) -> Result<String> {
+    use std::process::Command;
+
+    // Récupérer la branche courante
+    let head = repo.head()?;
+    let branch_name = head
+        .shorthand()
+        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?;
+
+    // Récupérer le chemin du repository
+    let repo_path = repo
+        .workdir()
+        .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
+
+    // Vérifier si la branche a un upstream configuré
+    let has_upstream = repo
+        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
+        .is_ok();
+
+    // Construire la commande git push
+    let mut cmd = Command::new("git");
+    cmd.arg("push");
+
+    // Ajouter --set-upstream si pas d'upstream
+    if !has_upstream {
+        cmd.arg("--set-upstream");
+    }
+
+    // Exécuter depuis le chemin du repository
+    let output = cmd
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git push: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(git2::Error::from_str(&format!("Erreur git push: {}", stderr)).into());
+    }
+
+    let _stdout = String::from_utf8_lossy(&output.stdout);
+    let remote_name = repo
+        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
+        .ok()
+        .and_then(|n| n.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "origin".to_string());
+    let remote_name = remote_name
+        .split('/')
+        .next()
+        .unwrap_or("origin")
+        .to_string();
+
+    if has_upstream {
+        Ok(format!("Push de '{}' vers {}", branch_name, remote_name))
+    } else {
+        Ok(format!(
+            "Push de '{}' vers {}/{} (upstream configuré)",
+            branch_name, remote_name, branch_name
+        ))
+    }
 }
