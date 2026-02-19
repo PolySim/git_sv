@@ -3,27 +3,19 @@ use std::io::Write;
 
 use crate::error::{GitSvError, Result};
 
-/// Un fichier en conflit.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConflictFile {
-    pub path: String,
-    pub conflicts: Vec<ConflictSection>,
-    pub is_resolved: bool,
+/// Mode de résolution des conflits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConflictResolutionMode {
+    File,
+    Block,
+    Line,
 }
 
-/// Une section de conflit dans un fichier.
+/// Résolution par ligne dans une section.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ConflictSection {
-    /// Lignes de contexte avant le conflit.
-    pub context_before: Vec<String>,
-    /// Version "ours" (HEAD / branche courante).
-    pub ours: Vec<String>,
-    /// Version "theirs" (branche mergée).
-    pub theirs: Vec<String>,
-    /// Lignes de contexte après le conflit.
-    pub context_after: Vec<String>,
-    /// Résolution choisie par l'utilisateur.
-    pub resolution: Option<ConflictResolution>,
+pub struct LineResolution {
+    pub line_index: usize,
+    pub source: ConflictResolution,
 }
 
 /// Résolution possible pour une section de conflit.
@@ -32,6 +24,34 @@ pub enum ConflictResolution {
     Ours,
     Theirs,
     Both,
+}
+
+/// Section de conflit enrichie.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConflictSection {
+    pub context_before: Vec<String>,
+    pub ours: Vec<String>,
+    pub theirs: Vec<String>,
+    pub context_after: Vec<String>,
+    pub resolution: Option<ConflictResolution>,
+    pub line_resolutions: Vec<LineResolution>,
+}
+
+/// Un fichier en conflit.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConflictFile {
+    pub path: String,
+    pub conflicts: Vec<ConflictSection>,
+    pub is_resolved: bool,
+}
+
+/// Fichier dans un merge (en conflit ou non).
+#[derive(Debug, Clone)]
+pub struct MergeFile {
+    pub path: String,
+    pub has_conflicts: bool,
+    pub conflicts: Vec<ConflictSection>,
+    pub is_resolved: bool,
 }
 
 /// Résultat d'une opération de merge.
@@ -74,6 +94,7 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
                         theirs,
                         context_after,
                         resolution: None,
+                        line_resolutions: Vec::new(),
                     });
 
                     context_before = Vec::new();
@@ -394,4 +415,186 @@ pub fn count_unresolved_sections(files: &[ConflictFile]) -> usize {
 /// Met à jour le statut resolved d'un fichier basé sur ses sections.
 pub fn update_file_resolved_status(file: &mut ConflictFile) {
     file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+}
+
+/// Liste tous les fichiers du merge (en conflit ou non).
+pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
+    let index = repo
+        .index()
+        .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+
+    let mut all_files: Vec<MergeFile> = Vec::new();
+
+    // Collecter les fichiers en conflit
+    let conflict_files: std::collections::HashSet<String> = if let Ok(conflicts) = index.conflicts()
+    {
+        conflicts
+            .filter_map(|c| c.ok())
+            .filter_map(|c| c.our)
+            .filter_map(|ours| std::str::from_utf8(&ours.path).ok().map(|s| s.to_string()))
+            .collect()
+    } else {
+        std::collections::HashSet::new()
+    };
+
+    // Parcourir tous les fichiers de l'index
+    for i in 0..index.len() {
+        if let Some(entry) = index.get(i) {
+            let path_bytes = entry.path;
+            if let Ok(path) = std::str::from_utf8(&path_bytes) {
+                let has_conflict = conflict_files.contains(path);
+
+                if has_conflict {
+                    // Fichier en conflit
+                    let sections = parse_conflict_file(path)?;
+                    let is_resolved = sections.iter().all(|s| s.resolution.is_some());
+
+                    all_files.push(MergeFile {
+                        path: path.to_string(),
+                        has_conflicts: true,
+                        conflicts: sections,
+                        is_resolved,
+                    });
+                } else {
+                    // Fichier sans conflit
+                    all_files.push(MergeFile {
+                        path: path.to_string(),
+                        has_conflicts: false,
+                        conflicts: Vec::new(),
+                        is_resolved: true,
+                    });
+                }
+            }
+        }
+    }
+
+    // Ajouter les fichiers non indexés (nouveaux fichiers non trackés)
+    if let Ok(status) = repo.statuses(None) {
+        for entry in status.iter() {
+            if let Some(path) = entry.path() {
+                if !all_files.iter().any(|f| f.path == path) {
+                    let status = entry.status();
+                    if status.is_wt_new() || status.is_index_new() {
+                        all_files.push(MergeFile {
+                            path: path.to_string(),
+                            has_conflicts: false,
+                            conflicts: Vec::new(),
+                            is_resolved: true,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(all_files)
+}
+
+/// Compte le nombre de fichiers en conflit non résolus dans MergeFile.
+pub fn count_unresolved_merge_files(files: &[MergeFile]) -> usize {
+    files
+        .iter()
+        .filter(|f| f.has_conflicts && !f.is_resolved)
+        .count()
+}
+
+/// Génère le contenu résolu d'un fichier en fonction des résolutions.
+pub fn generate_resolved_content(file: &MergeFile, mode: ConflictResolutionMode) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+
+    for section in &file.conflicts {
+        // Ajouter le contexte avant
+        result.extend(section.context_before.clone());
+
+        match mode {
+            ConflictResolutionMode::File => {
+                // Résolution au niveau fichier (appliquer à toutes les sections)
+                if let Some(resolution) = &section.resolution {
+                    match resolution {
+                        ConflictResolution::Ours => result.extend(section.ours.clone()),
+                        ConflictResolution::Theirs => result.extend(section.theirs.clone()),
+                        ConflictResolution::Both => {
+                            result.extend(section.ours.clone());
+                            result.extend(section.theirs.clone());
+                        }
+                    }
+                } else {
+                    // Pas résolu, garder le conflit
+                    result.push(format!("<<<<<<< HEAD"));
+                    result.extend(section.ours.iter().cloned());
+                    result.push("=======".to_string());
+                    result.extend(section.theirs.iter().cloned());
+                    result.push(format!(">>>>>>>"));
+                }
+            }
+            ConflictResolutionMode::Block => {
+                if let Some(resolution) = &section.resolution {
+                    match resolution {
+                        ConflictResolution::Ours => result.extend(section.ours.clone()),
+                        ConflictResolution::Theirs => result.extend(section.theirs.clone()),
+                        ConflictResolution::Both => {
+                            result.extend(section.ours.clone());
+                            result.extend(section.theirs.clone());
+                        }
+                    }
+                } else {
+                    // Pas résolu, garder le conflit
+                    result.push("<<<<<<< HEAD".to_string());
+                    result.extend(section.ours.iter().cloned());
+                    result.push("=======".to_string());
+                    result.extend(section.theirs.iter().cloned());
+                    result.push(">>>>>>>".to_string());
+                }
+            }
+            ConflictResolutionMode::Line => {
+                // Résolution ligne par ligne
+                let ours_lines = &section.ours;
+                let theirs_lines = &section.theirs;
+                let max_lines = ours_lines.len().max(theirs_lines.len());
+
+                for i in 0..max_lines {
+                    let resolution = section
+                        .line_resolutions
+                        .iter()
+                        .find(|lr| lr.line_index == i)
+                        .map(|lr| &lr.source);
+
+                    match resolution {
+                        Some(ConflictResolution::Ours) => {
+                            if i < ours_lines.len() {
+                                result.push(ours_lines[i].clone());
+                            }
+                        }
+                        Some(ConflictResolution::Theirs) => {
+                            if i < theirs_lines.len() {
+                                result.push(theirs_lines[i].clone());
+                            }
+                        }
+                        Some(ConflictResolution::Both) => {
+                            if i < ours_lines.len() {
+                                result.push(ours_lines[i].clone());
+                            }
+                            if i < theirs_lines.len() {
+                                result.push(theirs_lines[i].clone());
+                            }
+                        }
+                        None => {
+                            // Pas résolu, garder les deux
+                            if i < ours_lines.len() {
+                                result.push(ours_lines[i].clone());
+                            }
+                            if i < theirs_lines.len() {
+                                result.push(theirs_lines[i].clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ajouter le contexte après
+        result.extend(section.context_after.clone());
+    }
+
+    result
 }

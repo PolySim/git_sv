@@ -148,6 +148,11 @@ impl EventHandler {
             AppAction::ConflictResolveFile => self.handle_conflict_resolve_file()?,
             AppAction::ConflictFinalize => self.handle_conflict_finalize()?,
             AppAction::ConflictAbort => self.handle_conflict_abort()?,
+            AppAction::ConflictSwitchMode => self.handle_conflict_switch_mode()?,
+            AppAction::ConflictLineDown => self.handle_conflict_line_down(),
+            AppAction::ConflictLineUp => self.handle_conflict_line_up(),
+            AppAction::ConflictSwitchPanel => self.handle_conflict_switch_panel(),
+            AppAction::ConflictValidateMerge => self.handle_conflict_validate_merge()?,
             AppAction::StashSelectedFile => self.handle_stash_selected_file()?,
             AppAction::StashUnstagedFiles => self.handle_stash_unstaged_files()?,
         }
@@ -178,8 +183,38 @@ impl EventHandler {
                 ConfirmAction::CherryPick(oid) => {
                     self.execute_cherry_pick(oid)?;
                 }
-                ConfirmAction::MergeBranch(source, _target) => {
-                    self.execute_merge(&source)?;
+                ConfirmAction::MergeBranch(source, _) => {
+                    // C'est une validation de merge (ConflictValidateMerge)
+                    if self.state.view_mode == crate::state::ViewMode::Conflicts {
+                        self.execute_conflict_validate_merge(&source)?;
+                    } else {
+                        self.execute_merge(&source)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Exécute la validation du merge après confirmation.
+    fn execute_conflict_validate_merge(&mut self, _message: &str) -> Result<()> {
+        use crate::git::conflict::finalize_merge;
+        use crate::state::ViewMode;
+
+        if let Some(ref conflicts_state) = self.state.conflicts_state {
+            let message = format!("Merge: {}", conflicts_state.operation_description);
+            match finalize_merge(&self.state.repo.repo, &message) {
+                Ok(()) => {
+                    self.state.conflicts_state = None;
+                    self.state.view_mode = ViewMode::Graph;
+                    self.state
+                        .set_flash_message("Merge finalisé avec succès ✓".into());
+                    self.state.mark_dirty();
+                    self.refresh()?;
+                }
+                Err(e) => {
+                    self.state
+                        .set_flash_message(format!("Erreur lors de la finalisation: {}", e));
                 }
             }
         }
@@ -2176,16 +2211,18 @@ impl EventHandler {
     }
 
     fn handle_conflict_choose_ours(&mut self) -> Result<()> {
-        use crate::git::conflict::{update_file_resolved_status, ConflictResolution};
+        use crate::git::conflict::ConflictResolution;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            if let Some(ref mut file) = conflicts_state.files.get_mut(conflicts_state.file_selected)
+            if let Some(ref mut file) = conflicts_state
+                .all_files
+                .get_mut(conflicts_state.file_selected)
             {
                 if let Some(ref mut section) =
                     file.conflicts.get_mut(conflicts_state.section_selected)
                 {
                     section.resolution = Some(ConflictResolution::Ours);
-                    update_file_resolved_status(file);
+                    file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
                 }
             }
         }
@@ -2193,16 +2230,18 @@ impl EventHandler {
     }
 
     fn handle_conflict_choose_theirs(&mut self) -> Result<()> {
-        use crate::git::conflict::{update_file_resolved_status, ConflictResolution};
+        use crate::git::conflict::ConflictResolution;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            if let Some(ref mut file) = conflicts_state.files.get_mut(conflicts_state.file_selected)
+            if let Some(ref mut file) = conflicts_state
+                .all_files
+                .get_mut(conflicts_state.file_selected)
             {
                 if let Some(ref mut section) =
                     file.conflicts.get_mut(conflicts_state.section_selected)
                 {
                     section.resolution = Some(ConflictResolution::Theirs);
-                    update_file_resolved_status(file);
+                    file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
                 }
             }
         }
@@ -2210,16 +2249,18 @@ impl EventHandler {
     }
 
     fn handle_conflict_choose_both(&mut self) -> Result<()> {
-        use crate::git::conflict::{update_file_resolved_status, ConflictResolution};
+        use crate::git::conflict::ConflictResolution;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            if let Some(ref mut file) = conflicts_state.files.get_mut(conflicts_state.file_selected)
+            if let Some(ref mut file) = conflicts_state
+                .all_files
+                .get_mut(conflicts_state.file_selected)
             {
                 if let Some(ref mut section) =
                     file.conflicts.get_mut(conflicts_state.section_selected)
                 {
                     section.resolution = Some(ConflictResolution::Both);
-                    update_file_resolved_status(file);
+                    file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
                 }
             }
         }
@@ -2228,10 +2269,13 @@ impl EventHandler {
 
     fn handle_conflict_next_file(&mut self) {
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            if conflicts_state.file_selected + 1 < conflicts_state.files.len() {
+            if conflicts_state.file_selected + 1 < conflicts_state.all_files.len() {
                 conflicts_state.file_selected += 1;
                 conflicts_state.section_selected = 0;
-                conflicts_state.scroll_offset = 0;
+                conflicts_state.line_selected = 0;
+                conflicts_state.ours_scroll = 0;
+                conflicts_state.theirs_scroll = 0;
+                conflicts_state.result_scroll = 0;
             }
         }
     }
@@ -2241,16 +2285,20 @@ impl EventHandler {
             if conflicts_state.file_selected > 0 {
                 conflicts_state.file_selected -= 1;
                 conflicts_state.section_selected = 0;
-                conflicts_state.scroll_offset = 0;
+                conflicts_state.line_selected = 0;
+                conflicts_state.ours_scroll = 0;
+                conflicts_state.theirs_scroll = 0;
+                conflicts_state.result_scroll = 0;
             }
         }
     }
 
     fn handle_conflict_next_section(&mut self) {
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            if let Some(file) = conflicts_state.files.get(conflicts_state.file_selected) {
+            if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
                 if conflicts_state.section_selected + 1 < file.conflicts.len() {
                     conflicts_state.section_selected += 1;
+                    conflicts_state.line_selected = 0;
                 }
             }
         }
@@ -2260,34 +2308,49 @@ impl EventHandler {
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
             if conflicts_state.section_selected > 0 {
                 conflicts_state.section_selected -= 1;
+                conflicts_state.line_selected = 0;
             }
         }
     }
 
     fn handle_conflict_resolve_file(&mut self) -> Result<()> {
         use crate::git::conflict::resolve_file;
+        use crate::git::conflict::ConflictFile;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            let file_selected = conflicts_state.file_selected;
+
             // Vérifier que toutes les sections sont résolues
-            if let Some(file) = conflicts_state.files.get(conflicts_state.file_selected) {
+            if let Some(file) = conflicts_state.all_files.get(file_selected) {
+                if !file.has_conflicts {
+                    self.state
+                        .set_flash_message("Ce fichier n'a pas de conflits".into());
+                    return Ok(());
+                }
+
                 if !file.conflicts.iter().all(|s| s.resolution.is_some()) {
                     self.state
                         .set_flash_message("Toutes les sections ne sont pas résolues".into());
                     return Ok(());
                 }
 
-                // Résoudre le fichier
-                let file_clone = file.clone();
-                match resolve_file(&self.state.repo.repo, &file_clone) {
+                // Convertir MergeFile en ConflictFile pour resolve_file
+                let file_path = file.path.clone();
+                let conflict_file = ConflictFile {
+                    path: file_path.clone(),
+                    conflicts: file.conflicts.clone(),
+                    is_resolved: file.is_resolved,
+                };
+
+                match resolve_file(&self.state.repo.repo, &conflict_file) {
                     Ok(()) => {
                         // Mettre à jour le statut
-                        if let Some(ref mut file) =
-                            conflicts_state.files.get_mut(conflicts_state.file_selected)
+                        if let Some(ref mut file) = conflicts_state.all_files.get_mut(file_selected)
                         {
                             file.is_resolved = true;
                         }
                         self.state
-                            .set_flash_message(format!("Fichier '{}' résolu ✓", file_clone.path));
+                            .set_flash_message(format!("Fichier '{}' résolu ✓", file_path));
                     }
                     Err(e) => {
                         self.state
@@ -2300,11 +2363,11 @@ impl EventHandler {
     }
 
     fn handle_conflict_finalize(&mut self) -> Result<()> {
-        use crate::git::conflict::{count_unresolved_files, finalize_merge};
+        use crate::git::conflict::{count_unresolved_merge_files, finalize_merge};
         use crate::state::ViewMode;
 
         if let Some(ref conflicts_state) = self.state.conflicts_state {
-            let unresolved = count_unresolved_files(&conflicts_state.files);
+            let unresolved = count_unresolved_merge_files(&conflicts_state.all_files);
 
             if unresolved > 0 {
                 self.state.set_flash_message(format!(
@@ -2354,6 +2417,77 @@ impl EventHandler {
                         .set_flash_message(format!("Erreur lors de l'annulation: {}", e));
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn handle_conflict_switch_mode(&mut self) -> Result<()> {
+        use crate::git::conflict::ConflictResolutionMode;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.resolution_mode = match conflicts_state.resolution_mode {
+                ConflictResolutionMode::Block => ConflictResolutionMode::Line,
+                ConflictResolutionMode::Line => ConflictResolutionMode::File,
+                ConflictResolutionMode::File => ConflictResolutionMode::Block,
+            };
+            conflicts_state.line_selected = 0;
+        }
+        Ok(())
+    }
+
+    fn handle_conflict_line_down(&mut self) {
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
+                if let Some(section) = file.conflicts.get(conflicts_state.section_selected) {
+                    let max_lines = section.ours.len().max(section.theirs.len());
+                    if conflicts_state.line_selected < max_lines {
+                        conflicts_state.line_selected += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_conflict_line_up(&mut self) {
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            if conflicts_state.line_selected > 0 {
+                conflicts_state.line_selected -= 1;
+            }
+        }
+    }
+
+    fn handle_conflict_switch_panel(&mut self) {
+        use crate::state::ConflictPanelFocus;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.panel_focus = match conflicts_state.panel_focus {
+                ConflictPanelFocus::FileList => ConflictPanelFocus::OursPanel,
+                ConflictPanelFocus::OursPanel => ConflictPanelFocus::TheirsPanel,
+                ConflictPanelFocus::TheirsPanel => ConflictPanelFocus::ResultPanel,
+                ConflictPanelFocus::ResultPanel => ConflictPanelFocus::FileList,
+            };
+        }
+    }
+
+    fn handle_conflict_validate_merge(&mut self) -> Result<()> {
+        use crate::git::conflict::count_unresolved_merge_files;
+        use crate::ui::confirm_dialog::ConfirmAction;
+
+        if let Some(ref conflicts_state) = self.state.conflicts_state {
+            let unresolved = count_unresolved_merge_files(&conflicts_state.all_files);
+
+            if unresolved > 0 {
+                self.state.set_flash_message(format!(
+                    "{} fichier(s) non résolu(s). Résolvez tous les conflits avant de finaliser.",
+                    unresolved
+                ));
+                return Ok(());
+            }
+
+            // Demander confirmation
+            let desc = conflicts_state.operation_description.clone();
+            self.state.pending_confirmation =
+                Some(ConfirmAction::MergeBranch(desc, "merge".to_string()));
         }
         Ok(())
     }

@@ -1,5 +1,5 @@
 use crate::git::branch::BranchInfo;
-use crate::git::conflict::ConflictFile;
+use crate::git::conflict::{ConflictResolutionMode, MergeFile};
 use crate::git::diff::{DiffFile, FileDiff};
 use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
@@ -165,6 +165,16 @@ pub enum AppAction {
     StashSelectedFile,
     /// Stash tous les fichiers non staged.
     StashUnstagedFiles,
+    /// Changer le mode de résolution (File/Block/Line).
+    ConflictSwitchMode,
+    /// En mode ligne : sélectionner la ligne suivante.
+    ConflictLineDown,
+    /// En mode ligne : sélectionner la ligne précédente.
+    ConflictLineUp,
+    /// Basculer le focus entre les panneaux (Ours/Theirs/Result).
+    ConflictSwitchPanel,
+    /// Valider le merge final (tous les conflits résolus).
+    ConflictValidateMerge,
 }
 
 /// Mode d'affichage actif.
@@ -369,28 +379,66 @@ pub struct MergePickerState {
     pub is_active: bool,
 }
 
+/// Focus dans les panneaux de la vue conflits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConflictPanelFocus {
+    FileList,
+    OursPanel,
+    TheirsPanel,
+    ResultPanel,
+}
+
 /// État de la vue de résolution de conflits.
 pub struct ConflictsState {
-    /// Liste des fichiers en conflit.
-    pub files: Vec<ConflictFile>,
+    /// Tous les fichiers du merge (en conflit ou non).
+    pub all_files: Vec<MergeFile>,
     /// Index du fichier sélectionné.
     pub file_selected: usize,
-    /// Index de la section de conflit sélectionnée dans le fichier courant.
+    /// Index de la section de conflit sélectionnée.
     pub section_selected: usize,
-    /// Offset de scroll dans le panneau de résolution.
-    pub scroll_offset: usize,
-    /// Description de l'opération en cours (ex: "Merge de 'feature/x' dans 'main'").
+    /// Index de la ligne sélectionnée (mode ligne).
+    pub line_selected: usize,
+    /// Mode de résolution actif.
+    pub resolution_mode: ConflictResolutionMode,
+    /// Scroll dans le panneau ours.
+    pub ours_scroll: usize,
+    /// Scroll dans le panneau theirs.
+    pub theirs_scroll: usize,
+    /// Scroll dans le panneau résultat.
+    pub result_scroll: usize,
+    /// Focus dans les panneaux (Ours / Theirs / Result).
+    pub panel_focus: ConflictPanelFocus,
+    /// Description de l'opération en cours.
     pub operation_description: String,
 }
 
 impl ConflictsState {
-    /// Crée un nouvel état de conflits.
-    pub fn new(files: Vec<ConflictFile>, operation_description: String) -> Self {
+    /// Crée un nouvel état de conflits à partir de ConflictFile (compatibilité).
+    pub fn new(
+        files: Vec<crate::git::conflict::ConflictFile>,
+        operation_description: String,
+    ) -> Self {
+        // Convertir les ConflictFile en MergeFile
+        let all_files: Vec<MergeFile> = files
+            .into_iter()
+            .map(|f| MergeFile {
+                path: f.path,
+                has_conflicts: true,
+                conflicts: f.conflicts,
+                is_resolved: f.is_resolved,
+            })
+            .collect();
+
         Self {
-            files,
+            all_files,
             file_selected: 0,
             section_selected: 0,
-            scroll_offset: 0,
+            line_selected: 0,
+            resolution_mode: ConflictResolutionMode::Block,
+            ours_scroll: 0,
+            theirs_scroll: 0,
+            result_scroll: 0,
+            panel_focus: ConflictPanelFocus::FileList,
             operation_description,
         }
     }

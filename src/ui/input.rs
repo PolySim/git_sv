@@ -373,24 +373,63 @@ fn map_blame_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
 }
 
 /// Mappe les keybindings pour la vue de résolution de conflits.
-fn map_conflicts_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
+fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    // Si une confirmation est en attente (pour ConflictValidateMerge)
+    if state.pending_confirmation.is_some() {
+        return match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => Some(AppAction::ConfirmAction),
+            KeyCode::Char('n') | KeyCode::Char('N') => Some(AppAction::CancelAction),
+            KeyCode::Esc => Some(AppAction::CancelAction),
+            _ => None,
+        };
+    }
+
+    // Vérifier le mode actuel pour certains keybindings
+    let is_line_mode = state.conflicts_state.as_ref().map_or(false, |s| {
+        s.resolution_mode == crate::git::conflict::ConflictResolutionMode::Line
+    });
+
     match key.code {
-        // Navigation entre fichiers
+        // Navigation entre fichiers (FileList uniquement)
         KeyCode::Tab => Some(AppAction::ConflictNextFile),
         KeyCode::BackTab => Some(AppAction::ConflictPrevFile),
-        // Navigation entre sections de conflit
-        KeyCode::Char('j') | KeyCode::Down => Some(AppAction::ConflictNextSection),
-        KeyCode::Char('k') | KeyCode::Up => Some(AppAction::ConflictPrevSection),
+        // Basculer entre panneaux
+        KeyCode::Char('\t') if key.modifiers.contains(KeyModifiers::SHIFT) => {
+            Some(AppAction::ConflictSwitchPanel)
+        }
+        // Navigation dans les sections/lignes (selon le mode)
+        KeyCode::Char('j') | KeyCode::Down => {
+            if is_line_mode {
+                Some(AppAction::ConflictLineDown)
+            } else {
+                Some(AppAction::ConflictNextSection)
+            }
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if is_line_mode {
+                Some(AppAction::ConflictLineUp)
+            } else {
+                Some(AppAction::ConflictPrevSection)
+            }
+        }
         // Résolution
         KeyCode::Char('o') => Some(AppAction::ConflictChooseOurs),
         KeyCode::Char('t') => Some(AppAction::ConflictChooseTheirs),
         KeyCode::Char('b') => Some(AppAction::ConflictChooseBoth),
-        // Validation / Annulation
+        // Changement de mode de résolution
+        KeyCode::Char('F') => Some(AppAction::ConflictSwitchMode),
+        KeyCode::Char('B') => Some(AppAction::ConflictSwitchMode),
+        KeyCode::Char('L') => Some(AppAction::ConflictSwitchMode),
+        // Validation
         KeyCode::Enter => Some(AppAction::ConflictResolveFile),
-        KeyCode::Char('F') => Some(AppAction::ConflictFinalize),
+        KeyCode::Char('V') => Some(AppAction::ConflictValidateMerge),
         KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::ConflictAbort),
         // Vues
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
+        // Navigation entre vues
+        KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
+        KeyCode::Char('2') => return Some(AppAction::SwitchToStaging),
+        KeyCode::Char('3') => return Some(AppAction::SwitchToBranches),
         _ => None,
     }
 }
