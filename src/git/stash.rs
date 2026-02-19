@@ -1,4 +1,5 @@
 use git2::{Oid, Repository};
+use std::process::Command;
 
 use crate::error::Result;
 use crate::git::diff::DiffStatus;
@@ -186,6 +187,55 @@ pub fn pop_stash(repo: &mut Repository, index: usize) -> Result<()> {
 /// Supprime le stash à l'index donné sans l'appliquer.
 pub fn drop_stash(repo: &mut Repository, index: usize) -> Result<()> {
     repo.stash_drop(index)?;
+    Ok(())
+}
+
+/// Stash un fichier spécifique en utilisant git CLI.
+/// Utilise `git stash push -- <file>` car libgit2 ne supporte pas nativement cette fonctionnalité.
+pub fn stash_file(repo_path: &str, file_path: &str, message: Option<&str>) -> Result<()> {
+    let mut cmd = Command::new("git");
+    cmd.arg("stash").arg("push");
+    if let Some(msg) = message {
+        cmd.arg("-m").arg(msg);
+    }
+    cmd.arg("--").arg(file_path);
+    cmd.current_dir(repo_path);
+
+    let output = cmd.output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(crate::error::GitSvError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("git stash failed: {}", stderr),
+        ))
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Stash tous les fichiers non staged (working directory) en utilisant git CLI.
+pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<()> {
+    let mut cmd = Command::new("git");
+    cmd.arg("stash").arg("push");
+    if let Some(msg) = message {
+        cmd.arg("-m").arg(msg);
+    }
+    cmd.arg("--").arg("-u"); // Only include unstaged files
+    cmd.current_dir(repo_path);
+
+    let output = cmd.output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(crate::error::GitSvError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("git stash failed: {}", stderr),
+        ))
+        .into());
+    }
+
     Ok(())
 }
 

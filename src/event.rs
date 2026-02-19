@@ -148,6 +148,8 @@ impl EventHandler {
             AppAction::ConflictResolveFile => self.handle_conflict_resolve_file()?,
             AppAction::ConflictFinalize => self.handle_conflict_finalize()?,
             AppAction::ConflictAbort => self.handle_conflict_abort()?,
+            AppAction::StashSelectedFile => self.handle_stash_selected_file()?,
+            AppAction::StashUnstagedFiles => self.handle_stash_unstaged_files()?,
         }
         Ok(())
     }
@@ -974,6 +976,52 @@ impl EventHandler {
             self.state.branches_view_state.input_text.clear();
             self.state.branches_view_state.input_cursor = 0;
         }
+    }
+
+    fn handle_stash_selected_file(&mut self) -> Result<()> {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Staging {
+            if let Some(file) = self
+                .state
+                .staging_state
+                .unstaged_files
+                .get(self.state.staging_state.unstaged_selected)
+            {
+                let file_path = file.path.clone();
+                match crate::git::stash::stash_file(&self.state.repo_path, &file_path, None) {
+                    Ok(_) => {
+                        self.state
+                            .set_flash_message(format!("Fichier '{}' stashé", file_path));
+                        self.state.mark_dirty();
+                        self.refresh_staging()?;
+                    }
+                    Err(e) => {
+                        self.state.set_flash_message(format!("Erreur: {}", e));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_stash_unstaged_files(&mut self) -> Result<()> {
+        use crate::state::ViewMode;
+
+        if self.state.view_mode == ViewMode::Staging {
+            match crate::git::stash::stash_unstaged_files(&self.state.repo_path, None) {
+                Ok(_) => {
+                    self.state
+                        .set_flash_message("Fichiers unstaged stashés".into());
+                    self.state.mark_dirty();
+                    self.refresh_staging()?;
+                }
+                Err(e) => {
+                    self.state.set_flash_message(format!("Erreur: {}", e));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn handle_confirm_input(&mut self) -> Result<()> {

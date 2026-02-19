@@ -322,11 +322,17 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MoveDown),
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MoveUp),
             KeyCode::Char('s') | KeyCode::Enter => Some(AppAction::StageFile),
+            KeyCode::Char('S') => Some(AppAction::StashSelectedFile),
             KeyCode::Char('a') => Some(AppAction::StageAll),
             KeyCode::Char('d') => Some(AppAction::DiscardFile),
             KeyCode::Char('D') => Some(AppAction::DiscardAll),
             KeyCode::Tab => Some(AppAction::SwitchStagingFocus),
             KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
+            _ if key.modifiers.contains(KeyModifiers::CONTROL)
+                && key.code == KeyCode::Char('S') =>
+            {
+                Some(AppAction::StashUnstagedFiles)
+            }
             _ => None,
         },
         StagingFocus::Staged => match key.code {

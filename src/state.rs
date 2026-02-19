@@ -161,6 +161,10 @@ pub enum AppAction {
     ConflictFinalize,
     /// Annuler le merge en cours.
     ConflictAbort,
+    /// Stash le fichier sélectionné (vue staging).
+    StashSelectedFile,
+    /// Stash tous les fichiers non staged.
+    StashUnstagedFiles,
 }
 
 /// Mode d'affichage actif.
