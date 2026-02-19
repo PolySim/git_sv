@@ -365,11 +365,22 @@ impl EventHandler {
 
     fn handle_switch_bottom_mode(&mut self) {
         use crate::state::FocusPanel;
+
+        let previous_focus = self.state.focus;
+
         self.state.focus = match self.state.focus {
             FocusPanel::Graph => FocusPanel::Files,
             FocusPanel::Files => FocusPanel::Detail,
             FocusPanel::Detail => FocusPanel::Graph,
         };
+
+        // Auto-sélectionner le premier fichier quand on passe au panneau Files
+        if previous_focus == FocusPanel::Graph && self.state.focus == FocusPanel::Files {
+            if !self.state.commit_files.is_empty() && self.state.selected_file_diff.is_none() {
+                self.state.file_selected_index = 0;
+                self.load_selected_file_diff();
+            }
+        }
     }
 
     fn handle_switch_to_graph(&mut self) -> Result<()> {

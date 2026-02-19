@@ -52,7 +52,7 @@ fn build_diff_lines(diff: &FileDiff) -> Vec<Line<'static>> {
             let (prefix, fg_color, bg_color) = match line.line_type {
                 DiffLineType::Addition => ("+", Color::Green, Some(Color::Rgb(0, 40, 0))),
                 DiffLineType::Deletion => ("-", Color::Red, Some(Color::Rgb(40, 0, 0))),
-                DiffLineType::Context => (" ", Color::White, None),
+                DiffLineType::Context => (" ", Color::Reset, None),
                 DiffLineType::HunkHeader => ("", Color::Cyan, None),
             };
 
