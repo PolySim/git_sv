@@ -72,7 +72,23 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
 
-    // Navigation entre les vues principales (toujours disponible)
+    // Si on est en mode Staging avec focus sur CommitMessage, dispatcher immédiatement
+    // sans intercepter les raccourcis globaux (permet de taper "1", "2", "3" dans le message)
+    if state.view_mode == ViewMode::Staging
+        && state.staging_state.focus == StagingFocus::CommitMessage
+    {
+        return map_staging_key(key, state);
+    }
+
+    // Si on est en mode Branches avec focus sur Input, dispatcher immédiatement
+    // sans intercepter les raccourcis globaux (permet de taper "1", "2", "3" dans le nom)
+    if state.view_mode == ViewMode::Branches
+        && state.branches_view_state.focus == BranchesFocus::Input
+    {
+        return map_branches_key(key, state);
+    }
+
+    // Navigation entre les vues principales (toujours disponible, sauf en mode saisie)
     match key.code {
         KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
         KeyCode::Char('2') => return Some(AppAction::SwitchToStaging),
