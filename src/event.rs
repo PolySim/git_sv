@@ -3115,6 +3115,8 @@ impl EventHandler {
                 if conflicts_state.edit_cursor_col > line_len {
                     conflicts_state.edit_cursor_col = line_len;
                 }
+                // Scroll automatique pour garder le curseur visible
+                self.auto_scroll_result_to_cursor(20);
             }
         }
     }
@@ -3131,6 +3133,8 @@ impl EventHandler {
                     if conflicts_state.edit_cursor_col > line_len {
                         conflicts_state.edit_cursor_col = line_len;
                     }
+                    // Scroll automatique pour garder le curseur visible
+                    self.auto_scroll_result_to_cursor(20);
                 }
             }
         }
@@ -3171,7 +3175,25 @@ impl EventHandler {
                     conflicts_state.edit_buffer.insert(line_idx + 1, new_line);
                     conflicts_state.edit_cursor_line += 1;
                     conflicts_state.edit_cursor_col = 0;
+                    // Scroll automatique pour garder le curseur visible
+                    self.auto_scroll_result_to_cursor(20);
                 }
+            }
+        }
+    }
+
+    /// Scroll automatique du panneau Result pour garder le curseur visible.
+    fn auto_scroll_result_to_cursor(&mut self, panel_height: usize) {
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            let cursor_line = conflicts_state.edit_cursor_line;
+            let scroll = conflicts_state.result_scroll;
+
+            if cursor_line < scroll {
+                // Curseur au-dessus de la zone visible : remonter le scroll
+                conflicts_state.result_scroll = cursor_line;
+            } else if cursor_line >= scroll + panel_height {
+                // Curseur en dessous de la zone visible : descendre le scroll
+                conflicts_state.result_scroll = cursor_line.saturating_sub(panel_height - 1);
             }
         }
     }

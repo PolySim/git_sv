@@ -107,8 +107,11 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
         ConflictResolutionMode::Line => "Mode:Ligne",
     };
 
-    // Aide contextuelle selon le panneau actif
-    let help_text = if state.panel_focus == ConflictPanelFocus::FileList {
+    // Aide contextuelle selon le panneau actif et le mode
+    let help_text = if state.is_editing {
+        // Mode édition : raccourcis d'édition
+        "Esc:Quitter l'édition  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr".to_string()
+    } else if state.panel_focus == ConflictPanelFocus::FileList {
         format!(
             "o/←:Garder Ours  t/→:Garder Theirs  Tab:Panneau  ↑↓:Nav  V:Finaliser  q:Quitter | {}",
             mode_indicator
@@ -533,6 +536,47 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     frame.render_widget(paragraph, area);
 }
 
+/// Rend une ligne en mode édition avec le curseur visible.
+fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: &str) -> Line<'a> {
+    let mut spans = Vec::new();
+
+    // Numéro de ligne
+    spans.push(Span::styled(line_num.to_string(), Style::default().fg(Color::DarkGray)));
+    spans.push(Span::raw(" "));
+
+    let chars: Vec<char> = line.chars().collect();
+
+    if cursor_col >= chars.len() {
+        // Curseur en fin de ligne : tout le texte normal + espace inversé
+        spans.push(Span::raw(line.to_string()));
+        spans.push(Span::styled(
+            " ",
+            Style::default().bg(Color::White).fg(Color::Black),
+        ));
+    } else {
+        // Texte avant le curseur
+        if cursor_col > 0 {
+            let before: String = chars[..cursor_col].iter().collect();
+            spans.push(Span::raw(before));
+        }
+
+        // Caractère sous le curseur (inversé)
+        let cursor_char = chars[cursor_col].to_string();
+        spans.push(Span::styled(
+            cursor_char,
+            Style::default().bg(Color::White).fg(Color::Black),
+        ));
+
+        // Texte après le curseur
+        if cursor_col + 1 < chars.len() {
+            let after: String = chars[cursor_col + 1..].iter().collect();
+            spans.push(Span::raw(after));
+        }
+    }
+
+    Line::from(spans)
+}
+
 /// Rend le panneau Résultat avec background coloré.
 fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     use crate::git::conflict::{generate_resolved_content_with_source, LineSource};
@@ -570,7 +614,7 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         return;
     };
 
-    // En mode édition, afficher le buffer éditable
+    // En mode édition, afficher le buffer éditable avec curseur et numéros de ligne
     let lines: Vec<Line> = if state.is_editing {
         state
             .edit_buffer
@@ -578,15 +622,19 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             .enumerate()
             .map(|(idx, content)| {
                 let is_cursor_line = idx == state.edit_cursor_line;
-                let style = if is_cursor_line {
-                    Style::default()
-                        .fg(Color::White)
-                        .bg(Color::DarkGray)
-                        .add_modifier(Modifier::UNDERLINED)
+                let line_num = format!("{:>3} │", idx + 1);
+
+                if is_cursor_line {
+                    // Afficher la ligne avec le curseur visible à la colonne exacte
+                    render_edit_line_with_cursor(content, state.edit_cursor_col, &line_num)
                 } else {
-                    Style::default()
-                };
-                Line::from(vec![Span::styled(content.clone(), style)])
+                    // Ligne normale avec numéro
+                    Line::from(vec![
+                        Span::styled(line_num, Style::default().fg(Color::DarkGray)),
+                        Span::raw(" "),
+                        Span::raw(content),
+                    ])
+                }
             })
             .collect()
     } else {
