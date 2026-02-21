@@ -161,6 +161,7 @@ impl EventHandler {
             AppAction::ConflictSetModeFile => self.handle_conflict_set_mode_file()?,
             AppAction::ConflictSetModeBlock => self.handle_conflict_set_mode_block()?,
             AppAction::ConflictSetModeLine => self.handle_conflict_set_mode_line()?,
+            AppAction::ConflictToggleLine => self.handle_conflict_toggle_line(),
             AppAction::ConflictLineDown => self.handle_conflict_line_down(),
             AppAction::ConflictLineUp => self.handle_conflict_line_up(),
             AppAction::ConflictSwitchPanelForward => self.handle_conflict_switch_panel_forward(),
@@ -2262,7 +2263,9 @@ impl EventHandler {
         use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            let is_file_mode = conflicts_state.resolution_mode == ConflictResolutionMode::File;
+            let mode = conflicts_state.resolution_mode;
+            let is_file_mode = mode == ConflictResolutionMode::File;
+            let is_line_mode = mode == ConflictResolutionMode::Line;
 
             if let Some(ref mut file) = conflicts_state
                 .all_files
@@ -2272,10 +2275,29 @@ impl EventHandler {
                     // En mode Fichier, résoudre toutes les sections d'un coup
                     for section in &mut file.conflicts {
                         section.resolution = Some(ConflictResolution::Ours);
+                        // Mettre à jour aussi les line_level_resolution
+                        if let Some(ref mut lr) = section.line_level_resolution {
+                            lr.ours_lines_included.fill(true);
+                            lr.theirs_lines_included.fill(false);
+                            lr.touched = true;
+                        }
                     }
                     file.is_resolved = true;
+                } else if is_line_mode {
+                    // En mode Ligne, sélectionner toutes les lignes ours et désélectionner theirs
+                    if let Some(ref mut section) =
+                        file.conflicts.get_mut(conflicts_state.section_selected)
+                    {
+                        if let Some(ref mut lr) = section.line_level_resolution {
+                            lr.ours_lines_included.fill(true);
+                            lr.theirs_lines_included.fill(false);
+                            lr.touched = true;
+                        }
+                        section.resolution = Some(ConflictResolution::Ours);
+                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                    }
                 } else {
-                    // En mode Block/Line, résoudre seulement la section courante
+                    // En mode Block, résoudre seulement la section courante
                     if let Some(ref mut section) =
                         file.conflicts.get_mut(conflicts_state.section_selected)
                     {
@@ -2292,7 +2314,9 @@ impl EventHandler {
         use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            let is_file_mode = conflicts_state.resolution_mode == ConflictResolutionMode::File;
+            let mode = conflicts_state.resolution_mode;
+            let is_file_mode = mode == ConflictResolutionMode::File;
+            let is_line_mode = mode == ConflictResolutionMode::Line;
 
             if let Some(ref mut file) = conflicts_state
                 .all_files
@@ -2302,10 +2326,29 @@ impl EventHandler {
                     // En mode Fichier, résoudre toutes les sections d'un coup
                     for section in &mut file.conflicts {
                         section.resolution = Some(ConflictResolution::Theirs);
+                        // Mettre à jour aussi les line_level_resolution
+                        if let Some(ref mut lr) = section.line_level_resolution {
+                            lr.ours_lines_included.fill(false);
+                            lr.theirs_lines_included.fill(true);
+                            lr.touched = true;
+                        }
                     }
                     file.is_resolved = true;
+                } else if is_line_mode {
+                    // En mode Ligne, sélectionner toutes les lignes theirs et désélectionner ours
+                    if let Some(ref mut section) =
+                        file.conflicts.get_mut(conflicts_state.section_selected)
+                    {
+                        if let Some(ref mut lr) = section.line_level_resolution {
+                            lr.ours_lines_included.fill(false);
+                            lr.theirs_lines_included.fill(true);
+                            lr.touched = true;
+                        }
+                        section.resolution = Some(ConflictResolution::Theirs);
+                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                    }
                 } else {
-                    // En mode Block/Line, résoudre seulement la section courante
+                    // En mode Block, résoudre seulement la section courante
                     if let Some(ref mut section) =
                         file.conflicts.get_mut(conflicts_state.section_selected)
                     {
@@ -2322,7 +2365,9 @@ impl EventHandler {
         use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            let is_file_mode = conflicts_state.resolution_mode == ConflictResolutionMode::File;
+            let mode = conflicts_state.resolution_mode;
+            let is_file_mode = mode == ConflictResolutionMode::File;
+            let is_line_mode = mode == ConflictResolutionMode::Line;
 
             if let Some(ref mut file) = conflicts_state
                 .all_files
@@ -2332,10 +2377,29 @@ impl EventHandler {
                     // En mode Fichier, résoudre toutes les sections d'un coup
                     for section in &mut file.conflicts {
                         section.resolution = Some(ConflictResolution::Both);
+                        // Mettre à jour aussi les line_level_resolution
+                        if let Some(ref mut lr) = section.line_level_resolution {
+                            lr.ours_lines_included.fill(true);
+                            lr.theirs_lines_included.fill(true);
+                            lr.touched = true;
+                        }
                     }
                     file.is_resolved = true;
+                } else if is_line_mode {
+                    // En mode Ligne, sélectionner toutes les lignes des deux côtés
+                    if let Some(ref mut section) =
+                        file.conflicts.get_mut(conflicts_state.section_selected)
+                    {
+                        if let Some(ref mut lr) = section.line_level_resolution {
+                            lr.ours_lines_included.fill(true);
+                            lr.theirs_lines_included.fill(true);
+                            lr.touched = true;
+                        }
+                        section.resolution = Some(ConflictResolution::Both);
+                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                    }
                 } else {
-                    // En mode Block/Line, résoudre seulement la section courante
+                    // En mode Block, résoudre seulement la section courante
                     if let Some(ref mut section) =
                         file.conflicts.get_mut(conflicts_state.section_selected)
                     {
@@ -2707,6 +2771,52 @@ impl EventHandler {
             conflicts_state.line_selected = 0;
         }
         Ok(())
+    }
+
+    fn handle_conflict_toggle_line(&mut self) {
+        use crate::git::conflict::ConflictResolutionMode;
+        use crate::state::ConflictPanelFocus;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            // Vérifier qu'on est bien en mode Ligne
+            if conflicts_state.resolution_mode != ConflictResolutionMode::Line {
+                return;
+            }
+
+            let file_idx = conflicts_state.file_selected;
+            let section_idx = conflicts_state.section_selected;
+            let line_idx = conflicts_state.line_selected;
+            let panel_focus = conflicts_state.panel_focus;
+
+            if let Some(file) = conflicts_state.all_files.get_mut(file_idx) {
+                if let Some(section) = file.conflicts.get_mut(section_idx) {
+                    if let Some(ref mut lr) = section.line_level_resolution {
+                        match panel_focus {
+                            ConflictPanelFocus::OursPanel => {
+                                if line_idx < lr.ours_lines_included.len() {
+                                    lr.ours_lines_included[line_idx] = !lr.ours_lines_included[line_idx];
+                                    lr.touched = true;
+                                }
+                            }
+                            ConflictPanelFocus::TheirsPanel => {
+                                if line_idx < lr.theirs_lines_included.len() {
+                                    lr.theirs_lines_included[line_idx] = !lr.theirs_lines_included[line_idx];
+                                    lr.touched = true;
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        // Mettre à jour le statut de résolution de la section
+                        // Une section est considérée comme résolue si l'utilisateur a touché aux lignes
+                        // et qu'au moins une ligne est sélectionnée
+                        if lr.touched && lr.has_selection() {
+                            section.resolution = Some(crate::git::conflict::ConflictResolution::Both);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn handle_conflict_line_down(&mut self) {

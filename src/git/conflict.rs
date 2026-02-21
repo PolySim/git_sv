@@ -44,11 +44,40 @@ pub enum ConflictType {
     BothAdded,
 }
 
-/// Résolution par ligne dans une section.
+/// Résolution par ligne dans une section (ancienne structure, gardée pour compatibilité).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineResolution {
     pub line_index: usize,
     pub source: ConflictResolution,
+}
+
+/// Résolution au niveau ligne - permet de choisir individuellement quelles lignes inclure.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineLevelResolution {
+    /// true = cette ligne ours est dans le résultat
+    pub ours_lines_included: Vec<bool>,
+    /// true = cette ligne theirs est dans le résultat
+    pub theirs_lines_included: Vec<bool>,
+    /// Indique si l'utilisateur a modifié manuellement les sélections
+    pub touched: bool,
+}
+
+impl LineLevelResolution {
+    /// Crée une nouvelle résolution ligne par ligne avec toutes les lignes ours incluses par défaut.
+    pub fn new(ours_count: usize, theirs_count: usize) -> Self {
+        Self {
+            ours_lines_included: vec![true; ours_count],
+            theirs_lines_included: vec![false; theirs_count],
+            touched: false,
+        }
+    }
+
+    /// Vérifie si au moins une ligne est sélectionnée de chaque côté.
+    pub fn has_selection(&self) -> bool {
+        let has_ours = self.ours_lines_included.iter().any(|&b| b);
+        let has_theirs = self.theirs_lines_included.iter().any(|&b| b);
+        has_ours || has_theirs
+    }
 }
 
 /// Résolution possible pour une section de conflit.
@@ -68,6 +97,8 @@ pub struct ConflictSection {
     pub context_after: Vec<String>,
     pub resolution: Option<ConflictResolution>,
     pub line_resolutions: Vec<LineResolution>,
+    /// Résolution au niveau ligne (mode Ligne)
+    pub line_level_resolution: Option<LineLevelResolution>,
 }
 
 /// Un fichier en conflit.
@@ -123,6 +154,9 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
                     // Fin de la section de conflit
                     let context_after = collect_context_after(&mut lines, 3);
 
+                    // Initialiser la résolution ligne par ligne avec ours inclus par défaut
+                    let line_resolution = LineLevelResolution::new(ours.len(), theirs.len());
+
                     sections.push(ConflictSection {
                         context_before: context_before.clone(),
                         ours,
@@ -130,6 +164,7 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
                         context_after,
                         resolution: None,
                         line_resolutions: Vec::new(),
+                        line_level_resolution: Some(line_resolution),
                     });
 
                     context_before = Vec::new();
@@ -256,10 +291,11 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
                 vec![ConflictSection {
                     context_before: vec![],
                     ours: vec![], // Supprimé
-                    theirs: theirs_content,
+                    theirs: theirs_content.clone(),
                     context_after: vec![],
                     resolution: None,
                     line_resolutions: vec![],
+                    line_level_resolution: Some(LineLevelResolution::new(0, theirs_content.len())),
                 }]
             }
             ConflictType::DeletedByThem => {
@@ -267,11 +303,12 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
                 let ours_content = read_file_lines(&path).unwrap_or_default();
                 vec![ConflictSection {
                     context_before: vec![],
-                    ours: ours_content,
+                    ours: ours_content.clone(),
                     theirs: vec![], // Supprimé
                     context_after: vec![],
                     resolution: None,
                     line_resolutions: vec![],
+                    line_level_resolution: Some(LineLevelResolution::new(ours_content.len(), 0)),
                 }]
             }
         };
@@ -814,10 +851,11 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                             vec![ConflictSection {
                                 context_before: vec![],
                                 ours: vec![],
-                                theirs: theirs_content,
+                                theirs: theirs_content.clone(),
                                 context_after: vec![],
                                 resolution: None,
                                 line_resolutions: vec![],
+                                line_level_resolution: Some(LineLevelResolution::new(0, theirs_content.len())),
                             }]
                         }
                         ConflictType::DeletedByThem => {
@@ -825,11 +863,12 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                             let ours_content = read_file_lines(path).unwrap_or_default();
                             vec![ConflictSection {
                                 context_before: vec![],
-                                ours: ours_content,
+                                ours: ours_content.clone(),
                                 theirs: vec![],
                                 context_after: vec![],
                                 resolution: None,
                                 line_resolutions: vec![],
+                                line_level_resolution: Some(LineLevelResolution::new(ours_content.len(), 0)),
                             }]
                         }
                     };
@@ -882,10 +921,11 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                     vec![ConflictSection {
                         context_before: vec![],
                         ours: vec![],
-                        theirs: theirs_content,
+                        theirs: theirs_content.clone(),
                         context_after: vec![],
                         resolution: None,
                         line_resolutions: vec![],
+                        line_level_resolution: Some(LineLevelResolution::new(0, theirs_content.len())),
                     }]
                 }
                 _ => vec![],
@@ -1023,64 +1063,33 @@ pub fn generate_resolved_content_with_source(
                 }
             }
             ConflictResolutionMode::Line => {
-                // Résolution ligne par ligne
-                let ours_lines = &section.ours;
-                let theirs_lines = &section.theirs;
-                let max_lines = ours_lines.len().max(theirs_lines.len());
-
-                for i in 0..max_lines {
-                    let resolution = section
-                        .line_resolutions
-                        .iter()
-                        .find(|lr| lr.line_index == i)
-                        .map(|lr| &lr.source);
-
-                    match resolution {
-                        Some(ConflictResolution::Ours) => {
-                            if i < ours_lines.len() {
-                                result.push(ResolvedLine {
-                                    content: ours_lines[i].clone(),
-                                    source: LineSource::Ours,
-                                });
-                            }
+                // Résolution ligne par ligne avec line_level_resolution
+                if let Some(ref lr) = section.line_level_resolution {
+                    // Inclure les lignes ours marquées comme incluses
+                    for (i, line) in section.ours.iter().enumerate() {
+                        if lr.ours_lines_included.get(i) == Some(&true) {
+                            result.push(ResolvedLine {
+                                content: line.clone(),
+                                source: LineSource::Ours,
+                            });
                         }
-                        Some(ConflictResolution::Theirs) => {
-                            if i < theirs_lines.len() {
-                                result.push(ResolvedLine {
-                                    content: theirs_lines[i].clone(),
-                                    source: LineSource::Theirs,
-                                });
-                            }
+                    }
+                    // Puis les lignes theirs marquées comme incluses
+                    for (i, line) in section.theirs.iter().enumerate() {
+                        if lr.theirs_lines_included.get(i) == Some(&true) {
+                            result.push(ResolvedLine {
+                                content: line.clone(),
+                                source: LineSource::Theirs,
+                            });
                         }
-                        Some(ConflictResolution::Both) => {
-                            if i < ours_lines.len() {
-                                result.push(ResolvedLine {
-                                    content: ours_lines[i].clone(),
-                                    source: LineSource::Ours,
-                                });
-                            }
-                            if i < theirs_lines.len() {
-                                result.push(ResolvedLine {
-                                    content: theirs_lines[i].clone(),
-                                    source: LineSource::Theirs,
-                                });
-                            }
-                        }
-                        None => {
-                            // Pas résolu, garder les deux avec leur source
-                            if i < ours_lines.len() {
-                                result.push(ResolvedLine {
-                                    content: ours_lines[i].clone(),
-                                    source: LineSource::Ours,
-                                });
-                            }
-                            if i < theirs_lines.len() {
-                                result.push(ResolvedLine {
-                                    content: theirs_lines[i].clone(),
-                                    source: LineSource::Theirs,
-                                });
-                            }
-                        }
+                    }
+                } else {
+                    // Fallback : garder toutes les lignes ours par défaut
+                    for line in &section.ours {
+                        result.push(ResolvedLine {
+                            content: line.clone(),
+                            source: LineSource::Ours,
+                        });
                     }
                 }
             }

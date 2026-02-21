@@ -483,8 +483,20 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('B') => Some(AppAction::ConflictSetModeBlock),
         KeyCode::Char('L') => Some(AppAction::ConflictSetModeLine),
 
-        // Validation
-        KeyCode::Enter => Some(AppAction::ConflictResolveFile),
+        // Validation / Toggle ligne selon le mode
+        KeyCode::Enter => {
+            // En mode Ligne avec focus sur Ours ou Theirs, toggle la ligne
+            if conflicts_state.as_ref().map_or(false, |cs| {
+                cs.resolution_mode == ConflictResolutionMode::Line
+            }) && matches!(
+                panel_focus,
+                Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel)
+            ) {
+                Some(AppAction::ConflictToggleLine)
+            } else {
+                Some(AppAction::ConflictResolveFile)
+            }
+        }
         KeyCode::Char('V') => Some(AppAction::ConflictValidateMerge),
         KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::ConflictAbort),
 

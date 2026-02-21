@@ -171,6 +171,8 @@ pub enum AppAction {
     ConflictSetModeBlock,
     /// Définir le mode de résolution à Ligne.
     ConflictSetModeLine,
+    /// En mode ligne : toggle l'inclusion de la ligne sélectionnée.
+    ConflictToggleLine,
     /// En mode ligne : sélectionner la ligne suivante.
     ConflictLineDown,
     /// En mode ligne : sélectionner la ligne précédente.

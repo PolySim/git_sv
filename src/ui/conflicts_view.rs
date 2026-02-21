@@ -188,31 +188,38 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
     let is_focused = state.panel_focus == ConflictPanelFocus::OursPanel;
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
+    let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
     let title_style = if is_focused {
         Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
 
-    // En mode Fichier, ajouter une indication dans le titre
+    // En mode Fichier ou Ligne, ajouter une indication dans le titre
     let title_text = if is_file_mode {
         format!(" {} [Fichier entier] ", state.ours_branch_name)
+    } else if is_line_mode {
+        format!(" {} [Mode Ligne] ", state.ours_branch_name)
     } else {
         format!(" {} ", state.ours_branch_name)
+    };
+
+    let border_color = if is_focused {
+        if is_file_mode {
+            Color::Green
+        } else if is_line_mode {
+            Color::Cyan // Cyan pour le mode Ligne
+        } else {
+            Color::Yellow
+        }
+    } else {
+        Color::Reset
     };
 
     let block = Block::default()
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if is_focused {
-            if is_file_mode {
-                Color::Green // Bordure verte en mode Fichier pour indiquer la sélection globale
-            } else {
-                Color::Yellow
-            }
-        } else {
-            Color::Reset
-        }));
+        .border_style(Style::default().fg(border_color));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
@@ -273,23 +280,53 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         }
 
         // Contenu ours avec highlight si sélectionné
-        let ours_style = if is_selected
-            && matches!(
-                section.resolution,
-                Some(ConflictResolution::Ours) | Some(ConflictResolution::Both)
-            ) {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Green)
-        };
+        // En mode Ligne, afficher les indicateurs [x] ou [ ]
+        if is_line_mode && is_selected {
+            for (line_idx, line) in section.ours.iter().enumerate() {
+                let is_current_line = line_idx == state.line_selected && is_focused;
+                let is_included = section
+                    .line_level_resolution
+                    .as_ref()
+                    .map(|lr| lr.ours_lines_included.get(line_idx).copied().unwrap_or(false))
+                    .unwrap_or(true);
 
-        for line in &section.ours {
-            lines.push(Line::from(vec![Span::styled(
-                format!("> {}", line),
-                ours_style,
-            )]));
+                let indicator = if is_included { "[x]" } else { "[ ]" };
+                let style = if is_current_line {
+                    Style::default()
+                        .fg(if is_included { Color::Green } else { Color::DarkGray })
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD)
+                } else if is_included {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                lines.push(Line::from(vec![Span::styled(
+                    format!("{} {}", indicator, line),
+                    style,
+                )]));
+            }
+        } else {
+            // Mode Block ou File - affichage standard
+            let ours_style = if is_selected
+                && matches!(
+                    section.resolution,
+                    Some(ConflictResolution::Ours) | Some(ConflictResolution::Both)
+                ) {
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Green)
+            };
+
+            for line in &section.ours {
+                lines.push(Line::from(vec![Span::styled(
+                    format!("> {}", line),
+                    ours_style,
+                )]));
+            }
         }
 
         // Lignes de contexte après
@@ -315,31 +352,38 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
     let is_focused = state.panel_focus == ConflictPanelFocus::TheirsPanel;
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
+    let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
     let title_style = if is_focused {
         Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
 
-    // En mode Fichier, ajouter une indication dans le titre
+    // En mode Fichier ou Ligne, ajouter une indication dans le titre
     let title_text = if is_file_mode {
         format!(" {} [Fichier entier] ", state.theirs_branch_name)
+    } else if is_line_mode {
+        format!(" {} [Mode Ligne] ", state.theirs_branch_name)
     } else {
         format!(" {} ", state.theirs_branch_name)
+    };
+
+    let border_color = if is_focused {
+        if is_file_mode {
+            Color::Green
+        } else if is_line_mode {
+            Color::Cyan // Cyan pour le mode Ligne
+        } else {
+            Color::Yellow
+        }
+    } else {
+        Color::Reset
     };
 
     let block = Block::default()
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if is_focused {
-            if is_file_mode {
-                Color::Green // Bordure verte en mode Fichier
-            } else {
-                Color::Yellow
-            }
-        } else {
-            Color::Reset
-        }));
+        .border_style(Style::default().fg(border_color));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
@@ -400,23 +444,53 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         }
 
         // Contenu theirs avec highlight si sélectionné
-        let theirs_style = if is_selected
-            && matches!(
-                section.resolution,
-                Some(ConflictResolution::Theirs) | Some(ConflictResolution::Both)
-            ) {
-            Style::default()
-                .fg(Color::Blue)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Blue)
-        };
+        // En mode Ligne, afficher les indicateurs [x] ou [ ]
+        if is_line_mode && is_selected {
+            for (line_idx, line) in section.theirs.iter().enumerate() {
+                let is_current_line = line_idx == state.line_selected && is_focused;
+                let is_included = section
+                    .line_level_resolution
+                    .as_ref()
+                    .map(|lr| lr.theirs_lines_included.get(line_idx).copied().unwrap_or(false))
+                    .unwrap_or(false);
 
-        for line in &section.theirs {
-            lines.push(Line::from(vec![Span::styled(
-                format!("> {}", line),
-                theirs_style,
-            )]));
+                let indicator = if is_included { "[x]" } else { "[ ]" };
+                let style = if is_current_line {
+                    Style::default()
+                        .fg(if is_included { Color::Blue } else { Color::DarkGray })
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD)
+                } else if is_included {
+                    Style::default().fg(Color::Blue)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                lines.push(Line::from(vec![Span::styled(
+                    format!("{} {}", indicator, line),
+                    style,
+                )]));
+            }
+        } else {
+            // Mode Block ou File - affichage standard
+            let theirs_style = if is_selected
+                && matches!(
+                    section.resolution,
+                    Some(ConflictResolution::Theirs) | Some(ConflictResolution::Both)
+                ) {
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Blue)
+            };
+
+            for line in &section.theirs {
+                lines.push(Line::from(vec![Span::styled(
+                    format!("> {}", line),
+                    theirs_style,
+                )]));
+            }
         }
 
         // Lignes de contexte après
