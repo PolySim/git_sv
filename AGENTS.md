@@ -12,15 +12,18 @@
 # Build the project
 cargo build
 
-# Build for release
+# Build for release (optimized binary)
 cargo build --release
 
-# Run the application
+# Run the application (interactive TUI)
 cargo run
 
 # Run with arguments
 cargo run -- log -n 10
 cargo run -- --path /path/to/repo
+
+# Run in non-interactive mode (print commit log)
+cargo run -- log
 ```
 
 ---
@@ -31,13 +34,13 @@ cargo run -- --path /path/to/repo
 # Run all tests
 cargo test
 
-# Run a specific test
+# Run a specific test by name
 cargo test test_name
 
 # Run tests in a specific module
 cargo test module_name::
 
-# Run with output visible
+# Run with output visible (for debugging)
 cargo test -- --nocapture
 
 # Run tests matching a pattern
@@ -81,6 +84,7 @@ use std::io::{self, Stdout};
 // External crates
 use ratatui::{backend::CrosstermBackend, Terminal};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 
 // Internal modules
 use crate::error::Result;
@@ -95,21 +99,29 @@ use crate::git::GitRepo;
 - **Error types**: PascalCase ending with `Error` (`GitSvError`)
 
 ### Types & Error Handling
-- Use `anyhow::Result` for application-level errors
+- Use `anyhow::Result` for application-level errors (main.rs)
 - Use `thiserror` for custom error enums
 - Propagate errors with `?` operator
-- Avoid unwrap/expect in production code
+- Define custom errors with `#[derive(Debug, Error)]` and `#[error(...)]`
 
 ```rust
-// Custom errors
+// Custom errors (defined in main.rs)
 #[derive(Debug, Error)]
 pub enum GitSvError {
-    #[error("Git error: {0}")]
+    #[error("Erreur git : {0}")]
     Git(#[from] git2::Error),
-    #[error("IO error: {0}")]
+
+    #[error("Erreur I/O : {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Erreur terminal : {0}")]
+    Terminal(String),
+
+    #[error("Erreur clipboard : {0}")]
+    Clipboard(String),
 }
 
+/// Alias pratique pour Result avec GitSvError.
 pub type Result<T> = std::result::Result<T, GitSvError>;
 ```
 
@@ -164,9 +176,11 @@ match action {
 ### Module Organization
 ```
 src/
-├── main.rs          # Entry point, CLI parsing
+├── main.rs          # Entry point, CLI parsing, error types
 ├── app.rs           # App state and event loop
-├── error.rs         # Error types
+├── event.rs         # Event handling
+├── state.rs         # Application state
+├── terminal.rs      # Terminal setup/teardown
 ├── git/             # Git operations
 │   ├── mod.rs       # Re-exports
 │   ├── repo.rs      # Repository wrapper
@@ -188,6 +202,30 @@ Key crates (check Cargo.toml for versions):
 - `anyhow` - Error handling
 - `thiserror` - Custom errors
 - `chrono` - Date formatting
+
+---
+
+## CLI Structure
+
+The CLI uses `clap` with derive macros:
+
+```rust
+#[derive(Parser)]
+#[command(name = "git_sv")]
+#[command(about = "Visualisez le graphe git")]
+struct Cli {
+    #[arg(short, long, default_value = ".")]
+    path: String,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Log { #[arg(short = 'n', long, default_value = "20")] max_count: usize },
+}
+```
 
 ---
 
