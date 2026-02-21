@@ -421,13 +421,15 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Tab => Some(AppAction::ConflictSwitchPanelForward),
         KeyCode::BackTab => Some(AppAction::ConflictSwitchPanelReverse),
 
-        // Navigation flèches/j/k : dépend du panneau actif
+        // Navigation flèches/j/k : dépend du panneau actif et du mode de résolution
         KeyCode::Char('j') | KeyCode::Down => match panel_focus {
             Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictNextFile),
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
                 match resolution_mode {
+                    // En mode Fichier, naviguer entre les fichiers (pas entre sections)
+                    ConflictResolutionMode::File => Some(AppAction::ConflictNextFile),
                     ConflictResolutionMode::Line => Some(AppAction::ConflictLineDown),
-                    _ => Some(AppAction::ConflictNextSection),
+                    ConflictResolutionMode::Block => Some(AppAction::ConflictNextSection),
                 }
             }
             Some(ConflictPanelFocus::ResultPanel) => Some(AppAction::ConflictResultScrollDown),
@@ -437,8 +439,10 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictPrevFile),
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
                 match resolution_mode {
+                    // En mode Fichier, naviguer entre les fichiers (pas entre sections)
+                    ConflictResolutionMode::File => Some(AppAction::ConflictPrevFile),
                     ConflictResolutionMode::Line => Some(AppAction::ConflictLineUp),
-                    _ => Some(AppAction::ConflictPrevSection),
+                    ConflictResolutionMode::Block => Some(AppAction::ConflictPrevSection),
                 }
             }
             Some(ConflictPanelFocus::ResultPanel) => Some(AppAction::ConflictResultScrollUp),

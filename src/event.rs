@@ -2259,18 +2259,29 @@ impl EventHandler {
     }
 
     fn handle_conflict_choose_ours(&mut self) -> Result<()> {
-        use crate::git::conflict::ConflictResolution;
+        use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            let is_file_mode = conflicts_state.resolution_mode == ConflictResolutionMode::File;
+
             if let Some(ref mut file) = conflicts_state
                 .all_files
                 .get_mut(conflicts_state.file_selected)
             {
-                if let Some(ref mut section) =
-                    file.conflicts.get_mut(conflicts_state.section_selected)
-                {
-                    section.resolution = Some(ConflictResolution::Ours);
-                    file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                if is_file_mode {
+                    // En mode Fichier, résoudre toutes les sections d'un coup
+                    for section in &mut file.conflicts {
+                        section.resolution = Some(ConflictResolution::Ours);
+                    }
+                    file.is_resolved = true;
+                } else {
+                    // En mode Block/Line, résoudre seulement la section courante
+                    if let Some(ref mut section) =
+                        file.conflicts.get_mut(conflicts_state.section_selected)
+                    {
+                        section.resolution = Some(ConflictResolution::Ours);
+                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                    }
                 }
             }
         }
@@ -2278,18 +2289,29 @@ impl EventHandler {
     }
 
     fn handle_conflict_choose_theirs(&mut self) -> Result<()> {
-        use crate::git::conflict::ConflictResolution;
+        use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            let is_file_mode = conflicts_state.resolution_mode == ConflictResolutionMode::File;
+
             if let Some(ref mut file) = conflicts_state
                 .all_files
                 .get_mut(conflicts_state.file_selected)
             {
-                if let Some(ref mut section) =
-                    file.conflicts.get_mut(conflicts_state.section_selected)
-                {
-                    section.resolution = Some(ConflictResolution::Theirs);
-                    file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                if is_file_mode {
+                    // En mode Fichier, résoudre toutes les sections d'un coup
+                    for section in &mut file.conflicts {
+                        section.resolution = Some(ConflictResolution::Theirs);
+                    }
+                    file.is_resolved = true;
+                } else {
+                    // En mode Block/Line, résoudre seulement la section courante
+                    if let Some(ref mut section) =
+                        file.conflicts.get_mut(conflicts_state.section_selected)
+                    {
+                        section.resolution = Some(ConflictResolution::Theirs);
+                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                    }
                 }
             }
         }
@@ -2297,18 +2319,29 @@ impl EventHandler {
     }
 
     fn handle_conflict_choose_both(&mut self) -> Result<()> {
-        use crate::git::conflict::ConflictResolution;
+        use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            let is_file_mode = conflicts_state.resolution_mode == ConflictResolutionMode::File;
+
             if let Some(ref mut file) = conflicts_state
                 .all_files
                 .get_mut(conflicts_state.file_selected)
             {
-                if let Some(ref mut section) =
-                    file.conflicts.get_mut(conflicts_state.section_selected)
-                {
-                    section.resolution = Some(ConflictResolution::Both);
-                    file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                if is_file_mode {
+                    // En mode Fichier, résoudre toutes les sections d'un coup
+                    for section in &mut file.conflicts {
+                        section.resolution = Some(ConflictResolution::Both);
+                    }
+                    file.is_resolved = true;
+                } else {
+                    // En mode Block/Line, résoudre seulement la section courante
+                    if let Some(ref mut section) =
+                        file.conflicts.get_mut(conflicts_state.section_selected)
+                    {
+                        section.resolution = Some(ConflictResolution::Both);
+                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
+                    }
                 }
             }
         }

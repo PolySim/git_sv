@@ -184,21 +184,32 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
 /// Rend le panneau Ours.
 fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    use crate::git::conflict::ConflictResolutionMode;
+
     let is_focused = state.panel_focus == ConflictPanelFocus::OursPanel;
+    let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let title_style = if is_focused {
         Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
 
+    // En mode Fichier, ajouter une indication dans le titre
+    let title_text = if is_file_mode {
+        format!(" {} [Fichier entier] ", state.ours_branch_name)
+    } else {
+        format!(" {} ", state.ours_branch_name)
+    };
+
     let block = Block::default()
-        .title(Span::styled(
-            format!(" {} ", state.ours_branch_name),
-            title_style,
-        ))
+        .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if is_focused {
-            Color::Yellow
+            if is_file_mode {
+                Color::Green // Bordure verte en mode Fichier pour indiquer la sélection globale
+            } else {
+                Color::Yellow
+            }
         } else {
             Color::Reset
         }));
@@ -223,7 +234,12 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
 
     for (idx, section) in current_file.conflicts.iter().enumerate() {
-        let is_selected = idx == state.section_selected;
+        // En mode Fichier, toutes les sections sont considérées comme "sélectionnées"
+        let is_selected = if is_file_mode {
+            true
+        } else {
+            idx == state.section_selected
+        };
 
         // Séparateur entre sections
         if idx > 0 {
@@ -233,18 +249,20 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             )]));
         }
 
-        // Titre de la section
-        let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
-        lines.push(Line::from(vec![Span::styled(
-            section_title,
-            Style::default()
-                .fg(if is_selected {
-                    Color::Yellow
-                } else {
-                    Color::Gray
-                })
-                .add_modifier(Modifier::BOLD),
-        )]));
+        // Titre de la section (en mode Fichier, pas de numérotation de section)
+        if !is_file_mode {
+            let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
+            lines.push(Line::from(vec![Span::styled(
+                section_title,
+                Style::default()
+                    .fg(if is_selected {
+                        Color::Yellow
+                    } else {
+                        Color::Gray
+                    })
+                    .add_modifier(Modifier::BOLD),
+            )]));
+        }
 
         // Lignes de contexte avant
         for line in &section.context_before {
@@ -293,21 +311,32 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
 /// Rend le panneau Theirs.
 fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    use crate::git::conflict::ConflictResolutionMode;
+
     let is_focused = state.panel_focus == ConflictPanelFocus::TheirsPanel;
+    let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let title_style = if is_focused {
         Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
 
+    // En mode Fichier, ajouter une indication dans le titre
+    let title_text = if is_file_mode {
+        format!(" {} [Fichier entier] ", state.theirs_branch_name)
+    } else {
+        format!(" {} ", state.theirs_branch_name)
+    };
+
     let block = Block::default()
-        .title(Span::styled(
-            format!(" {} ", state.theirs_branch_name),
-            title_style,
-        ))
+        .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if is_focused {
-            Color::Yellow
+            if is_file_mode {
+                Color::Green // Bordure verte en mode Fichier
+            } else {
+                Color::Yellow
+            }
         } else {
             Color::Reset
         }));
@@ -332,7 +361,12 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
 
     for (idx, section) in current_file.conflicts.iter().enumerate() {
-        let is_selected = idx == state.section_selected;
+        // En mode Fichier, toutes les sections sont considérées comme "sélectionnées"
+        let is_selected = if is_file_mode {
+            true
+        } else {
+            idx == state.section_selected
+        };
 
         // Séparateur entre sections
         if idx > 0 {
@@ -342,18 +376,20 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             )]));
         }
 
-        // Titre de la section
-        let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
-        lines.push(Line::from(vec![Span::styled(
-            section_title,
-            Style::default()
-                .fg(if is_selected {
-                    Color::Yellow
-                } else {
-                    Color::Gray
-                })
-                .add_modifier(Modifier::BOLD),
-        )]));
+        // Titre de la section (en mode Fichier, pas de numérotation de section)
+        if !is_file_mode {
+            let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
+            lines.push(Line::from(vec![Span::styled(
+                section_title,
+                Style::default()
+                    .fg(if is_selected {
+                        Color::Yellow
+                    } else {
+                        Color::Gray
+                    })
+                    .add_modifier(Modifier::BOLD),
+            )]));
+        }
 
         // Lignes de contexte avant
         for line in &section.context_before {
