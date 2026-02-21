@@ -3,6 +3,26 @@ use std::io::Write;
 
 use crate::error::{GitSvError, Result};
 
+/// Source d'une ligne dans le résultat résolu.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LineSource {
+    /// Ligne de contexte (inchangée).
+    Context,
+    /// Ligne provenant de "ours".
+    Ours,
+    /// Ligne provenant de "theirs".
+    Theirs,
+    /// Marqueur de conflit non résolu.
+    ConflictMarker,
+}
+
+/// Ligne résolue avec sa provenance.
+#[derive(Debug, Clone)]
+pub struct ResolvedLine {
+    pub content: String,
+    pub source: LineSource,
+}
+
 /// Mode de résolution des conflits.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConflictResolutionMode {
@@ -848,50 +868,90 @@ pub fn count_unresolved_merge_files(files: &[MergeFile]) -> usize {
 
 /// Génère le contenu résolu d'un fichier en fonction des résolutions.
 pub fn generate_resolved_content(file: &MergeFile, mode: ConflictResolutionMode) -> Vec<String> {
-    let mut result: Vec<String> = Vec::new();
+    // Wrapper autour de la nouvelle fonction
+    generate_resolved_content_with_source(file, mode)
+        .into_iter()
+        .map(|line| line.content)
+        .collect()
+}
+
+/// Génère le contenu résolu avec provenance de chaque ligne.
+pub fn generate_resolved_content_with_source(
+    file: &MergeFile,
+    mode: ConflictResolutionMode,
+) -> Vec<ResolvedLine> {
+    let mut result: Vec<ResolvedLine> = Vec::new();
 
     for section in &file.conflicts {
-        // Ajouter le contexte avant
-        result.extend(section.context_before.clone());
+        // Contexte avant → LineSource::Context
+        for line in &section.context_before {
+            result.push(ResolvedLine {
+                content: line.clone(),
+                source: LineSource::Context,
+            });
+        }
 
         match mode {
-            ConflictResolutionMode::File => {
-                // Résolution au niveau fichier (appliquer à toutes les sections)
+            ConflictResolutionMode::File | ConflictResolutionMode::Block => {
                 if let Some(resolution) = &section.resolution {
                     match resolution {
-                        ConflictResolution::Ours => result.extend(section.ours.clone()),
-                        ConflictResolution::Theirs => result.extend(section.theirs.clone()),
+                        ConflictResolution::Ours => {
+                            for line in &section.ours {
+                                result.push(ResolvedLine {
+                                    content: line.clone(),
+                                    source: LineSource::Ours,
+                                });
+                            }
+                        }
+                        ConflictResolution::Theirs => {
+                            for line in &section.theirs {
+                                result.push(ResolvedLine {
+                                    content: line.clone(),
+                                    source: LineSource::Theirs,
+                                });
+                            }
+                        }
                         ConflictResolution::Both => {
-                            result.extend(section.ours.clone());
-                            result.extend(section.theirs.clone());
+                            for line in &section.ours {
+                                result.push(ResolvedLine {
+                                    content: line.clone(),
+                                    source: LineSource::Ours,
+                                });
+                            }
+                            for line in &section.theirs {
+                                result.push(ResolvedLine {
+                                    content: line.clone(),
+                                    source: LineSource::Theirs,
+                                });
+                            }
                         }
                     }
                 } else {
-                    // Pas résolu, garder le conflit
-                    result.push(format!("<<<<<<< HEAD"));
-                    result.extend(section.ours.iter().cloned());
-                    result.push("=======".to_string());
-                    result.extend(section.theirs.iter().cloned());
-                    result.push(format!(">>>>>>>"));
-                }
-            }
-            ConflictResolutionMode::Block => {
-                if let Some(resolution) = &section.resolution {
-                    match resolution {
-                        ConflictResolution::Ours => result.extend(section.ours.clone()),
-                        ConflictResolution::Theirs => result.extend(section.theirs.clone()),
-                        ConflictResolution::Both => {
-                            result.extend(section.ours.clone());
-                            result.extend(section.theirs.clone());
-                        }
+                    // Non résolu → marqueurs de conflit
+                    result.push(ResolvedLine {
+                        content: "<<<<<<< HEAD".into(),
+                        source: LineSource::ConflictMarker,
+                    });
+                    for line in &section.ours {
+                        result.push(ResolvedLine {
+                            content: line.clone(),
+                            source: LineSource::Ours,
+                        });
                     }
-                } else {
-                    // Pas résolu, garder le conflit
-                    result.push("<<<<<<< HEAD".to_string());
-                    result.extend(section.ours.iter().cloned());
-                    result.push("=======".to_string());
-                    result.extend(section.theirs.iter().cloned());
-                    result.push(">>>>>>>".to_string());
+                    result.push(ResolvedLine {
+                        content: "=======".into(),
+                        source: LineSource::ConflictMarker,
+                    });
+                    for line in &section.theirs {
+                        result.push(ResolvedLine {
+                            content: line.clone(),
+                            source: LineSource::Theirs,
+                        });
+                    }
+                    result.push(ResolvedLine {
+                        content: ">>>>>>>".into(),
+                        source: LineSource::ConflictMarker,
+                    });
                 }
             }
             ConflictResolutionMode::Line => {
@@ -910,29 +970,47 @@ pub fn generate_resolved_content(file: &MergeFile, mode: ConflictResolutionMode)
                     match resolution {
                         Some(ConflictResolution::Ours) => {
                             if i < ours_lines.len() {
-                                result.push(ours_lines[i].clone());
+                                result.push(ResolvedLine {
+                                    content: ours_lines[i].clone(),
+                                    source: LineSource::Ours,
+                                });
                             }
                         }
                         Some(ConflictResolution::Theirs) => {
                             if i < theirs_lines.len() {
-                                result.push(theirs_lines[i].clone());
+                                result.push(ResolvedLine {
+                                    content: theirs_lines[i].clone(),
+                                    source: LineSource::Theirs,
+                                });
                             }
                         }
                         Some(ConflictResolution::Both) => {
                             if i < ours_lines.len() {
-                                result.push(ours_lines[i].clone());
+                                result.push(ResolvedLine {
+                                    content: ours_lines[i].clone(),
+                                    source: LineSource::Ours,
+                                });
                             }
                             if i < theirs_lines.len() {
-                                result.push(theirs_lines[i].clone());
+                                result.push(ResolvedLine {
+                                    content: theirs_lines[i].clone(),
+                                    source: LineSource::Theirs,
+                                });
                             }
                         }
                         None => {
-                            // Pas résolu, garder les deux
+                            // Pas résolu, garder les deux avec leur source
                             if i < ours_lines.len() {
-                                result.push(ours_lines[i].clone());
+                                result.push(ResolvedLine {
+                                    content: ours_lines[i].clone(),
+                                    source: LineSource::Ours,
+                                });
                             }
                             if i < theirs_lines.len() {
-                                result.push(theirs_lines[i].clone());
+                                result.push(ResolvedLine {
+                                    content: theirs_lines[i].clone(),
+                                    source: LineSource::Theirs,
+                                });
                             }
                         }
                     }
@@ -940,8 +1018,13 @@ pub fn generate_resolved_content(file: &MergeFile, mode: ConflictResolutionMode)
             }
         }
 
-        // Ajouter le contexte après
-        result.extend(section.context_after.clone());
+        // Contexte après → LineSource::Context
+        for line in &section.context_after {
+            result.push(ResolvedLine {
+                content: line.clone(),
+                source: LineSource::Context,
+            });
+        }
     }
 
     result

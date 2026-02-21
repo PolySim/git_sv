@@ -393,12 +393,28 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
 
-    // Récupérer le panneau actif et le mode de résolution
-    let panel_focus = state.conflicts_state.as_ref().map(|s| s.panel_focus);
-    let resolution_mode = state
-        .conflicts_state
-        .as_ref()
-        .map_or(ConflictResolutionMode::Block, |s| s.resolution_mode);
+    // Récupérer le panneau actif, le mode de résolution et l'état d'édition
+    let conflicts_state = state.conflicts_state.as_ref();
+    let panel_focus = conflicts_state.map(|s| s.panel_focus);
+    let is_editing = conflicts_state.map_or(false, |s| s.is_editing);
+    let resolution_mode =
+        conflicts_state.map_or(ConflictResolutionMode::Block, |s| s.resolution_mode);
+
+    // Si en mode édition dans le panneau résultat, capturer toutes les touches comme du texte
+    if is_editing {
+        return match key.code {
+            KeyCode::Esc => Some(AppAction::ConflictStopEditing),
+            KeyCode::Char(c) => Some(AppAction::ConflictEditInsertChar(c)),
+            KeyCode::Backspace => Some(AppAction::ConflictEditBackspace),
+            KeyCode::Delete => Some(AppAction::ConflictEditDelete),
+            KeyCode::Enter => Some(AppAction::ConflictEditNewline),
+            KeyCode::Up => Some(AppAction::ConflictEditCursorUp),
+            KeyCode::Down => Some(AppAction::ConflictEditCursorDown),
+            KeyCode::Left => Some(AppAction::ConflictEditCursorLeft),
+            KeyCode::Right => Some(AppAction::ConflictEditCursorRight),
+            _ => None,
+        };
+    }
 
     match key.code {
         // Tab et Shift+Tab : basculer entre les panneaux
@@ -448,6 +464,15 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             }
             _ => None,
         },
+
+        // Mode édition (panneau résultat uniquement)
+        KeyCode::Char('i') | KeyCode::Char('e') => {
+            if panel_focus == Some(ConflictPanelFocus::ResultPanel) {
+                Some(AppAction::ConflictStartEditing)
+            } else {
+                None
+            }
+        }
 
         // Changement de mode de résolution
         KeyCode::Char('F') => Some(AppAction::ConflictSwitchMode),

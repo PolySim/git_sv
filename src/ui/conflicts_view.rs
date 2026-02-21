@@ -8,8 +8,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::conflict::{ConflictResolution, ConflictType};
-use crate::state::ConflictsState;
+use crate::git::conflict::{ConflictResolution, ConflictResolutionMode, ConflictType};
+use crate::state::{ConflictPanelFocus, ConflictsState};
 
 /// Rend la vue de résolution de conflits.
 pub fn render(
@@ -38,14 +38,25 @@ pub fn render(
     // Zone principale en deux panneaux
     let content_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
         .split(main_layout[1]);
 
     // Panneau gauche: liste des fichiers
     render_files_panel(frame, state, content_layout[0]);
 
-    // Panneau droit: résolution du conflit sélectionné
-    render_resolution_panel(frame, state, content_layout[1]);
+    // Panneau droit: trois sous-panneaux (Ours, Theirs, Résultat)
+    let resolution_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+        ])
+        .split(content_layout[1]);
+
+    render_ours_panel(frame, state, resolution_layout[0]);
+    render_theirs_panel(frame, state, resolution_layout[1]);
+    render_result_panel(frame, state, resolution_layout[2]);
 
     // Help bar
     let help_bar = build_help_bar();
@@ -90,7 +101,7 @@ fn build_status_bar<'a>(
 
 /// Construit la help bar.
 fn build_help_bar<'a>() -> Paragraph<'a> {
-    let help_text = "Tab:panneau  ↑/↓:naviguer  o/t/b:résoudre (panneaux ours/theirs)  F:mode  Enter:valider  V:finaliser  q:abort  ?:aide";
+    let help_text = "Tab:panneau  ↑/↓:naviguer  o/t/b:résoudre  i:éditer résultat  F:mode  Enter:valider  V:finaliser  q:abort  ?:aide";
 
     Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
@@ -151,12 +162,19 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     frame.render_widget(list, area);
 }
 
-/// Rend le panneau de résolution.
-fn render_resolution_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+/// Rend le panneau Ours.
+fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    let is_focused = state.panel_focus == ConflictPanelFocus::OursPanel;
+    let border_color = if is_focused {
+        Color::Yellow
+    } else {
+        Color::White
+    };
+
     let block = Block::default()
-        .title("Résolution du conflit")
+        .title("Ours (HEAD)")
         .borders(Borders::ALL)
-        .border_style(Style::default());
+        .border_style(Style::default().fg(border_color));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
@@ -167,104 +185,14 @@ fn render_resolution_panel(frame: &mut Frame, state: &ConflictsState, area: Rect
     };
 
     if current_file.conflicts.is_empty() {
-        let empty = Paragraph::new("Aucun conflit dans ce fichier")
+        let empty = Paragraph::new("Aucun conflit")
             .block(block)
             .style(Style::default().fg(Color::Green));
         frame.render_widget(empty, area);
         return;
     }
 
-    // Afficher un message spécial pour les fichiers supprimés
-    if let Some(conflict_type) = current_file.conflict_type {
-        match conflict_type {
-            ConflictType::DeletedByUs => {
-                let message = vec![
-                    Line::from(vec![Span::styled(
-                        "[Fichier supprimé dans notre branche]",
-                        Style::default()
-                            .fg(Color::Red)
-                            .add_modifier(Modifier::BOLD),
-                    )]),
-                    Line::from(""),
-                    Line::from(vec![Span::styled(
-                        "Le fichier a été supprimé dans HEAD (ours) mais modifié dans la branche mergée (theirs).",
-                        Style::default().fg(Color::Gray),
-                    )]),
-                    Line::from(""),
-                    Line::from(vec![Span::styled(
-                        "Appuyez sur 'o' pour garder la suppression",
-                        Style::default().fg(Color::Yellow),
-                    )]),
-                    Line::from(vec![Span::styled(
-                        "Appuyez sur 't' pour garder le fichier (version theirs)",
-                        Style::default().fg(Color::Yellow),
-                    )]),
-                ];
-                let paragraph = Paragraph::new(message)
-                    .block(block)
-                    .wrap(Wrap { trim: true });
-                frame.render_widget(paragraph, area);
-                return;
-            }
-            ConflictType::DeletedByThem => {
-                let message = vec![
-                    Line::from(vec![Span::styled(
-                        "[Fichier supprimé dans la branche mergée]",
-                        Style::default()
-                            .fg(Color::Red)
-                            .add_modifier(Modifier::BOLD),
-                    )]),
-                    Line::from(""),
-                    Line::from(vec![Span::styled(
-                        "Le fichier a été modifié dans HEAD (ours) mais supprimé dans la branche mergée (theirs).",
-                        Style::default().fg(Color::Gray),
-                    )]),
-                    Line::from(""),
-                    Line::from(vec![Span::styled(
-                        "Appuyez sur 'o' pour garder le fichier (version ours)",
-                        Style::default().fg(Color::Yellow),
-                    )]),
-                    Line::from(vec![Span::styled(
-                        "Appuyez sur 't' pour garder la suppression",
-                        Style::default().fg(Color::Yellow),
-                    )]),
-                ];
-                let paragraph = Paragraph::new(message)
-                    .block(block)
-                    .wrap(Wrap { trim: true });
-                frame.render_widget(paragraph, area);
-                return;
-            }
-            ConflictType::BothAdded => {
-                let message = vec![
-                    Line::from(vec![Span::styled(
-                        "[Fichier ajouté dans les deux branches]",
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    )]),
-                    Line::from(""),
-                    Line::from(vec![Span::styled(
-                        "Le fichier a été ajouté dans les deux branches avec des contenus différents.",
-                        Style::default().fg(Color::Gray),
-                    )]),
-                    Line::from(""),
-                    Line::from(vec![Span::styled(
-                        "Utilisez 'o', 't' ou 'b' pour choisir la version à garder.",
-                        Style::default().fg(Color::Yellow),
-                    )]),
-                ];
-                let paragraph = Paragraph::new(message)
-                    .block(block)
-                    .wrap(Wrap { trim: true });
-                frame.render_widget(paragraph, area);
-                return;
-            }
-            _ => {} // BothModified: affichage normal
-        }
-    }
-
-    // Construire le contenu avec toutes les sections
+    // Construire le contenu
     let mut lines: Vec<Line> = Vec::new();
 
     for (idx, section) in current_file.conflicts.iter().enumerate() {
@@ -279,7 +207,7 @@ fn render_resolution_panel(frame: &mut Frame, state: &ConflictsState, area: Rect
         }
 
         // Titre de la section
-        let section_title = format!("Conflit #{}/{}", idx + 1, current_file.conflicts.len());
+        let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
         lines.push(Line::from(vec![Span::styled(
             section_title,
             Style::default()
@@ -292,120 +220,217 @@ fn render_resolution_panel(frame: &mut Frame, state: &ConflictsState, area: Rect
         )]));
 
         // Lignes de contexte avant
-        if !section.context_before.is_empty() {
+        for line in &section.context_before {
             lines.push(Line::from(vec![Span::styled(
-                "...",
+                format!("  {}", line),
                 Style::default().fg(Color::DarkGray),
             )]));
-            for line in &section.context_before {
-                lines.push(Line::from(vec![Span::styled(
-                    format!("  {}", line),
-                    Style::default().fg(Color::DarkGray),
-                )]));
-            }
         }
 
-        // Affichage selon la résolution
-        match section.resolution {
-            Some(ConflictResolution::Ours) => {
-                lines.push(Line::from(vec![Span::styled(
-                    "◄─ Ours (sélectionné)",
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                )]));
-                for line in &section.ours {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("> {}", line),
-                        Style::default().fg(Color::Green),
-                    )]));
-                }
-            }
-            Some(ConflictResolution::Theirs) => {
-                lines.push(Line::from(vec![Span::styled(
-                    "─► Theirs (sélectionné)",
-                    Style::default()
-                        .fg(Color::Blue)
-                        .add_modifier(Modifier::BOLD),
-                )]));
-                for line in &section.theirs {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("> {}", line),
-                        Style::default().fg(Color::Blue),
-                    )]));
-                }
-            }
-            Some(ConflictResolution::Both) => {
-                lines.push(Line::from(vec![Span::styled(
-                    "◄─ Both ─► (sélectionné)",
-                    Style::default()
-                        .fg(Color::Magenta)
-                        .add_modifier(Modifier::BOLD),
-                )]));
-                lines.push(Line::from(vec![Span::styled(
-                    "Ours:",
-                    Style::default().fg(Color::Green),
-                )]));
-                for line in &section.ours {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("> {}", line),
-                        Style::default().fg(Color::Green),
-                    )]));
-                }
-                lines.push(Line::from(vec![Span::styled(
-                    "Theirs:",
-                    Style::default().fg(Color::Blue),
-                )]));
-                for line in &section.theirs {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("> {}", line),
-                        Style::default().fg(Color::Blue),
-                    )]));
-                }
-            }
-            None => {
-                // Affichage des deux versions (non résolu)
-                lines.push(Line::from(vec![Span::styled(
-                    "<<<<<<< Ours (HEAD)",
-                    Style::default().fg(Color::Green),
-                )]));
-                for line in &section.ours {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("  {}", line),
-                        Style::default().fg(Color::Green),
-                    )]));
-                }
-                lines.push(Line::from(vec![Span::styled(
-                    "═══════",
-                    Style::default().fg(Color::Yellow),
-                )]));
-                for line in &section.theirs {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("  {}", line),
-                        Style::default().fg(Color::Blue),
-                    )]));
-                }
-                lines.push(Line::from(vec![Span::styled(
-                    ">>>>>>> Theirs",
-                    Style::default().fg(Color::Blue),
-                )]));
-            }
+        // Contenu ours avec highlight si sélectionné
+        let ours_style = if is_selected
+            && matches!(
+                section.resolution,
+                Some(ConflictResolution::Ours) | Some(ConflictResolution::Both)
+            ) {
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Green)
+        };
+
+        for line in &section.ours {
+            lines.push(Line::from(vec![Span::styled(
+                format!("> {}", line),
+                ours_style,
+            )]));
         }
 
         // Lignes de contexte après
-        if !section.context_after.is_empty() {
-            for line in &section.context_after {
-                lines.push(Line::from(vec![Span::styled(
-                    format!("  {}", line),
-                    Style::default().fg(Color::DarkGray),
-                )]));
-            }
+        for line in &section.context_after {
             lines.push(Line::from(vec![Span::styled(
-                "...",
+                format!("  {}", line),
                 Style::default().fg(Color::DarkGray),
             )]));
         }
     }
+
+    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+
+    frame.render_widget(paragraph, area);
+}
+
+/// Rend le panneau Theirs.
+fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    let is_focused = state.panel_focus == ConflictPanelFocus::TheirsPanel;
+    let border_color = if is_focused {
+        Color::Yellow
+    } else {
+        Color::White
+    };
+
+    let block = Block::default()
+        .title("Theirs (branche)")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color));
+
+    let Some(current_file) = state.all_files.get(state.file_selected) else {
+        let empty = Paragraph::new("Sélectionnez un fichier")
+            .block(block)
+            .style(Style::default().fg(Color::Gray));
+        frame.render_widget(empty, area);
+        return;
+    };
+
+    if current_file.conflicts.is_empty() {
+        let empty = Paragraph::new("Aucun conflit")
+            .block(block)
+            .style(Style::default().fg(Color::Green));
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    // Construire le contenu
+    let mut lines: Vec<Line> = Vec::new();
+
+    for (idx, section) in current_file.conflicts.iter().enumerate() {
+        let is_selected = idx == state.section_selected;
+
+        // Séparateur entre sections
+        if idx > 0 {
+            lines.push(Line::from(vec![Span::styled(
+                "─".repeat(area.width as usize - 2),
+                Style::default().fg(Color::DarkGray),
+            )]));
+        }
+
+        // Titre de la section
+        let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
+        lines.push(Line::from(vec![Span::styled(
+            section_title,
+            Style::default()
+                .fg(if is_selected {
+                    Color::Yellow
+                } else {
+                    Color::Gray
+                })
+                .add_modifier(Modifier::BOLD),
+        )]));
+
+        // Lignes de contexte avant
+        for line in &section.context_before {
+            lines.push(Line::from(vec![Span::styled(
+                format!("  {}", line),
+                Style::default().fg(Color::DarkGray),
+            )]));
+        }
+
+        // Contenu theirs avec highlight si sélectionné
+        let theirs_style = if is_selected
+            && matches!(
+                section.resolution,
+                Some(ConflictResolution::Theirs) | Some(ConflictResolution::Both)
+            ) {
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Blue)
+        };
+
+        for line in &section.theirs {
+            lines.push(Line::from(vec![Span::styled(
+                format!("> {}", line),
+                theirs_style,
+            )]));
+        }
+
+        // Lignes de contexte après
+        for line in &section.context_after {
+            lines.push(Line::from(vec![Span::styled(
+                format!("  {}", line),
+                Style::default().fg(Color::DarkGray),
+            )]));
+        }
+    }
+
+    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+
+    frame.render_widget(paragraph, area);
+}
+
+/// Rend le panneau Résultat avec background coloré.
+fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    use crate::git::conflict::{generate_resolved_content_with_source, LineSource};
+
+    let is_focused = state.panel_focus == ConflictPanelFocus::ResultPanel;
+    let border_color = if state.is_editing {
+        Color::Magenta
+    } else if is_focused {
+        Color::Yellow
+    } else {
+        Color::White
+    };
+
+    let title = if state.is_editing {
+        "Résultat [ÉDITION]"
+    } else {
+        "Résultat"
+    };
+
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color));
+
+    let Some(current_file) = state.all_files.get(state.file_selected) else {
+        let empty = Paragraph::new("Sélectionnez un fichier")
+            .block(block)
+            .style(Style::default().fg(Color::Gray));
+        frame.render_widget(empty, area);
+        return;
+    };
+
+    // En mode édition, afficher le buffer éditable
+    let lines: Vec<Line> = if state.is_editing {
+        state
+            .edit_buffer
+            .iter()
+            .enumerate()
+            .map(|(idx, content)| {
+                let is_cursor_line = idx == state.edit_cursor_line;
+                let style = if is_cursor_line {
+                    Style::default()
+                        .fg(Color::White)
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::UNDERLINED)
+                } else {
+                    Style::default()
+                };
+                Line::from(vec![Span::styled(content.clone(), style)])
+            })
+            .collect()
+    } else {
+        // Mode normal: afficher le contenu résolu avec les couleurs
+        let resolved = generate_resolved_content_with_source(current_file, state.resolution_mode);
+
+        resolved
+            .into_iter()
+            .enumerate()
+            .map(|(_idx, rline)| {
+                let style = match rline.source {
+                    LineSource::Context => Style::default(),
+                    LineSource::Ours => Style::default().bg(Color::Indexed(22)), // Vert foncé pour compatibilité
+                    LineSource::Theirs => Style::default().bg(Color::Indexed(17)), // Bleu foncé pour compatibilité
+                    LineSource::ConflictMarker => Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                };
+                Line::from(vec![Span::styled(rline.content, style)])
+            })
+            .collect()
+    };
 
     let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
 
@@ -437,7 +462,7 @@ pub fn render_nav_indicator(has_conflicts: bool) -> Line<'static> {
 
 /// Rend l'overlay d'aide pour la vue conflits.
 pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
-    let popup_area = centered_rect(70, 70, area);
+    let popup_area = centered_rect(70, 80, area);
 
     frame.render_widget(Clear, popup_area);
 
@@ -465,6 +490,18 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from("  t           - Garder la version 'theirs' (branche mergée)"),
         Line::from("  b           - Garder les deux versions"),
         Line::from("  Enter       - Valider la résolution du fichier courant"),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Édition du résultat",
+            Style::default().fg(Color::Yellow),
+        )]),
+        Line::from("  i ou e      - Entrer en mode édition (panneau Résultat)"),
+        Line::from("  Esc         - Quitter le mode édition"),
+        Line::from("  ↑/↓/←/→     - Déplacer le curseur"),
+        Line::from("  Caractères  - Insérer du texte"),
+        Line::from("  Backspace   - Supprimer le caractère avant"),
+        Line::from("  Delete      - Supprimer le caractère sous le curseur"),
+        Line::from("  Enter       - Insérer une nouvelle ligne"),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Actions globales",

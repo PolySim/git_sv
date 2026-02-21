@@ -183,6 +183,23 @@ pub enum AppAction {
     ConflictValidateMerge,
     /// Copier le contenu du panneau actif dans le clipboard.
     CopyPanelContent,
+    /// Entrer en mode édition dans le panneau résultat.
+    ConflictStartEditing,
+    /// Quitter le mode édition (Esc).
+    ConflictStopEditing,
+    /// Insérer un caractère en mode édition.
+    ConflictEditInsertChar(char),
+    /// Supprimer le caractère avant le curseur.
+    ConflictEditBackspace,
+    /// Supprimer le caractère sous le curseur.
+    ConflictEditDelete,
+    /// Déplacer le curseur en mode édition.
+    ConflictEditCursorUp,
+    ConflictEditCursorDown,
+    ConflictEditCursorLeft,
+    ConflictEditCursorRight,
+    /// Insérer une nouvelle ligne.
+    ConflictEditNewline,
 }
 
 /// Mode d'affichage actif.
@@ -418,6 +435,14 @@ pub struct ConflictsState {
     pub panel_focus: ConflictPanelFocus,
     /// Description de l'opération en cours.
     pub operation_description: String,
+    /// Mode édition actif dans le panneau résultat.
+    pub is_editing: bool,
+    /// Buffer éditable (contenu du résultat, modifiable).
+    pub edit_buffer: Vec<String>,
+    /// Ligne du curseur dans le buffer d'édition.
+    pub edit_cursor_line: usize,
+    /// Colonne du curseur dans le buffer d'édition.
+    pub edit_cursor_col: usize,
 }
 
 impl ConflictsState {
@@ -449,6 +474,10 @@ impl ConflictsState {
             result_scroll: 0,
             panel_focus: ConflictPanelFocus::FileList,
             operation_description,
+            is_editing: false,
+            edit_buffer: Vec::new(),
+            edit_cursor_line: 0,
+            edit_cursor_col: 0,
         }
     }
 }
