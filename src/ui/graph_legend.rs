@@ -49,10 +49,7 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
             "●",
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::styled(
-            format!(" {}", name),
-            Style::default(),
-        ));
+        spans.push(Span::styled(format!(" {}", name), Style::default()));
 
         if i < branches.len() - 1 {
             spans.push(Span::raw("  "));

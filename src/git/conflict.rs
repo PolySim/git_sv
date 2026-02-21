@@ -11,6 +11,19 @@ pub enum ConflictResolutionMode {
     Line,
 }
 
+/// Type de conflit sur un fichier.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConflictType {
+    /// Conflit classique : modifié des deux côtés.
+    BothModified,
+    /// Supprimé dans ours, modifié dans theirs.
+    DeletedByUs,
+    /// Modifié dans ours, supprimé dans theirs.
+    DeletedByThem,
+    /// Ajouté dans les deux branches avec des contenus différents.
+    BothAdded,
+}
+
 /// Résolution par ligne dans une section.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineResolution {
@@ -43,6 +56,7 @@ pub struct ConflictFile {
     pub path: String,
     pub conflicts: Vec<ConflictSection>,
     pub is_resolved: bool,
+    pub conflict_type: ConflictType,
 }
 
 /// Fichier dans un merge (en conflit ou non).
@@ -52,6 +66,7 @@ pub struct MergeFile {
     pub has_conflicts: bool,
     pub conflicts: Vec<ConflictSection>,
     pub is_resolved: bool,
+    pub conflict_type: Option<ConflictType>, // None si pas de conflit
 }
 
 /// Résultat d'une opération de merge.
@@ -138,6 +153,24 @@ fn collect_context_after(
     context
 }
 
+/// Lit le contenu d'un blob depuis l'index git (pour les fichiers supprimés localement).
+fn read_blob_content(repo: &Repository, entry: &git2::IndexEntry) -> Result<Vec<String>> {
+    let blob = repo
+        .find_blob(entry.id)
+        .map_err(|e| GitSvError::Other(format!("Impossible de trouver le blob: {}", e)))?;
+    let content = std::str::from_utf8(blob.content())
+        .map_err(|_| GitSvError::Other("Contenu du blob invalide".into()))?;
+    Ok(content.lines().map(|l| l.to_string()).collect())
+}
+
+/// Lit les lignes d'un fichier local.
+fn read_file_lines(path: &str) -> Result<Vec<String>> {
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        GitSvError::Other(format!("Impossible de lire le fichier '{}': {}", path, e))
+    })?;
+    Ok(content.lines().map(|l| l.to_string()).collect())
+}
+
 /// Liste tous les fichiers en conflit dans le repository.
 pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
     let index = repo
@@ -154,21 +187,83 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
         let conflict = conflict
             .map_err(|e| GitSvError::Other(format!("Erreur lors du parsing du conflit: {}", e)))?;
 
-        if let Some(ours) = conflict.our {
-            let path = std::str::from_utf8(&ours.path)
-                .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
-                .to_string();
+        // Déterminer le type de conflit et le chemin
+        let (path, conflict_type) = match (&conflict.our, &conflict.their, &conflict.ancestor) {
+            // Cas classique : modifié des deux côtés
+            (Some(ours), Some(_theirs), Some(_ancestor)) => {
+                let p = std::str::from_utf8(&ours.path)
+                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .to_string();
+                (p, ConflictType::BothModified)
+            }
+            // Modifié dans ours, supprimé dans theirs
+            (Some(ours), None, _) => {
+                let p = std::str::from_utf8(&ours.path)
+                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .to_string();
+                (p, ConflictType::DeletedByThem)
+            }
+            // Supprimé dans ours, modifié dans theirs
+            (None, Some(theirs), _) => {
+                let p = std::str::from_utf8(&theirs.path)
+                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .to_string();
+                (p, ConflictType::DeletedByUs)
+            }
+            // Pas d'ancêtre commun, ajouté des deux côtés
+            (Some(ours), Some(_theirs), None) => {
+                let p = std::str::from_utf8(&ours.path)
+                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .to_string();
+                (p, ConflictType::BothAdded)
+            }
+            _ => continue, // Cas impossible en théorie
+        };
 
-            // Parser les sections de conflit du fichier
-            let sections = parse_conflict_file(&path)?;
-            let is_resolved = sections.iter().all(|s| s.resolution.is_some());
+        // Créer les sections selon le type de conflit
+        let sections = match conflict_type {
+            ConflictType::BothModified | ConflictType::BothAdded => {
+                // Parser les marqueurs de conflit dans le fichier
+                parse_conflict_file(&path)?
+            }
+            ConflictType::DeletedByUs => {
+                // Le fichier n'existe pas en local (supprimé par nous), lire depuis theirs
+                let theirs_content = if let Some(ref their_entry) = conflict.their {
+                    read_blob_content(repo, their_entry)?
+                } else {
+                    vec![]
+                };
+                vec![ConflictSection {
+                    context_before: vec![],
+                    ours: vec![], // Supprimé
+                    theirs: theirs_content,
+                    context_after: vec![],
+                    resolution: None,
+                    line_resolutions: vec![],
+                }]
+            }
+            ConflictType::DeletedByThem => {
+                // Le fichier existe en local (nous l'avons gardé), theirs est vide
+                let ours_content = read_file_lines(&path).unwrap_or_default();
+                vec![ConflictSection {
+                    context_before: vec![],
+                    ours: ours_content,
+                    theirs: vec![], // Supprimé
+                    context_after: vec![],
+                    resolution: None,
+                    line_resolutions: vec![],
+                }]
+            }
+        };
 
-            files.push(ConflictFile {
-                path,
-                conflicts: sections,
-                is_resolved,
-            });
-        }
+        let is_resolved = sections.iter().all(|s| s.resolution.is_some());
+
+        files.push(ConflictFile {
+            path,
+            conflicts: sections,
+            is_resolved,
+            conflict_type,
+        });
     }
 
     Ok(files)
@@ -393,9 +488,140 @@ pub fn resolve_file_with_strategy(
         path: path.to_string(),
         conflicts: sections,
         is_resolved: true,
+        conflict_type: ConflictType::BothModified,
     };
 
     resolve_file(repo, &file)
+}
+
+/// Résout un fichier de conflit spécial (DeletedByUs, DeletedByThem, BothAdded).
+/// Retourne true si le fichier doit être supprimé, false s'il doit être conservé.
+pub fn resolve_special_file(
+    repo: &Repository,
+    file: &MergeFile,
+    resolution: ConflictResolution,
+) -> Result<bool> {
+    use std::io::Write;
+
+    let should_delete = match file.conflict_type {
+        Some(ConflictType::DeletedByUs) => {
+            // Supprimé chez nous, modifié chez eux
+            // 'o' = garder la suppression (supprimer le fichier)
+            // 't' ou 'b' = garder le fichier (version theirs)
+            matches!(resolution, ConflictResolution::Ours)
+        }
+        Some(ConflictType::DeletedByThem) => {
+            // Modifié chez nous, supprimé chez eux
+            // 't' = garder la suppression (supprimer le fichier)
+            // 'o' ou 'b' = garder le fichier (version ours)
+            matches!(resolution, ConflictResolution::Theirs)
+        }
+        Some(ConflictType::BothAdded) => {
+            // Ajouté des deux côtés
+            // 'o' = version ours, 't' = version theirs, 'b' = les deux
+            false // On écrit toujours un fichier, jamais de suppression
+        }
+        _ => {
+            return Err(GitSvError::Other(
+                "Type de conflit non supporté pour resolve_special_file".into(),
+            ));
+        }
+    };
+
+    let path = std::path::Path::new(&file.path);
+
+    if should_delete {
+        // Supprimer le fichier s'il existe
+        if path.exists() {
+            std::fs::remove_file(path).map_err(|e| {
+                GitSvError::Other(format!(
+                    "Impossible de supprimer le fichier '{}': {}",
+                    file.path, e
+                ))
+            })?;
+        }
+
+        // Supprimer de l'index
+        let mut index = repo
+            .index()
+            .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+        index.remove_path(path).map_err(|e| {
+            GitSvError::Other(format!(
+                "Impossible de retirer le fichier de l'index: {}",
+                e
+            ))
+        })?;
+        index
+            .write()
+            .map_err(|e| GitSvError::Other(format!("Impossible d'écrire l'index: {}", e)))?;
+
+        Ok(true)
+    } else {
+        // Garder le fichier - déterminer le contenu
+        let content = match file.conflict_type {
+            Some(ConflictType::DeletedByUs) => {
+                // Garder la version theirs
+                file.conflicts
+                    .first()
+                    .map(|s| s.theirs.join("\n"))
+                    .unwrap_or_default()
+            }
+            Some(ConflictType::DeletedByThem) => {
+                // Garder la version ours
+                file.conflicts
+                    .first()
+                    .map(|s| s.ours.join("\n"))
+                    .unwrap_or_default()
+            }
+            Some(ConflictType::BothAdded) => {
+                // Selon la résolution choisie
+                let section = file.conflicts.first();
+                match resolution {
+                    ConflictResolution::Ours => {
+                        section.map(|s| s.ours.join("\n")).unwrap_or_default()
+                    }
+                    ConflictResolution::Theirs => {
+                        section.map(|s| s.theirs.join("\n")).unwrap_or_default()
+                    }
+                    ConflictResolution::Both => section
+                        .map(|s| {
+                            let mut result = s.ours.clone();
+                            result.extend(s.theirs.clone());
+                            result.join("\n")
+                        })
+                        .unwrap_or_default(),
+                }
+            }
+            _ => String::new(),
+        };
+
+        // Écrire le fichier
+        let mut file_handle = std::fs::File::create(path).map_err(|e| {
+            GitSvError::Other(format!(
+                "Impossible de créer le fichier '{}': {}",
+                file.path, e
+            ))
+        })?;
+        file_handle.write_all(content.as_bytes()).map_err(|e| {
+            GitSvError::Other(format!(
+                "Erreur lors de l'écriture du fichier '{}': {}",
+                file.path, e
+            ))
+        })?;
+
+        // Ajouter à l'index
+        let mut index = repo
+            .index()
+            .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+        index.add_path(path).map_err(|e| {
+            GitSvError::Other(format!("Impossible d'ajouter le fichier à l'index: {}", e))
+        })?;
+        index
+            .write()
+            .map_err(|e| GitSvError::Other(format!("Impossible d'écrire l'index: {}", e)))?;
+
+        Ok(false)
+    }
 }
 
 /// Compte le nombre de fichiers en conflit non résolus.
@@ -425,28 +651,101 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
 
     let mut all_files: Vec<MergeFile> = Vec::new();
 
-    // Collecter les fichiers en conflit
-    let conflict_files: std::collections::HashSet<String> = if let Ok(conflicts) = index.conflicts()
-    {
-        conflicts
-            .filter_map(|c| c.ok())
-            .filter_map(|c| c.our)
-            .filter_map(|ours| std::str::from_utf8(&ours.path).ok().map(|s| s.to_string()))
-            .collect()
-    } else {
-        std::collections::HashSet::new()
-    };
+    // Collecter les informations de conflit avec leur type
+    let mut conflict_map: std::collections::HashMap<String, ConflictType> =
+        std::collections::HashMap::new();
+
+    if let Ok(conflicts) = index.conflicts() {
+        for conflict in conflicts.filter_map(|c| c.ok()) {
+            let (path, conflict_type) = match (&conflict.our, &conflict.their, &conflict.ancestor) {
+                // Cas classique : modifié des deux côtés
+                (Some(ours), Some(_theirs), Some(_ancestor)) => {
+                    if let Ok(p) = std::str::from_utf8(&ours.path) {
+                        (p.to_string(), ConflictType::BothModified)
+                    } else {
+                        continue;
+                    }
+                }
+                // Modifié dans ours, supprimé dans theirs
+                (Some(ours), None, _) => {
+                    if let Ok(p) = std::str::from_utf8(&ours.path) {
+                        (p.to_string(), ConflictType::DeletedByThem)
+                    } else {
+                        continue;
+                    }
+                }
+                // Supprimé dans ours, modifié dans theirs
+                (None, Some(theirs), _) => {
+                    if let Ok(p) = std::str::from_utf8(&theirs.path) {
+                        (p.to_string(), ConflictType::DeletedByUs)
+                    } else {
+                        continue;
+                    }
+                }
+                // Pas d'ancêtre commun, ajouté des deux côtés
+                (Some(ours), Some(_theirs), None) => {
+                    if let Ok(p) = std::str::from_utf8(&ours.path) {
+                        (p.to_string(), ConflictType::BothAdded)
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+            conflict_map.insert(path, conflict_type);
+        }
+    }
 
     // Parcourir tous les fichiers de l'index
     for i in 0..index.len() {
         if let Some(entry) = index.get(i) {
             let path_bytes = entry.path;
             if let Ok(path) = std::str::from_utf8(&path_bytes) {
-                let has_conflict = conflict_files.contains(path);
+                if let Some(&conflict_type) = conflict_map.get(path) {
+                    // Fichier en conflit - créer les sections selon le type
+                    let sections = match conflict_type {
+                        ConflictType::BothModified | ConflictType::BothAdded => {
+                            parse_conflict_file(path).unwrap_or_default()
+                        }
+                        ConflictType::DeletedByUs => {
+                            // Lire le contenu depuis l'index (theirs)
+                            let theirs_content = if let Ok(conflicts) = index.conflicts() {
+                                conflicts
+                                    .filter_map(|c| c.ok())
+                                    .find(|c| {
+                                        c.their.as_ref().map_or(false, |t| {
+                                            std::str::from_utf8(&t.path).ok() == Some(path)
+                                        })
+                                    })
+                                    .and_then(|c| c.their)
+                                    .and_then(|entry| read_blob_content(repo, &entry).ok())
+                                    .unwrap_or_default()
+                            } else {
+                                vec![]
+                            };
+                            vec![ConflictSection {
+                                context_before: vec![],
+                                ours: vec![],
+                                theirs: theirs_content,
+                                context_after: vec![],
+                                resolution: None,
+                                line_resolutions: vec![],
+                            }]
+                        }
+                        ConflictType::DeletedByThem => {
+                            // Lire le contenu local (ours)
+                            let ours_content = read_file_lines(path).unwrap_or_default();
+                            vec![ConflictSection {
+                                context_before: vec![],
+                                ours: ours_content,
+                                theirs: vec![],
+                                context_after: vec![],
+                                resolution: None,
+                                line_resolutions: vec![],
+                            }]
+                        }
+                    };
 
-                if has_conflict {
-                    // Fichier en conflit
-                    let sections = parse_conflict_file(path)?;
                     let is_resolved = sections.iter().all(|s| s.resolution.is_some());
 
                     all_files.push(MergeFile {
@@ -454,6 +753,7 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                         has_conflicts: true,
                         conflicts: sections,
                         is_resolved,
+                        conflict_type: Some(conflict_type),
                     });
                 } else {
                     // Fichier sans conflit
@@ -462,9 +762,56 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                         has_conflicts: false,
                         conflicts: Vec::new(),
                         is_resolved: true,
+                        conflict_type: None,
                     });
                 }
             }
+        }
+    }
+
+    // Ajouter les fichiers en conflit qui ne sont pas dans l'index (cas DeletedByUs)
+    for (path, conflict_type) in &conflict_map {
+        if !all_files.iter().any(|f| &f.path == path) {
+            // Fichier supprimé chez nous mais modifié chez eux
+            let sections = match conflict_type {
+                ConflictType::DeletedByUs => {
+                    // Lire le contenu depuis l'index (theirs)
+                    let theirs_content = if let Ok(conflicts) = index.conflicts() {
+                        conflicts
+                            .filter_map(|c| c.ok())
+                            .find(|c| {
+                                c.their.as_ref().map_or(false, |t| {
+                                    std::str::from_utf8(&t.path).ok().map(|s| s.to_string())
+                                        == Some(path.clone())
+                                })
+                            })
+                            .and_then(|c| c.their)
+                            .and_then(|entry| read_blob_content(repo, &entry).ok())
+                            .unwrap_or_default()
+                    } else {
+                        vec![]
+                    };
+                    vec![ConflictSection {
+                        context_before: vec![],
+                        ours: vec![],
+                        theirs: theirs_content,
+                        context_after: vec![],
+                        resolution: None,
+                        line_resolutions: vec![],
+                    }]
+                }
+                _ => vec![],
+            };
+
+            let is_resolved = sections.iter().all(|s| s.resolution.is_some());
+
+            all_files.push(MergeFile {
+                path: path.clone(),
+                has_conflicts: !sections.is_empty(),
+                conflicts: sections,
+                is_resolved,
+                conflict_type: Some(*conflict_type),
+            });
         }
     }
 
@@ -480,6 +827,7 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                             has_conflicts: false,
                             conflicts: Vec::new(),
                             is_resolved: true,
+                            conflict_type: None,
                         });
                     }
                 }

@@ -2328,48 +2328,117 @@ impl EventHandler {
     }
 
     fn handle_conflict_resolve_file(&mut self) -> Result<()> {
-        use crate::git::conflict::resolve_file;
-        use crate::git::conflict::ConflictFile;
+        use crate::git::conflict::{
+            resolve_file, resolve_special_file, ConflictFile, ConflictType,
+        };
 
-        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            let file_selected = conflicts_state.file_selected;
-
-            // Vérifier que toutes les sections sont résolues
-            if let Some(file) = conflicts_state.all_files.get(file_selected) {
-                if !file.has_conflicts {
-                    self.state
-                        .set_flash_message("Ce fichier n'a pas de conflits".into());
-                    return Ok(());
+        // Extraire les informations nécessaires d'abord
+        let (file_info, is_special, has_conflicts) = {
+            if let Some(ref conflicts_state) = self.state.conflicts_state {
+                let file_selected = conflicts_state.file_selected;
+                if let Some(file) = conflicts_state.all_files.get(file_selected) {
+                    let is_special = matches!(
+                        file.conflict_type,
+                        Some(ConflictType::DeletedByUs)
+                            | Some(ConflictType::DeletedByThem)
+                            | Some(ConflictType::BothAdded)
+                    );
+                    (
+                        Some((
+                            file.path.clone(),
+                            file.conflicts.clone(),
+                            file.is_resolved,
+                            file.conflict_type,
+                            file_selected,
+                        )),
+                        is_special,
+                        file.has_conflicts,
+                    )
+                } else {
+                    (None, false, false)
                 }
+            } else {
+                (None, false, false)
+            }
+        };
 
-                if !file.conflicts.iter().all(|s| s.resolution.is_some()) {
-                    self.state
-                        .set_flash_message("Toutes les sections ne sont pas résolues".into());
-                    return Ok(());
-                }
+        if let Some((file_path, conflicts, is_resolved, conflict_type, file_selected)) = file_info {
+            if !has_conflicts {
+                self.state
+                    .set_flash_message("Ce fichier n'a pas de conflits".into());
+                return Ok(());
+            }
 
-                // Convertir MergeFile en ConflictFile pour resolve_file
-                let file_path = file.path.clone();
-                let conflict_file = ConflictFile {
+            if is_special {
+                // Pour les fichiers spéciaux, on a besoin d'une résolution
+                let resolution = conflicts
+                    .first()
+                    .and_then(|s| s.resolution)
+                    .unwrap_or(crate::git::conflict::ConflictResolution::Ours);
+
+                // Créer un MergeFile temporaire pour resolve_special_file
+                let merge_file = crate::git::conflict::MergeFile {
                     path: file_path.clone(),
-                    conflicts: file.conflicts.clone(),
-                    is_resolved: file.is_resolved,
+                    has_conflicts: true,
+                    conflicts: conflicts.clone(),
+                    is_resolved,
+                    conflict_type,
                 };
 
-                match resolve_file(&self.state.repo.repo, &conflict_file) {
-                    Ok(()) => {
+                match resolve_special_file(&self.state.repo.repo, &merge_file, resolution) {
+                    Ok(was_deleted) => {
                         // Mettre à jour le statut
-                        if let Some(ref mut file) = conflicts_state.all_files.get_mut(file_selected)
-                        {
-                            file.is_resolved = true;
+                        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+                            if let Some(ref mut f) =
+                                conflicts_state.all_files.get_mut(file_selected)
+                            {
+                                f.is_resolved = true;
+                            }
                         }
-                        self.state
-                            .set_flash_message(format!("Fichier '{}' résolu ✓", file_path));
+                        if was_deleted {
+                            self.state
+                                .set_flash_message(format!("Fichier '{}' supprimé ✓", file_path));
+                        } else {
+                            self.state
+                                .set_flash_message(format!("Fichier '{}' résolu ✓", file_path));
+                        }
                     }
                     Err(e) => {
                         self.state
                             .set_flash_message(format!("Erreur lors de la résolution: {}", e));
                     }
+                }
+                return Ok(());
+            }
+
+            // Conflit classique (BothModified)
+            if !conflicts.iter().all(|s| s.resolution.is_some()) {
+                self.state
+                    .set_flash_message("Toutes les sections ne sont pas résolues".into());
+                return Ok(());
+            }
+
+            // Convertir MergeFile en ConflictFile pour resolve_file
+            let conflict_file = ConflictFile {
+                path: file_path.clone(),
+                conflicts: conflicts.clone(),
+                is_resolved,
+                conflict_type: conflict_type.unwrap_or(ConflictType::BothModified),
+            };
+
+            match resolve_file(&self.state.repo.repo, &conflict_file) {
+                Ok(()) => {
+                    if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+                        if let Some(ref mut f) = conflicts_state.all_files.get_mut(file_selected) {
+                            f.is_resolved = true;
+                        }
+                    }
+                    self.state
+                        .set_flash_message(format!("Fichier '{}' résolu ✓", file_path));
+                }
+                Err(e) => {
+                    self.state
+                        .set_flash_message(format!("Erreur lors de la résolution: {}", e));
                 }
             }
         }

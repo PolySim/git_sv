@@ -1,0 +1,10 @@
+--- a/src/state.rs
++++ b/src/state.rs
+@@ -433,6 +433,7 @@ impl ConflictsState {
+                 has_conflicts: true,
+                 conflicts: f.conflicts,
+                 is_resolved: f.is_resolved,
++                conflict_type: None,
+             })
+             .collect();
+ 

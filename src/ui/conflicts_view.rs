@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::conflict::ConflictResolution;
+use crate::git::conflict::{ConflictResolution, ConflictType};
 use crate::state::ConflictsState;
 
 /// Rend la vue de résolution de conflits.
@@ -117,7 +117,16 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         .iter()
         .enumerate()
         .map(|(idx, file)| {
-            let icon = if file.is_resolved { "✓ " } else { "✗ " };
+            let status_icon = if file.is_resolved { "✓" } else { "✗" };
+
+            // Icône selon le type de conflit
+            let type_icon = match file.conflict_type {
+                Some(ConflictType::DeletedByUs) => "D←",
+                Some(ConflictType::DeletedByThem) => "D→",
+                Some(ConflictType::BothAdded) => "A+",
+                Some(ConflictType::BothModified) | None => "  ",
+            };
+
             let color = if file.is_resolved {
                 Color::Green
             } else {
@@ -133,7 +142,7 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 Style::default().fg(color)
             };
 
-            let label = format!("{}{}", icon, file.path);
+            let label = format!("{} {} {}", status_icon, type_icon, file.path);
             ListItem::new(label).style(style)
         })
         .collect();
@@ -163,6 +172,96 @@ fn render_resolution_panel(frame: &mut Frame, state: &ConflictsState, area: Rect
             .style(Style::default().fg(Color::Green));
         frame.render_widget(empty, area);
         return;
+    }
+
+    // Afficher un message spécial pour les fichiers supprimés
+    if let Some(conflict_type) = current_file.conflict_type {
+        match conflict_type {
+            ConflictType::DeletedByUs => {
+                let message = vec![
+                    Line::from(vec![Span::styled(
+                        "[Fichier supprimé dans notre branche]",
+                        Style::default()
+                            .fg(Color::Red)
+                            .add_modifier(Modifier::BOLD),
+                    )]),
+                    Line::from(""),
+                    Line::from(vec![Span::styled(
+                        "Le fichier a été supprimé dans HEAD (ours) mais modifié dans la branche mergée (theirs).",
+                        Style::default().fg(Color::Gray),
+                    )]),
+                    Line::from(""),
+                    Line::from(vec![Span::styled(
+                        "Appuyez sur 'o' pour garder la suppression",
+                        Style::default().fg(Color::Yellow),
+                    )]),
+                    Line::from(vec![Span::styled(
+                        "Appuyez sur 't' pour garder le fichier (version theirs)",
+                        Style::default().fg(Color::Yellow),
+                    )]),
+                ];
+                let paragraph = Paragraph::new(message)
+                    .block(block)
+                    .wrap(Wrap { trim: true });
+                frame.render_widget(paragraph, area);
+                return;
+            }
+            ConflictType::DeletedByThem => {
+                let message = vec![
+                    Line::from(vec![Span::styled(
+                        "[Fichier supprimé dans la branche mergée]",
+                        Style::default()
+                            .fg(Color::Red)
+                            .add_modifier(Modifier::BOLD),
+                    )]),
+                    Line::from(""),
+                    Line::from(vec![Span::styled(
+                        "Le fichier a été modifié dans HEAD (ours) mais supprimé dans la branche mergée (theirs).",
+                        Style::default().fg(Color::Gray),
+                    )]),
+                    Line::from(""),
+                    Line::from(vec![Span::styled(
+                        "Appuyez sur 'o' pour garder le fichier (version ours)",
+                        Style::default().fg(Color::Yellow),
+                    )]),
+                    Line::from(vec![Span::styled(
+                        "Appuyez sur 't' pour garder la suppression",
+                        Style::default().fg(Color::Yellow),
+                    )]),
+                ];
+                let paragraph = Paragraph::new(message)
+                    .block(block)
+                    .wrap(Wrap { trim: true });
+                frame.render_widget(paragraph, area);
+                return;
+            }
+            ConflictType::BothAdded => {
+                let message = vec![
+                    Line::from(vec![Span::styled(
+                        "[Fichier ajouté dans les deux branches]",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    )]),
+                    Line::from(""),
+                    Line::from(vec![Span::styled(
+                        "Le fichier a été ajouté dans les deux branches avec des contenus différents.",
+                        Style::default().fg(Color::Gray),
+                    )]),
+                    Line::from(""),
+                    Line::from(vec![Span::styled(
+                        "Utilisez 'o', 't' ou 'b' pour choisir la version à garder.",
+                        Style::default().fg(Color::Yellow),
+                    )]),
+                ];
+                let paragraph = Paragraph::new(message)
+                    .block(block)
+                    .wrap(Wrap { trim: true });
+                frame.render_widget(paragraph, area);
+                return;
+            }
+            _ => {} // BothModified: affichage normal
+        }
     }
 
     // Construire le contenu avec toutes les sections

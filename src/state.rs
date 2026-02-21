@@ -434,6 +434,7 @@ impl ConflictsState {
                 has_conflicts: true,
                 conflicts: f.conflicts,
                 is_resolved: f.is_resolved,
+                conflict_type: Some(f.conflict_type),
             })
             .collect();
 

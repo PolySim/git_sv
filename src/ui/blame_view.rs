@@ -116,10 +116,7 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         );
 
         // Contenu de la ligne
-        let content_span = Span::styled(
-            &blame_line.content,
-            Style::default().bg(bg_color),
-        );
+        let content_span = Span::styled(&blame_line.content, Style::default().bg(bg_color));
 
         // Construire la ligne complète
         let line = Line::from(vec![hash_span, author_span, line_num_span, content_span]);
