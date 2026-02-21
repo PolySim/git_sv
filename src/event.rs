@@ -1673,8 +1673,20 @@ impl EventHandler {
                         self.refresh()?;
                     }
                     Ok(MergeResult::Conflicts(files)) => {
-                        self.state.conflicts_state =
-                            Some(ConflictsState::new(files, "Pull depuis origin".into()));
+                        let ours_name =
+                            crate::git::conflict::get_current_branch_name(&self.state.repo.repo);
+                        // Pour un pull, on utilise "origin" comme nom de branche theirs
+                        // car la branche de tracking est souvent origin/<branche_courante>
+                        let theirs_name = format!(
+                            "origin/{}",
+                            self.state.current_branch.clone().unwrap_or_else(|| "HEAD".to_string())
+                        );
+                        self.state.conflicts_state = Some(ConflictsState::new(
+                            files,
+                            "Pull depuis origin".into(),
+                            ours_name,
+                            theirs_name,
+                        ));
                         self.state.view_mode = ViewMode::Conflicts;
                         self.state
                             .set_flash_message("Conflits détectés lors du pull".into());
@@ -2052,9 +2064,14 @@ impl EventHandler {
                 ));
             }
             Ok(MergeResult::Conflicts(files)) => {
+                let ours_name =
+                    crate::git::conflict::get_current_branch_name(&self.state.repo.repo);
+                let theirs_name = format!("{:.7}", commit_oid);
                 self.state.conflicts_state = Some(ConflictsState::new(
                     files,
                     format!("Cherry-pick de {}", format!("{:.7}", commit_oid)),
+                    ours_name,
+                    theirs_name,
                 ));
                 self.state.view_mode = ViewMode::Conflicts;
                 self.state
@@ -2206,6 +2223,9 @@ impl EventHandler {
                 self.refresh()?;
             }
             Ok(MergeResult::Conflicts(files)) => {
+                let ours_name =
+                    crate::git::conflict::get_current_branch_name(&self.state.repo.repo);
+                let theirs_name = branch_name.to_string();
                 self.state.conflicts_state = Some(ConflictsState::new(
                     files,
                     format!(
@@ -2213,6 +2233,8 @@ impl EventHandler {
                         branch_name,
                         self.state.current_branch.clone().unwrap_or_default()
                     ),
+                    ours_name,
+                    theirs_name,
                 ));
                 self.state.view_mode = ViewMode::Conflicts;
                 self.state
@@ -2317,12 +2339,59 @@ impl EventHandler {
         }
     }
 
+    /// Ajuste le scroll pour que la ligne sélectionnée reste visible.
+    fn auto_scroll(scroll: &mut usize, selected_line: usize, panel_height: usize) {
+        // Si la sélection est au-dessus de la zone visible
+        if selected_line < *scroll {
+            *scroll = selected_line;
+        }
+        // Si la sélection est en-dessous de la zone visible
+        if selected_line >= *scroll + panel_height.saturating_sub(3) {
+            *scroll = selected_line.saturating_sub(panel_height.saturating_sub(3));
+        }
+    }
+
+    /// Calcule le numéro de ligne visuel pour une section donnée.
+    fn calculate_section_scroll_line(
+        file: &crate::git::conflict::MergeFile,
+        section_idx: usize,
+    ) -> usize {
+        let mut line = 0usize;
+        for (idx, section) in file.conflicts.iter().enumerate() {
+            if idx == section_idx {
+                return line;
+            }
+            // Compter les lignes de cette section
+            // Titre de section (1 ligne) + context_before + max(ours, theirs) + context_after
+            let section_lines = 1usize
+                + section.context_before.len()
+                + section.ours.len().max(section.theirs.len())
+                + section.context_after.len()
+                + 1; // Séparateur
+            line += section_lines;
+        }
+        line
+    }
+
     fn handle_conflict_next_section(&mut self) {
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
             if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
                 if conflicts_state.section_selected + 1 < file.conflicts.len() {
                     conflicts_state.section_selected += 1;
                     conflicts_state.line_selected = 0;
+                    // Calculer et synchroniser le scroll
+                    let target_line = Self::calculate_section_scroll_line(
+                        file,
+                        conflicts_state.section_selected,
+                    );
+                    // Hauteur par défaut du panneau (sera ajustée par le rendu)
+                    let panel_height = 20usize;
+                    Self::auto_scroll(
+                        &mut conflicts_state.ours_scroll,
+                        target_line,
+                        panel_height,
+                    );
+                    conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
                 }
             }
         }
@@ -2333,6 +2402,20 @@ impl EventHandler {
             if conflicts_state.section_selected > 0 {
                 conflicts_state.section_selected -= 1;
                 conflicts_state.line_selected = 0;
+                // Calculer et synchroniser le scroll
+                if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
+                    let target_line = Self::calculate_section_scroll_line(
+                        file,
+                        conflicts_state.section_selected,
+                    );
+                    let panel_height = 20usize;
+                    Self::auto_scroll(
+                        &mut conflicts_state.ours_scroll,
+                        target_line,
+                        panel_height,
+                    );
+                    conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
+                }
             }
         }
     }
@@ -2582,6 +2665,19 @@ impl EventHandler {
                     let max_lines = section.ours.len().max(section.theirs.len());
                     if conflicts_state.line_selected < max_lines {
                         conflicts_state.line_selected += 1;
+                        // Mettre à jour le scroll pour suivre la ligne
+                        let panel_height = 20usize;
+                        let base_line = Self::calculate_section_scroll_line(
+                            file,
+                            conflicts_state.section_selected,
+                        );
+                        let target_line = base_line + 2 + conflicts_state.line_selected; // +2 pour le titre et context_before
+                        Self::auto_scroll(
+                            &mut conflicts_state.ours_scroll,
+                            target_line,
+                            panel_height,
+                        );
+                        conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
                     }
                 }
             }
@@ -2592,6 +2688,21 @@ impl EventHandler {
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
             if conflicts_state.line_selected > 0 {
                 conflicts_state.line_selected -= 1;
+                // Mettre à jour le scroll pour suivre la ligne
+                if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
+                    let panel_height = 20usize;
+                    let base_line = Self::calculate_section_scroll_line(
+                        file,
+                        conflicts_state.section_selected,
+                    );
+                    let target_line = base_line + 2 + conflicts_state.line_selected;
+                    Self::auto_scroll(
+                        &mut conflicts_state.ours_scroll,
+                        target_line,
+                        panel_height,
+                    );
+                    conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
+                }
             }
         }
     }
@@ -2624,7 +2735,19 @@ impl EventHandler {
 
     fn handle_conflict_result_scroll_down(&mut self) {
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            conflicts_state.result_scroll = conflicts_state.result_scroll.saturating_add(1);
+            if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
+                // Calculer le nombre total de lignes dans le résultat
+                let total_lines: usize = file
+                    .conflicts
+                    .iter()
+                    .map(|s| {
+                        s.context_before.len() + s.ours.len().max(s.theirs.len()) + s.context_after.len() + 2
+                    })
+                    .sum();
+                let panel_height = 20usize;
+                let max_scroll = total_lines.saturating_sub(panel_height);
+                conflicts_state.result_scroll = (conflicts_state.result_scroll + 1).min(max_scroll);
+            }
         }
     }
 

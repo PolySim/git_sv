@@ -435,6 +435,10 @@ pub struct ConflictsState {
     pub panel_focus: ConflictPanelFocus,
     /// Description de l'opération en cours.
     pub operation_description: String,
+    /// Nom de la branche "ours" (HEAD).
+    pub ours_branch_name: String,
+    /// Nom de la branche "theirs" (branche mergée).
+    pub theirs_branch_name: String,
     /// Mode édition actif dans le panneau résultat.
     pub is_editing: bool,
     /// Buffer éditable (contenu du résultat, modifiable).
@@ -450,6 +454,8 @@ impl ConflictsState {
     pub fn new(
         files: Vec<crate::git::conflict::ConflictFile>,
         operation_description: String,
+        ours_branch_name: String,
+        theirs_branch_name: String,
     ) -> Self {
         // Convertir les ConflictFile en MergeFile
         let all_files: Vec<MergeFile> = files
@@ -474,6 +480,8 @@ impl ConflictsState {
             result_scroll: 0,
             panel_focus: ConflictPanelFocus::FileList,
             operation_description,
+            ours_branch_name,
+            theirs_branch_name,
             is_editing: false,
             edit_buffer: Vec::new(),
             edit_cursor_line: 0,

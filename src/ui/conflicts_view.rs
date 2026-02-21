@@ -110,10 +110,21 @@ fn build_help_bar<'a>() -> Paragraph<'a> {
 
 /// Rend le panneau de liste des fichiers.
 fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    let is_focused = state.panel_focus == ConflictPanelFocus::FileList;
+    let title_style = if is_focused {
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD)
+    };
+
     let block = Block::default()
-        .title("Fichiers en conflit")
+        .title(Span::styled("Fichiers en conflit", title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default());
+        .border_style(Style::default().fg(if is_focused {
+            Color::Yellow
+        } else {
+            Color::Reset
+        }));
 
     if state.all_files.is_empty() {
         let empty = Paragraph::new("Aucun fichier en conflit")
@@ -165,16 +176,23 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 /// Rend le panneau Ours.
 fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_focused = state.panel_focus == ConflictPanelFocus::OursPanel;
-    let border_color = if is_focused {
-        Color::Yellow
+    let title_style = if is_focused {
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
     } else {
-        Color::White
+        Style::default().add_modifier(Modifier::BOLD)
     };
 
     let block = Block::default()
-        .title("Ours (HEAD)")
+        .title(Span::styled(
+            format!(" {} ", state.ours_branch_name),
+            title_style,
+        ))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(Style::default().fg(if is_focused {
+            Color::Yellow
+        } else {
+            Color::Reset
+        }));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
@@ -256,7 +274,10 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         }
     }
 
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: true })
+        .scroll((state.ours_scroll as u16, 0));
 
     frame.render_widget(paragraph, area);
 }
@@ -264,16 +285,23 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 /// Rend le panneau Theirs.
 fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_focused = state.panel_focus == ConflictPanelFocus::TheirsPanel;
-    let border_color = if is_focused {
-        Color::Yellow
+    let title_style = if is_focused {
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
     } else {
-        Color::White
+        Style::default().add_modifier(Modifier::BOLD)
     };
 
     let block = Block::default()
-        .title("Theirs (branche)")
+        .title(Span::styled(
+            format!(" {} ", state.theirs_branch_name),
+            title_style,
+        ))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(Style::default().fg(if is_focused {
+            Color::Yellow
+        } else {
+            Color::Reset
+        }));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
@@ -355,7 +383,10 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         }
     }
 
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: true })
+        .scroll((state.theirs_scroll as u16, 0));
 
     frame.render_widget(paragraph, area);
 }
@@ -365,24 +396,29 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     use crate::git::conflict::{generate_resolved_content_with_source, LineSource};
 
     let is_focused = state.panel_focus == ConflictPanelFocus::ResultPanel;
-    let border_color = if state.is_editing {
-        Color::Magenta
-    } else if is_focused {
-        Color::Yellow
-    } else {
-        Color::White
-    };
-
-    let title = if state.is_editing {
+    let title_text = if state.is_editing {
         "Résultat [ÉDITION]"
     } else {
         "Résultat"
     };
+    let title_style = if state.is_editing {
+        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+    } else if is_focused {
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD)
+    };
 
     let block = Block::default()
-        .title(title)
+        .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(Style::default().fg(if state.is_editing {
+            Color::Magenta
+        } else if is_focused {
+            Color::Yellow
+        } else {
+            Color::Reset
+        }));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
@@ -432,7 +468,10 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             .collect()
     };
 
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: true })
+        .scroll((state.result_scroll as u16, 0));
 
     frame.render_widget(paragraph, area);
 }

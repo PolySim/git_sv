@@ -298,6 +298,74 @@ pub fn has_conflicts(repo: &Repository) -> Result<bool> {
     Ok(index.has_conflicts())
 }
 
+/// Récupère le nom court de la branche courante (HEAD).
+/// Retourne le nom de la branche ou un fallback si HEAD est détaché.
+pub fn get_current_branch_name(repo: &Repository) -> String {
+    // Essayer d'obtenir la référence HEAD
+    match repo.head() {
+        Ok(head) => {
+            // Si c'est une branche, retourner son nom court
+            if let Some(name) = head.shorthand() {
+                name.to_string()
+            } else {
+                // HEAD détaché - utiliser le SHA court
+                head.target()
+                    .map(|oid| format!("{:.7}", oid))
+                    .unwrap_or_else(|| "HEAD".to_string())
+            }
+        }
+        Err(_) => {
+            // Pas de HEAD (repo vide) - fallback
+            "HEAD".to_string()
+        }
+    }
+}
+
+/// Récupère le nom de la branche mergée depuis MERGE_HEAD ou un message d'opération.
+/// Pour un merge : nom de la branche source.
+/// Pour un cherry-pick : SHA court du commit.
+/// Fallback : "MERGE_HEAD" si non disponible.
+pub fn get_merge_branch_name(repo: &Repository, operation_msg: Option<&str>) -> String {
+    // D'abord essayer de lire le message d'opération s'il contient le nom
+    if let Some(msg) = operation_msg {
+        // Extraire le nom de branche depuis des patterns comme "Merge de 'branch' dans 'other'"
+        if let Some(start) = msg.find('\'') {
+            if let Some(end) = msg[start + 1..].find('\'') {
+                return msg[start + 1..start + 1 + end].to_string();
+            }
+        }
+    }
+
+    // Essayer de lire MERGE_HEAD depuis le filesystem
+    let merge_head_path = repo.path().join("MERGE_HEAD");
+    if let Ok(merge_head_content) = std::fs::read_to_string(&merge_head_path) {
+        let merge_head_oid = merge_head_content.trim();
+        if let Ok(oid) = git2::Oid::from_str(merge_head_oid) {
+            // Chercher une branche qui pointe vers ce commit
+            if let Ok(branches) = repo.branches(None) {
+                for branch_result in branches {
+                    if let Ok((branch, _)) = branch_result {
+                        if let Some(target) = branch.get().target() {
+                            if target == oid {
+                                if let Some(name) = branch.name().ok().flatten() {
+                                    return name.to_string();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Aucune branche trouvée - utiliser le SHA court
+            return format!("{:.7}", oid);
+        }
+    }
+
+    // Fallback final
+    operation_msg
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "MERGE_HEAD".to_string())
+}
+
 /// Résout un fichier en appliquant les résolutions choisies.
 pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
     let content = std::fs::read_to_string(&file.path).map_err(|e| {
