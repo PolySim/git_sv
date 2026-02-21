@@ -75,9 +75,9 @@ fn build_help_spans<'a>(keys: &'a [(&'a str, &'a str)]) -> Vec<Span<'a>> {
                 .add_modifier(Modifier::BOLD),
         ));
 
-        // Description en blanc.
+        // Description en couleur par défaut.
         spans.push(Span::raw(":"));
-        spans.push(Span::styled(*desc, Style::default().fg(Color::White)));
+        spans.push(Span::styled(*desc, Style::default()));
     }
 
     spans

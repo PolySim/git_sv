@@ -118,7 +118,7 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         // Contenu de la ligne
         let content_span = Span::styled(
             &blame_line.content,
-            Style::default().fg(Color::White).bg(bg_color),
+            Style::default().bg(bg_color),
         );
 
         // Construire la ligne complète

@@ -51,7 +51,7 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
         ));
         spans.push(Span::styled(
             format!(" {}", name),
-            Style::default().fg(Color::White),
+            Style::default(),
         ));
 
         if i < branches.len() - 1 {

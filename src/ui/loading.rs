@@ -85,7 +85,7 @@ pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rec
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" "),
-            Span::styled(spinner.message.clone(), Style::default().fg(Color::White)),
+            Span::styled(spinner.message.clone(), Style::default()),
         ]),
     ];
 
@@ -112,7 +112,7 @@ pub fn render_inline(spinner: &mut LoadingSpinner) -> Line {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
-        Span::styled(spinner.message.clone(), Style::default().fg(Color::White)),
+        Span::styled(spinner.message.clone(), Style::default()),
     ])
 }
 

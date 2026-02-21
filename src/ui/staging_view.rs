@@ -129,7 +129,7 @@ fn render_file_list(
                 "Modifié" => Color::Yellow,
                 "Supprimé" => Color::Red,
                 "Non suivi" => Color::DarkGray,
-                _ => Color::White,
+                _ => Color::Reset,
             };
 
             let line = Line::from(vec![

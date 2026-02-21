@@ -101,7 +101,7 @@ fn build_status_items(entries: &[StatusEntry]) -> Vec<ListItem> {
                 "Nouveau (staged)" | "Modifié (staged)" | "Supprimé (staged)" => Color::Green,
                 "Modifié" | "Supprimé" => Color::Red,
                 "Non suivi" => Color::DarkGray,
-                _ => Color::White,
+                _ => Color::Reset,
             };
 
             let line = Line::from(vec![

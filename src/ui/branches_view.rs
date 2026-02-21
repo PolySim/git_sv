@@ -439,7 +439,7 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
                     'M' => Color::Yellow,
                     'D' => Color::Red,
                     'R' => Color::Cyan,
-                    _ => Color::White,
+                    _ => Color::Reset,
                 };
                 let is_selected = i == state.stash_file_selected;
                 let prefix = if is_selected { "→ " } else { "  " };
