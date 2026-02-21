@@ -496,7 +496,14 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
         KeyCode::Char('V') => Some(AppAction::ConflictValidateMerge),
-        KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::ConflictAbort),
+        KeyCode::Char('q') | KeyCode::Esc => {
+            if is_editing {
+                Some(AppAction::ConflictStopEditing)
+            } else {
+                Some(AppAction::ConflictLeaveView)
+            }
+        }
+        KeyCode::Char('A') => Some(AppAction::ConflictAbort),
 
         // Vues
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),

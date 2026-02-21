@@ -114,8 +114,17 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
     );
 
     // Rendu de la barre de navigation.
-    let has_conflicts = state.conflicts_state.is_some();
-    nav_bar::render(frame, state.view_mode, layout.nav_bar, has_conflicts);
+    let unresolved_count = state
+        .conflicts_state
+        .as_ref()
+        .map(|cs| {
+            cs.all_files
+                .iter()
+                .filter(|f| !f.is_resolved && f.has_conflicts)
+                .count()
+        })
+        .unwrap_or(0);
+    nav_bar::render(frame, state.view_mode, layout.nav_bar, unresolved_count);
 
     // Rendu du graphe.
     let is_graph_focused = state.focus == FocusPanel::Graph;

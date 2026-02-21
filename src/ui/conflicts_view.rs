@@ -113,12 +113,12 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
         "Esc:Quitter l'édition  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr".to_string()
     } else if state.panel_focus == ConflictPanelFocus::FileList {
         format!(
-            "o/←:Garder Ours  t/→:Garder Theirs  Tab:Panneau  ↑↓:Nav  V:Finaliser  q:Quitter | {}",
+            "o/←:Ours  t/→:Theirs  Tab:Panneau  ↑↓:Nav  V:Finaliser  q:Quitter  A:Avorter | {}",
             mode_indicator
         )
     } else {
         format!(
-            "Enter:Valider  Tab:Panneau  ↑↓:Nav  F/B/L:Mode  b:Les deux (Bloc)  i:Éditer  V:Finaliser  q:Quitter | {}",
+            "Enter:Valider  Tab:Panneau  ↑↓:Nav  F/B/L:Mode  b:Les deux  i:Éditer  V:Finaliser  q:Quitter  A:Avorter | {}",
             mode_indicator
         )
     };

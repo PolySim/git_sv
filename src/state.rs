@@ -141,6 +141,8 @@ pub enum AppAction {
     MergePickerCancel,
     /// Basculer vers la vue conflits.
     SwitchToConflicts,
+    /// Quitter la vue conflits sans avorter le merge.
+    ConflictLeaveView,
     /// Valider la résolution depuis le panneau courant (Enter contextuel selon le panneau et le mode).
     ConflictEnterResolve,
     /// Résoudre la section avec les deux (uniquement en mode Bloc).

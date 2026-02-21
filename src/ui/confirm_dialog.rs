@@ -25,6 +25,8 @@ pub enum ConfirmAction {
     CherryPick(git2::Oid),
     /// Merger une branche (source, cible)
     MergeBranch(String, String),
+    /// Avorter le merge en cours
+    AbortMerge,
 }
 
 impl ConfirmAction {
@@ -65,6 +67,9 @@ impl ConfirmAction {
             ConfirmAction::MergeBranch(source, target) => {
                 format!("Merger '{}' dans '{}' ?", source, target)
             }
+            ConfirmAction::AbortMerge => {
+                "Êtes-vous sûr de vouloir avorter le merge en cours ?".to_string()
+            }
         }
     }
 
@@ -78,6 +83,7 @@ impl ConfirmAction {
             ConfirmAction::DiscardAll => "Confirmer le discard de tous les fichiers",
             ConfirmAction::CherryPick(_) => "Confirmer le cherry-pick",
             ConfirmAction::MergeBranch(_, _) => "Confirmer le merge",
+            ConfirmAction::AbortMerge => "Confirmer l'annulation du merge",
         }
     }
 }

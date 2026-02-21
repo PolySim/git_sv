@@ -148,6 +148,7 @@ impl EventHandler {
             AppAction::MergePickerConfirm => self.handle_merge_picker_confirm()?,
             AppAction::MergePickerCancel => self.handle_merge_picker_cancel(),
             AppAction::SwitchToConflicts => self.handle_switch_to_conflicts(),
+            AppAction::ConflictLeaveView => self.handle_conflict_leave_view(),
             AppAction::ConflictEnterResolve => self.handle_conflict_enter_resolve()?,
             AppAction::ConflictChooseBoth => self.handle_conflict_choose_both()?,
             AppAction::ConflictFileChooseOurs => self.handle_conflict_file_choose_ours(),
@@ -218,6 +219,34 @@ impl EventHandler {
                     } else {
                         self.execute_merge(&source)?;
                     }
+                }
+                ConfirmAction::AbortMerge => {
+                    self.execute_abort_merge()?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Exécute l'annulation du merge après confirmation.
+    fn execute_abort_merge(&mut self) -> Result<()> {
+        use crate::git::conflict::abort_merge;
+        use crate::state::ViewMode;
+
+        if let Some(ref conflicts_state) = self.state.conflicts_state {
+            match abort_merge(&self.state.repo.repo) {
+                Ok(()) => {
+                    let desc = conflicts_state.operation_description.clone();
+                    self.state.conflicts_state = None;
+                    self.state.view_mode = ViewMode::Graph;
+                    self.state
+                        .set_flash_message(format!("Merge avorté: {}", desc));
+                    self.state.mark_dirty();
+                    self.refresh()?;
+                }
+                Err(e) => {
+                    self.state
+                        .set_flash_message(format!("Erreur lors de l'annulation: {}", e));
                 }
             }
         }
@@ -2797,27 +2826,22 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_conflict_abort(&mut self) -> Result<()> {
-        use crate::git::conflict::abort_merge;
+    /// Quitte la vue conflits sans avorter le merge.
+    fn handle_conflict_leave_view(&mut self) {
         use crate::state::ViewMode;
 
-        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            match abort_merge(&self.state.repo.repo) {
-                Ok(()) => {
-                    let desc = conflicts_state.operation_description.clone();
-                    self.state.conflicts_state = None;
-                    self.state.view_mode = ViewMode::Graph;
-                    self.state
-                        .set_flash_message(format!("Merge annulé: {}", desc));
-                    self.state.mark_dirty();
-                    self.refresh()?;
-                }
-                Err(e) => {
-                    self.state
-                        .set_flash_message(format!("Erreur lors de l'annulation: {}", e));
-                }
-            }
-        }
+        // NE PAS appeler abort_merge()
+        // NE PAS mettre conflicts_state à None
+        // Juste changer de vue vers Graph
+        self.state.view_mode = ViewMode::Graph;
+    }
+
+    /// Demande une confirmation pour avorter le merge.
+    fn handle_conflict_abort(&mut self) -> Result<()> {
+        use crate::ui::confirm_dialog::ConfirmAction;
+
+        // Ouvrir un dialogue de confirmation
+        self.state.pending_confirmation = Some(ConfirmAction::AbortMerge);
         Ok(())
     }
 
