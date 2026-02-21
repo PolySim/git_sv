@@ -90,7 +90,7 @@ fn build_status_bar<'a>(
 
 /// Construit la help bar.
 fn build_help_bar<'a>() -> Paragraph<'a> {
-    let help_text = "j/k:naviguer  o:ours  t:theirs  b:both  Enter:valider  Tab:fichier suivant  F:finaliser  q:abort  ?:aide";
+    let help_text = "Tab:panneau  ↑/↓:naviguer  o:ours  t:theirs  b:both  F:mode  Enter:valider  V:finaliser  q:abort  ?:aide";
 
     Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
@@ -354,9 +354,9 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
             "Navigation",
             Style::default().fg(Color::Yellow),
         )]),
-        Line::from("  j/k ou ↑/↓  - Naviguer entre les sections de conflit"),
-        Line::from("  Tab         - Passer au fichier en conflit suivant"),
-        Line::from("  Shift+Tab   - Passer au fichier en conflit précédent"),
+        Line::from("  ↑/↓ ou j/k  - Naviguer (fichiers / sections / lignes selon le panneau)"),
+        Line::from("  Tab         - Panneau suivant (Fichiers → Ours → Theirs → Résultat)"),
+        Line::from("  Shift+Tab   - Panneau précédent"),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Résolution",
@@ -371,7 +371,8 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
             "Actions globales",
             Style::default().fg(Color::Yellow),
         )]),
-        Line::from("  F           - Finaliser le merge (créer le commit)"),
+        Line::from("  F/B/L       - Changer le mode de résolution (File/Block/Line)"),
+        Line::from("  V           - Finaliser le merge (créer le commit)"),
         Line::from("  q ou Esc    - Annuler le merge et revenir au graph"),
         Line::from("  1/2/3       - Basculer vers Graph/Staging/Branches"),
         Line::from(""),

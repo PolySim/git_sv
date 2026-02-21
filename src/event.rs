@@ -161,7 +161,10 @@ impl EventHandler {
             AppAction::ConflictSwitchMode => self.handle_conflict_switch_mode()?,
             AppAction::ConflictLineDown => self.handle_conflict_line_down(),
             AppAction::ConflictLineUp => self.handle_conflict_line_up(),
-            AppAction::ConflictSwitchPanel => self.handle_conflict_switch_panel(),
+            AppAction::ConflictSwitchPanelForward => self.handle_conflict_switch_panel_forward(),
+            AppAction::ConflictSwitchPanelReverse => self.handle_conflict_switch_panel_reverse(),
+            AppAction::ConflictResultScrollDown => self.handle_conflict_result_scroll_down(),
+            AppAction::ConflictResultScrollUp => self.handle_conflict_result_scroll_up(),
             AppAction::ConflictValidateMerge => self.handle_conflict_validate_merge()?,
             AppAction::StashSelectedFile => self.handle_stash_selected_file()?,
             AppAction::StashUnstagedFiles => self.handle_stash_unstaged_files()?,
@@ -2467,7 +2470,7 @@ impl EventHandler {
         }
     }
 
-    fn handle_conflict_switch_panel(&mut self) {
+    fn handle_conflict_switch_panel_forward(&mut self) {
         use crate::state::ConflictPanelFocus;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
@@ -2477,6 +2480,31 @@ impl EventHandler {
                 ConflictPanelFocus::TheirsPanel => ConflictPanelFocus::ResultPanel,
                 ConflictPanelFocus::ResultPanel => ConflictPanelFocus::FileList,
             };
+        }
+    }
+
+    fn handle_conflict_switch_panel_reverse(&mut self) {
+        use crate::state::ConflictPanelFocus;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.panel_focus = match conflicts_state.panel_focus {
+                ConflictPanelFocus::FileList => ConflictPanelFocus::ResultPanel,
+                ConflictPanelFocus::ResultPanel => ConflictPanelFocus::TheirsPanel,
+                ConflictPanelFocus::TheirsPanel => ConflictPanelFocus::OursPanel,
+                ConflictPanelFocus::OursPanel => ConflictPanelFocus::FileList,
+            };
+        }
+    }
+
+    fn handle_conflict_result_scroll_down(&mut self) {
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.result_scroll = conflicts_state.result_scroll.saturating_add(1);
+        }
+    }
+
+    fn handle_conflict_result_scroll_up(&mut self) {
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.result_scroll = conflicts_state.result_scroll.saturating_sub(1);
         }
     }
 

@@ -171,8 +171,14 @@ pub enum AppAction {
     ConflictLineDown,
     /// En mode ligne : sélectionner la ligne précédente.
     ConflictLineUp,
-    /// Basculer le focus entre les panneaux (Ours/Theirs/Result).
-    ConflictSwitchPanel,
+    /// Basculer vers le panneau suivant (Tab).
+    ConflictSwitchPanelForward,
+    /// Basculer vers le panneau précédent (Shift+Tab).
+    ConflictSwitchPanelReverse,
+    /// Scroll vers le bas dans le panneau résultat.
+    ConflictResultScrollDown,
+    /// Scroll vers le haut dans le panneau résultat.
+    ConflictResultScrollUp,
     /// Valider le merge final (tous les conflits résolus).
     ConflictValidateMerge,
     /// Copier le contenu du panneau actif dans le clipboard.

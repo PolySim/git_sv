@@ -2,7 +2,8 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent,
 use std::time::Duration;
 
 use crate::state::{
-    AppAction, AppState, BranchesFocus, BranchesSection, FocusPanel, StagingFocus, ViewMode,
+    AppAction, AppState, BranchesFocus, BranchesSection, ConflictPanelFocus, FocusPanel,
+    StagingFocus, ViewMode,
 };
 
 /// Poll un événement clavier et retourne l'action correspondante.
@@ -380,6 +381,8 @@ fn map_blame_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
 
 /// Mappe les keybindings pour la vue de résolution de conflits.
 fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    use crate::git::conflict::ConflictResolutionMode;
+
     // Si une confirmation est en attente (pour ConflictValidateMerge)
     if state.pending_confirmation.is_some() {
         return match key.code {
@@ -390,48 +393,60 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
 
-    // Vérifier le mode actuel pour certains keybindings
-    let is_line_mode = state.conflicts_state.as_ref().map_or(false, |s| {
-        s.resolution_mode == crate::git::conflict::ConflictResolutionMode::Line
-    });
+    // Récupérer le panneau actif et le mode de résolution
+    let panel_focus = state.conflicts_state.as_ref().map(|s| s.panel_focus);
+    let resolution_mode = state
+        .conflicts_state
+        .as_ref()
+        .map_or(ConflictResolutionMode::Block, |s| s.resolution_mode);
 
     match key.code {
-        // Navigation entre fichiers (FileList uniquement)
-        KeyCode::Tab => Some(AppAction::ConflictNextFile),
-        KeyCode::BackTab => Some(AppAction::ConflictPrevFile),
-        // Basculer entre panneaux
-        KeyCode::Char('\t') if key.modifiers.contains(KeyModifiers::SHIFT) => {
-            Some(AppAction::ConflictSwitchPanel)
-        }
-        // Navigation dans les sections/lignes (selon le mode)
-        KeyCode::Char('j') | KeyCode::Down => {
-            if is_line_mode {
-                Some(AppAction::ConflictLineDown)
-            } else {
-                Some(AppAction::ConflictNextSection)
+        // Tab et Shift+Tab : basculer entre les panneaux
+        KeyCode::Tab => Some(AppAction::ConflictSwitchPanelForward),
+        KeyCode::BackTab => Some(AppAction::ConflictSwitchPanelReverse),
+
+        // Navigation flèches/j/k : dépend du panneau actif
+        KeyCode::Char('j') | KeyCode::Down => match panel_focus {
+            Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictNextFile),
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                match resolution_mode {
+                    ConflictResolutionMode::Line => Some(AppAction::ConflictLineDown),
+                    _ => Some(AppAction::ConflictNextSection),
+                }
             }
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            if is_line_mode {
-                Some(AppAction::ConflictLineUp)
-            } else {
-                Some(AppAction::ConflictPrevSection)
+            Some(ConflictPanelFocus::ResultPanel) => Some(AppAction::ConflictResultScrollDown),
+            _ => None,
+        },
+        KeyCode::Char('k') | KeyCode::Up => match panel_focus {
+            Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictPrevFile),
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                match resolution_mode {
+                    ConflictResolutionMode::Line => Some(AppAction::ConflictLineUp),
+                    _ => Some(AppAction::ConflictPrevSection),
+                }
             }
-        }
+            Some(ConflictPanelFocus::ResultPanel) => Some(AppAction::ConflictResultScrollUp),
+            _ => None,
+        },
+
         // Résolution
         KeyCode::Char('o') => Some(AppAction::ConflictChooseOurs),
         KeyCode::Char('t') => Some(AppAction::ConflictChooseTheirs),
         KeyCode::Char('b') => Some(AppAction::ConflictChooseBoth),
+
         // Changement de mode de résolution
         KeyCode::Char('F') => Some(AppAction::ConflictSwitchMode),
         KeyCode::Char('B') => Some(AppAction::ConflictSwitchMode),
         KeyCode::Char('L') => Some(AppAction::ConflictSwitchMode),
+
         // Validation
         KeyCode::Enter => Some(AppAction::ConflictResolveFile),
         KeyCode::Char('V') => Some(AppAction::ConflictValidateMerge),
         KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::ConflictAbort),
+
         // Vues
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
+
         // Navigation entre vues
         KeyCode::Char('1') => return Some(AppAction::SwitchToGraph),
         KeyCode::Char('2') => return Some(AppAction::SwitchToStaging),
