@@ -59,7 +59,7 @@ pub fn render(
     render_result_panel(frame, state, resolution_layout[2]);
 
     // Help bar
-    let help_bar = build_help_bar();
+    let help_bar = build_help_bar(state);
     frame.render_widget(help_bar, main_layout[2]);
 }
 
@@ -99,9 +99,18 @@ fn build_status_bar<'a>(
         .alignment(Alignment::Left)
 }
 
-/// Construit la help bar.
-fn build_help_bar<'a>() -> Paragraph<'a> {
-    let help_text = "Tab:panneau  ↑/↓:naviguer  o/t/b:résoudre  i:éditer résultat  F:mode  Enter:valider  V:finaliser  q:abort  ?:aide";
+/// Construit la help bar avec indication du mode actif.
+fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
+    let mode_indicator = match state.resolution_mode {
+        ConflictResolutionMode::File => "Mode:Fichier",
+        ConflictResolutionMode::Block => "Mode:Bloc",
+        ConflictResolutionMode::Line => "Mode:Ligne",
+    };
+
+    let help_text = format!(
+        "Tab:panneau  ↑/↓:naviguer  o/t/b:résoudre  i:éditer  F/B/L:mode  Enter:valider  V:finaliser  q:abort  ?:aide | {}",
+        mode_indicator
+    );
 
     Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
@@ -546,7 +555,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
             "Actions globales",
             Style::default().fg(Color::Yellow),
         )]),
-        Line::from("  F/B/L       - Changer le mode de résolution (File/Block/Line)"),
+        Line::from("  F/B/L       - Mode Fichier/Bloc/Ligne (touche directe)"),
         Line::from("  V           - Finaliser le merge (créer le commit)"),
         Line::from("  q ou Esc    - Annuler le merge et revenir au graph"),
         Line::from("  1/2/3       - Basculer vers Graph/Staging/Branches"),

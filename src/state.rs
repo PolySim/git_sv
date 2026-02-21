@@ -165,8 +165,12 @@ pub enum AppAction {
     StashSelectedFile,
     /// Stash tous les fichiers non staged.
     StashUnstagedFiles,
-    /// Changer le mode de résolution (File/Block/Line).
-    ConflictSwitchMode,
+    /// Définir le mode de résolution à Fichier.
+    ConflictSetModeFile,
+    /// Définir le mode de résolution à Bloc.
+    ConflictSetModeBlock,
+    /// Définir le mode de résolution à Ligne.
+    ConflictSetModeLine,
     /// En mode ligne : sélectionner la ligne suivante.
     ConflictLineDown,
     /// En mode ligne : sélectionner la ligne précédente.

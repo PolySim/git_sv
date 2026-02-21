@@ -158,7 +158,9 @@ impl EventHandler {
             AppAction::ConflictResolveFile => self.handle_conflict_resolve_file()?,
             AppAction::ConflictFinalize => self.handle_conflict_finalize()?,
             AppAction::ConflictAbort => self.handle_conflict_abort()?,
-            AppAction::ConflictSwitchMode => self.handle_conflict_switch_mode()?,
+            AppAction::ConflictSetModeFile => self.handle_conflict_set_mode_file()?,
+            AppAction::ConflictSetModeBlock => self.handle_conflict_set_mode_block()?,
+            AppAction::ConflictSetModeLine => self.handle_conflict_set_mode_line()?,
             AppAction::ConflictLineDown => self.handle_conflict_line_down(),
             AppAction::ConflictLineUp => self.handle_conflict_line_up(),
             AppAction::ConflictSwitchPanelForward => self.handle_conflict_switch_panel_forward(),
@@ -2644,15 +2646,31 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_conflict_switch_mode(&mut self) -> Result<()> {
+    fn handle_conflict_set_mode_file(&mut self) -> Result<()> {
         use crate::git::conflict::ConflictResolutionMode;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            conflicts_state.resolution_mode = match conflicts_state.resolution_mode {
-                ConflictResolutionMode::Block => ConflictResolutionMode::Line,
-                ConflictResolutionMode::Line => ConflictResolutionMode::File,
-                ConflictResolutionMode::File => ConflictResolutionMode::Block,
-            };
+            conflicts_state.resolution_mode = ConflictResolutionMode::File;
+            conflicts_state.line_selected = 0;
+        }
+        Ok(())
+    }
+
+    fn handle_conflict_set_mode_block(&mut self) -> Result<()> {
+        use crate::git::conflict::ConflictResolutionMode;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.resolution_mode = ConflictResolutionMode::Block;
+            conflicts_state.line_selected = 0;
+        }
+        Ok(())
+    }
+
+    fn handle_conflict_set_mode_line(&mut self) -> Result<()> {
+        use crate::git::conflict::ConflictResolutionMode;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            conflicts_state.resolution_mode = ConflictResolutionMode::Line;
             conflicts_state.line_selected = 0;
         }
         Ok(())

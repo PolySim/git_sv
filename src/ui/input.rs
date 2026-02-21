@@ -474,10 +474,10 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             }
         }
 
-        // Changement de mode de résolution
-        KeyCode::Char('F') => Some(AppAction::ConflictSwitchMode),
-        KeyCode::Char('B') => Some(AppAction::ConflictSwitchMode),
-        KeyCode::Char('L') => Some(AppAction::ConflictSwitchMode),
+        // Changement de mode de résolution (mapping direct)
+        KeyCode::Char('F') => Some(AppAction::ConflictSetModeFile),
+        KeyCode::Char('B') => Some(AppAction::ConflictSetModeBlock),
+        KeyCode::Char('L') => Some(AppAction::ConflictSetModeLine),
 
         // Validation
         KeyCode::Enter => Some(AppAction::ConflictResolveFile),
