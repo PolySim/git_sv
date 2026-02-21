@@ -503,10 +503,18 @@ pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
             ))
         })?;
 
-    // Ajouter le fichier à l'index (git add)
+    // Mettre à jour l'index pour marquer le conflit comme résolu
     let mut index = repo
         .index()
         .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+
+    // Supprimer explicitement toutes les entrées pour ce chemin (stages 0, 1, 2, 3)
+    // Cela nettoie les entrées de conflit (stages 1, 2, 3) si elles existent
+    index
+        .remove_path(std::path::Path::new(&file.path))
+        .ok(); // Ignorer l'erreur si le chemin n'existe pas
+
+    // Ajouter le fichier résolu à l'index (stage 0)
     index
         .add_path(std::path::Path::new(&file.path))
         .map_err(|e| {
@@ -535,11 +543,33 @@ pub fn abort_merge(repo: &Repository) -> Result<()> {
 
 /// Finalise le merge en créant le commit de merge.
 pub fn finalize_merge(repo: &Repository, message: &str) -> Result<()> {
-    // Vérifier qu'il n'y a plus de conflits
-    if has_conflicts(repo)? {
-        return Err(GitSvError::Other(
-            "Des conflits non résolus restent. Résolvez-les avant de finaliser.".into(),
-        ));
+    // Obtenir l'index pour vérification
+    let mut index = repo
+        .index()
+        .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+
+    // Vérification détaillée : aucun conflit ne doit subsister dans l'index
+    if index.has_conflicts() {
+        // Lister les conflits restants pour un message d'erreur utile
+        let remaining: Vec<String> = index
+            .conflicts()
+            .map_err(|e| {
+                GitSvError::Other(format!("Impossible de lister les conflits: {}", e))
+            })?
+            .filter_map(|c| c.ok())
+            .filter_map(|c| {
+                c.our
+                    .or(c.their)
+                    .or(c.ancestor)
+                    .and_then(|e| String::from_utf8(e.path).ok())
+            })
+            .collect();
+
+        return Err(GitSvError::Other(format!(
+            "Des conflits non résolus subsistent dans l'index : {:?}. \
+             Résolvez tous les fichiers avant de finaliser.",
+            remaining
+        )));
     }
 
     let signature = repo
@@ -552,11 +582,6 @@ pub fn finalize_merge(repo: &Repository, message: &str) -> Result<()> {
     let head_commit = head
         .peel_to_commit()
         .map_err(|e| GitSvError::Other(format!("Impossible de résoudre HEAD: {}", e)))?;
-
-    // Obtenir l'index
-    let mut index = repo
-        .index()
-        .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
 
     // Écrire l'arbre
     let tree_id = index
@@ -673,10 +698,12 @@ pub fn resolve_special_file(
             })?;
         }
 
-        // Supprimer de l'index
+        // Supprimer les entrées de l'index (y compris les entrées de conflit stages 1, 2, 3)
         let mut index = repo
             .index()
             .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+
+        // remove_path supprime toutes les entrées pour ce chemin (tous stages)
         index.remove_path(path).map_err(|e| {
             GitSvError::Other(format!(
                 "Impossible de retirer le fichier de l'index: {}",
@@ -741,10 +768,16 @@ pub fn resolve_special_file(
             ))
         })?;
 
-        // Ajouter à l'index
+        // Mettre à jour l'index
         let mut index = repo
             .index()
             .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
+
+        // Supprimer explicitement toutes les entrées pour ce chemin (stages 0, 1, 2, 3)
+        // Cela nettoie les entrées de conflit si elles existent
+        index.remove_path(path).ok(); // Ignorer l'erreur si le chemin n'existe pas
+
+        // Ajouter le fichier résolu à l'index (stage 0)
         index.add_path(path).map_err(|e| {
             GitSvError::Other(format!("Impossible d'ajouter le fichier à l'index: {}", e))
         })?;
