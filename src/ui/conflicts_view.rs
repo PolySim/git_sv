@@ -90,7 +90,7 @@ fn build_status_bar<'a>(
 
 /// Construit la help bar.
 fn build_help_bar<'a>() -> Paragraph<'a> {
-    let help_text = "Tab:panneau  ↑/↓:naviguer  o:ours  t:theirs  b:both  F:mode  Enter:valider  V:finaliser  q:abort  ?:aide";
+    let help_text = "Tab:panneau  ↑/↓:naviguer  o/t/b:résoudre (panneaux ours/theirs)  F:mode  Enter:valider  V:finaliser  q:abort  ?:aide";
 
     Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))

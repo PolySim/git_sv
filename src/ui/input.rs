@@ -429,10 +429,25 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
 
-        // Résolution
-        KeyCode::Char('o') => Some(AppAction::ConflictChooseOurs),
-        KeyCode::Char('t') => Some(AppAction::ConflictChooseTheirs),
-        KeyCode::Char('b') => Some(AppAction::ConflictChooseBoth),
+        // Résolution (uniquement dans les panneaux Ours/Theirs)
+        KeyCode::Char('o') => match panel_focus {
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                Some(AppAction::ConflictChooseOurs)
+            }
+            _ => None,
+        },
+        KeyCode::Char('t') => match panel_focus {
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                Some(AppAction::ConflictChooseTheirs)
+            }
+            _ => None,
+        },
+        KeyCode::Char('b') => match panel_focus {
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                Some(AppAction::ConflictChooseBoth)
+            }
+            _ => None,
+        },
 
         // Changement de mode de résolution
         KeyCode::Char('F') => Some(AppAction::ConflictSwitchMode),
