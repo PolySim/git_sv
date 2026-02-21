@@ -150,6 +150,8 @@ impl EventHandler {
             AppAction::SwitchToConflicts => self.handle_switch_to_conflicts(),
             AppAction::ConflictEnterResolve => self.handle_conflict_enter_resolve()?,
             AppAction::ConflictChooseBoth => self.handle_conflict_choose_both()?,
+            AppAction::ConflictFileChooseOurs => self.handle_conflict_file_choose_ours(),
+            AppAction::ConflictFileChooseTheirs => self.handle_conflict_file_choose_theirs(),
             AppAction::ConflictNextFile => self.handle_conflict_next_file(),
             AppAction::ConflictPrevFile => self.handle_conflict_prev_file(),
             AppAction::ConflictNextSection => self.handle_conflict_next_section(),
@@ -2404,6 +2406,88 @@ impl EventHandler {
             }
         }
         Ok(())
+    }
+
+    fn handle_conflict_file_choose_ours(&mut self) {
+        use crate::git::conflict::ConflictResolution;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            if let Some(ref mut file) = conflicts_state
+                .all_files
+                .get_mut(conflicts_state.file_selected)
+            {
+                // Résoudre toutes les sections en Ours
+                for section in &mut file.conflicts {
+                    section.resolution = Some(ConflictResolution::Ours);
+                    // Réinitialiser les éventuelles résolutions par ligne
+                    section.line_level_resolution = None;
+                }
+                file.is_resolved = true;
+
+                // Avancer au fichier suivant non résolu
+                self.advance_to_next_unresolved();
+            }
+        }
+    }
+
+    fn handle_conflict_file_choose_theirs(&mut self) {
+        use crate::git::conflict::ConflictResolution;
+
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            if let Some(ref mut file) = conflicts_state
+                .all_files
+                .get_mut(conflicts_state.file_selected)
+            {
+                // Résoudre toutes les sections en Theirs
+                for section in &mut file.conflicts {
+                    section.resolution = Some(ConflictResolution::Theirs);
+                    // Réinitialiser les éventuelles résolutions par ligne
+                    section.line_level_resolution = None;
+                }
+                file.is_resolved = true;
+
+                // Avancer au fichier suivant non résolu
+                self.advance_to_next_unresolved();
+            }
+        }
+    }
+
+    fn advance_to_next_unresolved(&mut self) {
+        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            let current = conflicts_state.file_selected;
+            let total = conflicts_state.all_files.len();
+
+            // Chercher le prochain fichier non résolu après le courant
+            for i in 1..total {
+                let idx = (current + i) % total;
+                if let Some(file) = conflicts_state.all_files.get(idx) {
+                    if !file.is_resolved {
+                        conflicts_state.file_selected = idx;
+                        conflicts_state.section_selected = 0;
+                        conflicts_state.line_selected = 0;
+                        conflicts_state.ours_scroll = 0;
+                        conflicts_state.theirs_scroll = 0;
+                        conflicts_state.result_scroll = 0;
+                        return;
+                    }
+                }
+            }
+
+            // Si tous les fichiers suivants sont résolus, chercher depuis le début
+            for i in 0..current {
+                if let Some(file) = conflicts_state.all_files.get(i) {
+                    if !file.is_resolved {
+                        conflicts_state.file_selected = i;
+                        conflicts_state.section_selected = 0;
+                        conflicts_state.line_selected = 0;
+                        conflicts_state.ours_scroll = 0;
+                        conflicts_state.theirs_scroll = 0;
+                        conflicts_state.result_scroll = 0;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     fn handle_conflict_next_file(&mut self) {

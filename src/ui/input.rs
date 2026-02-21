@@ -449,6 +449,16 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
 
+        // Résolution rapide depuis le panneau FileList
+        KeyCode::Char('o') | KeyCode::Left => match panel_focus {
+            Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictFileChooseOurs),
+            _ => None,
+        },
+        KeyCode::Char('t') | KeyCode::Right => match panel_focus {
+            Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictFileChooseTheirs),
+            _ => None,
+        },
+
         // Résolution "Both" uniquement en mode Bloc (depuis les panneaux Ours/Theirs)
         KeyCode::Char('b') => {
             if matches!(

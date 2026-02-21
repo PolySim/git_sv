@@ -145,6 +145,10 @@ pub enum AppAction {
     ConflictEnterResolve,
     /// Résoudre la section avec les deux (uniquement en mode Bloc).
     ConflictChooseBoth,
+    /// Choisir le fichier entier en Ours (depuis FileList).
+    ConflictFileChooseOurs,
+    /// Choisir le fichier entier en Theirs (depuis FileList).
+    ConflictFileChooseTheirs,
     /// Passer au fichier en conflit suivant.
     ConflictNextFile,
     /// Passer au fichier en conflit précédent.

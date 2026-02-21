@@ -107,10 +107,18 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
         ConflictResolutionMode::Line => "Mode:Ligne",
     };
 
-    let help_text = format!(
-        "Enter:Valider  Tab:Panneau  ↑↓:Nav  F/B/L:Mode  b:Les deux (Bloc)  i:Éditer  V:Finaliser  q:Quitter | {}",
-        mode_indicator
-    );
+    // Aide contextuelle selon le panneau actif
+    let help_text = if state.panel_focus == ConflictPanelFocus::FileList {
+        format!(
+            "o/←:Garder Ours  t/→:Garder Theirs  Tab:Panneau  ↑↓:Nav  V:Finaliser  q:Quitter | {}",
+            mode_indicator
+        )
+    } else {
+        format!(
+            "Enter:Valider  Tab:Panneau  ↑↓:Nav  F/B/L:Mode  b:Les deux (Bloc)  i:Éditer  V:Finaliser  q:Quitter | {}",
+            mode_indicator
+        )
+    };
 
     Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
@@ -158,6 +166,21 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 Some(ConflictType::BothModified) | None => "  ",
             };
 
+            // Déterminer la résolution choisie pour l'affichage
+            let resolution_label = if file.is_resolved {
+                // Prendre la résolution de la première section (toutes identiques après résolution rapide)
+                file.conflicts.first().and_then(|s| s.resolution).map_or(
+                    String::new(),
+                    |r| match r {
+                        ConflictResolution::Ours => " [Ours]".to_string(),
+                        ConflictResolution::Theirs => " [Theirs]".to_string(),
+                        ConflictResolution::Both => " [Les deux]".to_string(),
+                    },
+                )
+            } else {
+                String::new()
+            };
+
             let color = if file.is_resolved {
                 Color::Green
             } else {
@@ -173,7 +196,7 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 Style::default().fg(color)
             };
 
-            let label = format!("{} {} {}", status_icon, type_icon, file.path);
+            let label = format!("{} {}{}{}", status_icon, type_icon, file.path, resolution_label);
             ListItem::new(label).style(style)
         })
         .collect();
