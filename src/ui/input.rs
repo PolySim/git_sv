@@ -449,25 +449,18 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
 
-        // Résolution (uniquement dans les panneaux Ours/Theirs)
-        KeyCode::Char('o') => match panel_focus {
-            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
-                Some(AppAction::ConflictChooseOurs)
-            }
-            _ => None,
-        },
-        KeyCode::Char('t') => match panel_focus {
-            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
-                Some(AppAction::ConflictChooseTheirs)
-            }
-            _ => None,
-        },
-        KeyCode::Char('b') => match panel_focus {
-            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+        // Résolution "Both" uniquement en mode Bloc (depuis les panneaux Ours/Theirs)
+        KeyCode::Char('b') => {
+            if matches!(
+                panel_focus,
+                Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel)
+            ) && resolution_mode == ConflictResolutionMode::Block
+            {
                 Some(AppAction::ConflictChooseBoth)
+            } else {
+                None
             }
-            _ => None,
-        },
+        }
 
         // Mode édition (panneau résultat uniquement)
         KeyCode::Char('i') | KeyCode::Char('e') => {
@@ -483,20 +476,15 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('B') => Some(AppAction::ConflictSetModeBlock),
         KeyCode::Char('L') => Some(AppAction::ConflictSetModeLine),
 
-        // Validation / Toggle ligne selon le mode
-        KeyCode::Enter => {
-            // En mode Ligne avec focus sur Ours ou Theirs, toggle la ligne
-            if conflicts_state.as_ref().map_or(false, |cs| {
-                cs.resolution_mode == ConflictResolutionMode::Line
-            }) && matches!(
-                panel_focus,
-                Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel)
-            ) {
-                Some(AppAction::ConflictToggleLine)
-            } else {
-                Some(AppAction::ConflictResolveFile)
+        // Enter: validation contextuelle selon le panneau et le mode
+        KeyCode::Enter => match panel_focus {
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                // En mode Ligne, Enter toggle la ligne courante
+                // En mode Fichier/Bloc, Enter résout selon le panneau actif
+                Some(AppAction::ConflictEnterResolve)
             }
-        }
+            _ => None,
+        },
         KeyCode::Char('V') => Some(AppAction::ConflictValidateMerge),
         KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::ConflictAbort),
 

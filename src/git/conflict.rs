@@ -88,6 +88,13 @@ pub enum ConflictResolution {
     Both,
 }
 
+/// Côté de résolution (déterminé par le panneau actif).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ResolutionSide {
+    Ours,
+    Theirs,
+}
+
 /// Section de conflit enrichie.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConflictSection {

@@ -108,7 +108,7 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
     };
 
     let help_text = format!(
-        "Tab:panneau  ↑/↓:naviguer  o/t/b:résoudre  i:éditer  F/B/L:mode  Enter:valider  V:finaliser  q:abort  ?:aide | {}",
+        "Enter:Valider  Tab:Panneau  ↑↓:Nav  F/B/L:Mode  b:Les deux (Bloc)  i:Éditer  V:Finaliser  q:Quitter | {}",
         mode_indicator
     );
 

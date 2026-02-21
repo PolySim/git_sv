@@ -141,11 +141,9 @@ pub enum AppAction {
     MergePickerCancel,
     /// Basculer vers la vue conflits.
     SwitchToConflicts,
-    /// Résoudre la section avec "ours".
-    ConflictChooseOurs,
-    /// Résoudre la section avec "theirs".
-    ConflictChooseTheirs,
-    /// Résoudre la section avec les deux.
+    /// Valider la résolution depuis le panneau courant (Enter contextuel selon le panneau et le mode).
+    ConflictEnterResolve,
+    /// Résoudre la section avec les deux (uniquement en mode Bloc).
     ConflictChooseBoth,
     /// Passer au fichier en conflit suivant.
     ConflictNextFile,

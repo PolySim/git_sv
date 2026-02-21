@@ -148,8 +148,7 @@ impl EventHandler {
             AppAction::MergePickerConfirm => self.handle_merge_picker_confirm()?,
             AppAction::MergePickerCancel => self.handle_merge_picker_cancel(),
             AppAction::SwitchToConflicts => self.handle_switch_to_conflicts(),
-            AppAction::ConflictChooseOurs => self.handle_conflict_choose_ours()?,
-            AppAction::ConflictChooseTheirs => self.handle_conflict_choose_theirs()?,
+            AppAction::ConflictEnterResolve => self.handle_conflict_enter_resolve()?,
             AppAction::ConflictChooseBoth => self.handle_conflict_choose_both()?,
             AppAction::ConflictNextFile => self.handle_conflict_next_file(),
             AppAction::ConflictPrevFile => self.handle_conflict_prev_file(),
@@ -2259,101 +2258,96 @@ impl EventHandler {
         }
     }
 
-    fn handle_conflict_choose_ours(&mut self) -> Result<()> {
-        use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
+    fn handle_conflict_enter_resolve(&mut self) -> Result<()> {
+        use crate::git::conflict::{ConflictResolution, ConflictResolutionMode, ResolutionSide};
+        use crate::state::ConflictPanelFocus;
 
         if let Some(ref mut conflicts_state) = self.state.conflicts_state {
+            // Déterminer le côté selon le panneau actif
+            let side = match conflicts_state.panel_focus {
+                ConflictPanelFocus::OursPanel => ResolutionSide::Ours,
+                ConflictPanelFocus::TheirsPanel => ResolutionSide::Theirs,
+                _ => return Ok(()), // Pas de résolution depuis FileList ou Result
+            };
+
             let mode = conflicts_state.resolution_mode;
-            let is_file_mode = mode == ConflictResolutionMode::File;
-            let is_line_mode = mode == ConflictResolutionMode::Line;
+            let resolution = match side {
+                ResolutionSide::Ours => ConflictResolution::Ours,
+                ResolutionSide::Theirs => ConflictResolution::Theirs,
+            };
 
             if let Some(ref mut file) = conflicts_state
                 .all_files
                 .get_mut(conflicts_state.file_selected)
             {
-                if is_file_mode {
-                    // En mode Fichier, résoudre toutes les sections d'un coup
-                    for section in &mut file.conflicts {
-                        section.resolution = Some(ConflictResolution::Ours);
-                        // Mettre à jour aussi les line_level_resolution
-                        if let Some(ref mut lr) = section.line_level_resolution {
-                            lr.ours_lines_included.fill(true);
-                            lr.theirs_lines_included.fill(false);
-                            lr.touched = true;
+                match mode {
+                    ConflictResolutionMode::File => {
+                        // En mode Fichier, résoudre toutes les sections d'un coup
+                        for section in &mut file.conflicts {
+                            section.resolution = Some(resolution);
+                            // Mettre à jour aussi les line_level_resolution
+                            if let Some(ref mut lr) = section.line_level_resolution {
+                                match side {
+                                    ResolutionSide::Ours => {
+                                        lr.ours_lines_included.fill(true);
+                                        lr.theirs_lines_included.fill(false);
+                                    }
+                                    ResolutionSide::Theirs => {
+                                        lr.ours_lines_included.fill(false);
+                                        lr.theirs_lines_included.fill(true);
+                                    }
+                                }
+                                lr.touched = true;
+                            }
+                        }
+                        file.is_resolved = true;
+                    }
+                    ConflictResolutionMode::Block => {
+                        // En mode Block, résoudre seulement la section courante
+                        if let Some(ref mut section) =
+                            file.conflicts.get_mut(conflicts_state.section_selected)
+                        {
+                            section.resolution = Some(resolution);
+                            file.is_resolved =
+                                file.conflicts.iter().all(|s| s.resolution.is_some());
                         }
                     }
-                    file.is_resolved = true;
-                } else if is_line_mode {
-                    // En mode Ligne, sélectionner toutes les lignes ours et désélectionner theirs
-                    if let Some(ref mut section) =
-                        file.conflicts.get_mut(conflicts_state.section_selected)
-                    {
-                        if let Some(ref mut lr) = section.line_level_resolution {
-                            lr.ours_lines_included.fill(true);
-                            lr.theirs_lines_included.fill(false);
-                            lr.touched = true;
+                    ConflictResolutionMode::Line => {
+                        // En mode Ligne, toggle la ligne courante selon le panneau
+                        if let Some(ref mut section) =
+                            file.conflicts.get_mut(conflicts_state.section_selected)
+                        {
+                            let line_idx = conflicts_state.line_selected;
+                            if let Some(ref mut lr) = section.line_level_resolution {
+                                match side {
+                                    ResolutionSide::Ours => {
+                                        if line_idx < lr.ours_lines_included.len() {
+                                            lr.ours_lines_included[line_idx] =
+                                                !lr.ours_lines_included[line_idx];
+                                            lr.touched = true;
+                                        }
+                                    }
+                                    ResolutionSide::Theirs => {
+                                        if line_idx < lr.theirs_lines_included.len() {
+                                            lr.theirs_lines_included[line_idx] =
+                                                !lr.theirs_lines_included[line_idx];
+                                            lr.touched = true;
+                                        }
+                                    }
+                                }
+                                // Mettre à jour la résolution de section selon les lignes sélectionnées
+                                let has_ours = lr.ours_lines_included.iter().any(|&b| b);
+                                let has_theirs = lr.theirs_lines_included.iter().any(|&b| b);
+                                section.resolution = match (has_ours, has_theirs) {
+                                    (true, true) => Some(ConflictResolution::Both),
+                                    (true, false) => Some(ConflictResolution::Ours),
+                                    (false, true) => Some(ConflictResolution::Theirs),
+                                    (false, false) => None,
+                                };
+                                file.is_resolved =
+                                    file.conflicts.iter().all(|s| s.resolution.is_some());
+                            }
                         }
-                        section.resolution = Some(ConflictResolution::Ours);
-                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
-                    }
-                } else {
-                    // En mode Block, résoudre seulement la section courante
-                    if let Some(ref mut section) =
-                        file.conflicts.get_mut(conflicts_state.section_selected)
-                    {
-                        section.resolution = Some(ConflictResolution::Ours);
-                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_conflict_choose_theirs(&mut self) -> Result<()> {
-        use crate::git::conflict::{ConflictResolution, ConflictResolutionMode};
-
-        if let Some(ref mut conflicts_state) = self.state.conflicts_state {
-            let mode = conflicts_state.resolution_mode;
-            let is_file_mode = mode == ConflictResolutionMode::File;
-            let is_line_mode = mode == ConflictResolutionMode::Line;
-
-            if let Some(ref mut file) = conflicts_state
-                .all_files
-                .get_mut(conflicts_state.file_selected)
-            {
-                if is_file_mode {
-                    // En mode Fichier, résoudre toutes les sections d'un coup
-                    for section in &mut file.conflicts {
-                        section.resolution = Some(ConflictResolution::Theirs);
-                        // Mettre à jour aussi les line_level_resolution
-                        if let Some(ref mut lr) = section.line_level_resolution {
-                            lr.ours_lines_included.fill(false);
-                            lr.theirs_lines_included.fill(true);
-                            lr.touched = true;
-                        }
-                    }
-                    file.is_resolved = true;
-                } else if is_line_mode {
-                    // En mode Ligne, sélectionner toutes les lignes theirs et désélectionner ours
-                    if let Some(ref mut section) =
-                        file.conflicts.get_mut(conflicts_state.section_selected)
-                    {
-                        if let Some(ref mut lr) = section.line_level_resolution {
-                            lr.ours_lines_included.fill(false);
-                            lr.theirs_lines_included.fill(true);
-                            lr.touched = true;
-                        }
-                        section.resolution = Some(ConflictResolution::Theirs);
-                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
-                    }
-                } else {
-                    // En mode Block, résoudre seulement la section courante
-                    if let Some(ref mut section) =
-                        file.conflicts.get_mut(conflicts_state.section_selected)
-                    {
-                        section.resolution = Some(ConflictResolution::Theirs);
-                        file.is_resolved = file.conflicts.iter().all(|s| s.resolution.is_some());
                     }
                 }
             }
