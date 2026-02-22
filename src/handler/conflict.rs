@@ -104,13 +104,27 @@ fn handle_switch_panel(state: &mut AppState) -> Result<()> {
 fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
     use crate::git::conflict::{ConflictResolution, resolve_file_with_strategy};
 
-    if let Some(ref mut conflicts) = state.conflicts_state {
-        if let Some(file) = conflicts.all_files.get(conflicts.file_selected).cloned() {
-            if let Err(e) = resolve_file_with_strategy(&state.repo.repo, &file.path, ConflictResolution::Ours) {
-                state.set_flash_message(format!("Erreur: {}", e));
-            } else {
-                state.set_flash_message(format!("Accepté 'ours' pour {}", file.path));
+    let file_path = state.conflicts_state.as_ref()
+        .and_then(|c| c.all_files.get(c.file_selected))
+        .map(|f| f.path.clone());
+
+    if let (Some(path), Some(file_index)) = (file_path, state.conflicts_state.as_ref().map(|c| c.file_selected)) {
+        if let Err(e) = resolve_file_with_strategy(&state.repo.repo, &path, ConflictResolution::Ours) {
+            state.set_flash_message(format!("Erreur: {}", e));
+        } else {
+            // Mettre à jour l'état en mémoire
+            if let Some(ref mut conflicts) = state.conflicts_state {
+                if let Some(file) = conflicts.all_files.get_mut(file_index) {
+                    file.is_resolved = true;
+                    for conflict in &mut file.conflicts {
+                        conflict.resolution = Some(ConflictResolution::Ours);
+                    }
+                }
+                // Avancer au fichier suivant non résolu
+                advance_to_next_unresolved(conflicts);
             }
+            state.mark_dirty();
+            state.set_flash_message(format!("Accepté 'ours' pour {}", path));
         }
     }
     Ok(())
@@ -119,13 +133,27 @@ fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
 fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
     use crate::git::conflict::{ConflictResolution, resolve_file_with_strategy};
 
-    if let Some(ref mut conflicts) = state.conflicts_state {
-        if let Some(file) = conflicts.all_files.get(conflicts.file_selected).cloned() {
-            if let Err(e) = resolve_file_with_strategy(&state.repo.repo, &file.path, ConflictResolution::Theirs) {
-                state.set_flash_message(format!("Erreur: {}", e));
-            } else {
-                state.set_flash_message(format!("Accepté 'theirs' pour {}", file.path));
+    let file_path = state.conflicts_state.as_ref()
+        .and_then(|c| c.all_files.get(c.file_selected))
+        .map(|f| f.path.clone());
+
+    if let (Some(path), Some(file_index)) = (file_path, state.conflicts_state.as_ref().map(|c| c.file_selected)) {
+        if let Err(e) = resolve_file_with_strategy(&state.repo.repo, &path, ConflictResolution::Theirs) {
+            state.set_flash_message(format!("Erreur: {}", e));
+        } else {
+            // Mettre à jour l'état en mémoire
+            if let Some(ref mut conflicts) = state.conflicts_state {
+                if let Some(file) = conflicts.all_files.get_mut(file_index) {
+                    file.is_resolved = true;
+                    for conflict in &mut file.conflicts {
+                        conflict.resolution = Some(ConflictResolution::Theirs);
+                    }
+                }
+                // Avancer au fichier suivant non résolu
+                advance_to_next_unresolved(conflicts);
             }
+            state.mark_dirty();
+            state.set_flash_message(format!("Accepté 'theirs' pour {}", path));
         }
     }
     Ok(())
@@ -334,4 +362,34 @@ fn handle_leave_view(state: &mut AppState) -> Result<()> {
 fn handle_enter_resolve(_state: &mut AppState) -> Result<()> {
     // Logique à implémenter
     Ok(())
+}
+
+/// Avance à la sélection au prochain fichier non résolu.
+fn advance_to_next_unresolved(conflicts: &mut crate::state::ConflictsState) {
+    let current = conflicts.file_selected;
+    let total = conflicts.all_files.len();
+
+    // Chercher un fichier non résolu après le courant
+    for i in (current + 1)..total {
+        if let Some(file) = conflicts.all_files.get(i) {
+            if !file.is_resolved {
+                conflicts.file_selected = i;
+                conflicts.section_selected = 0;
+                return;
+            }
+        }
+    }
+
+    // Si aucun trouvé après, chercher depuis le début
+    for i in 0..current {
+        if let Some(file) = conflicts.all_files.get(i) {
+            if !file.is_resolved {
+                conflicts.file_selected = i;
+                conflicts.section_selected = 0;
+                return;
+            }
+        }
+    }
+
+    // Si tous les fichiers sont résolus, rester sur le courant
 }

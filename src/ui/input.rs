@@ -480,6 +480,11 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictFileChooseTheirs),
             _ => None,
         },
+        // Marquer comme résolu depuis le panneau FileList
+        KeyCode::Char('r') => match panel_focus {
+            Some(ConflictPanelFocus::FileList) => Some(AppAction::ConflictResolveFile),
+            _ => None,
+        },
 
         // Résolution "Both" uniquement en mode Bloc (depuis les panneaux Ours/Theirs)
         KeyCode::Char('b') => {
