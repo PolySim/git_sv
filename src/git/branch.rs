@@ -1,4 +1,5 @@
 use git2::{Branch, BranchType, Repository};
+use std::time::SystemTime;
 
 use crate::error::Result;
 
@@ -7,8 +8,12 @@ use crate::error::Result;
 pub struct BranchInfo {
     pub name: String,
     pub is_head: bool,
+    /// Indique si c'est une branche distante (remote)
+    pub is_remote: bool,
     /// Dernier message de commit sur cette branche.
     pub last_commit_message: Option<String>,
+    /// Date du dernier commit sur cette branche.
+    pub last_commit_date: Option<SystemTime>,
     /// Nombre de commits d'avance/retard par rapport à la branche tracking.
     pub ahead: Option<usize>,
     pub behind: Option<usize>,
@@ -16,11 +21,13 @@ pub struct BranchInfo {
 
 impl BranchInfo {
     /// Crée un BranchInfo simple (pour compatibilité avec le code existant).
-    pub fn simple(name: String, is_head: bool, _is_remote: bool) -> Self {
+    pub fn simple(name: String, is_head: bool, is_remote: bool) -> Self {
         Self {
             name,
             is_head,
+            is_remote,
             last_commit_message: None,
+            last_commit_date: None,
             ahead: None,
             behind: None,
         }
@@ -38,8 +45,12 @@ fn build_local_branch_info(
     let name = branch.name()?.unwrap_or("???").to_string();
 
     // Récupérer les métadonnées du dernier commit.
-    let (last_msg, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit() {
+    let (last_msg, last_date, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit() {
         let msg = reference.summary().map(|s| s.to_string());
+
+        // Convertir le timestamp en SystemTime
+        let date = reference.time().seconds();
+        let system_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(date as u64);
 
         // Calculer ahead/behind si tracking.
         // CORRECTION: Un seul appel à graph_ahead_behind au lieu de deux
@@ -55,15 +66,17 @@ fn build_local_branch_info(
             (None, None)
         };
 
-        (msg, ahead_count, behind_count)
+        (msg, Some(system_time), ahead_count, behind_count)
     } else {
-        (None, None, None)
+        (None, None, None, None)
     };
 
     Ok(BranchInfo {
         name,
         is_head,
+        is_remote: false,
         last_commit_message: last_msg,
+        last_commit_date: last_date,
         ahead,
         behind,
     })
@@ -74,16 +87,24 @@ fn build_remote_branch_info(branch: &Branch) -> Result<BranchInfo> {
     let name = branch.name()?.unwrap_or("???").to_string();
 
     // Récupérer les métadonnées du dernier commit.
-    let last_msg = if let Ok(reference) = branch.get().peel_to_commit() {
-        reference.summary().map(|s| s.to_string())
+    let (last_msg, last_date) = if let Ok(reference) = branch.get().peel_to_commit() {
+        let msg = reference.summary().map(|s| s.to_string());
+
+        // Convertir le timestamp en SystemTime
+        let date = reference.time().seconds();
+        let system_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(date as u64);
+
+        (msg, Some(system_time))
     } else {
-        None
+        (None, None)
     };
 
     Ok(BranchInfo {
         name,
         is_head: false,
+        is_remote: true,
         last_commit_message: last_msg,
+        last_commit_date: last_date,
         ahead: None,
         behind: None,
     })
@@ -181,10 +202,12 @@ mod tests {
         // Vérifier que main est la branche HEAD
         let main_branch = branches.iter().find(|b| b.name == "main").unwrap();
         assert!(main_branch.is_head);
+        assert!(!main_branch.is_remote);
 
         // Vérifier que feature n'est pas HEAD
         let feature_branch = branches.iter().find(|b| b.name == "feature").unwrap();
         assert!(!feature_branch.is_head);
+        assert!(!feature_branch.is_remote);
     }
 
     #[test]
@@ -199,6 +222,7 @@ mod tests {
         // Devrait avoir 1 branche locale (main)
         assert_eq!(local.len(), 1);
         assert_eq!(local[0].name, "main");
+        assert!(!local[0].is_remote);
 
         // Pas de remote configuré
         assert!(remote.is_empty());
@@ -220,6 +244,7 @@ mod tests {
 
         let new_branch = branches.iter().find(|b| b.name == "new-feature").unwrap();
         assert!(!new_branch.is_head); // N'est pas HEAD
+        assert!(!new_branch.is_remote);
     }
 
     #[test]

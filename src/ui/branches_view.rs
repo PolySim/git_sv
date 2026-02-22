@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
 use crate::ui::common::centered_rect;
+use crate::utils::time::format_relative_time;
 
 /// Rend la vue complète branches/worktrees/stashes.
 pub fn render(
@@ -229,6 +230,21 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
                 ]),
             ];
 
+            // Afficher la date du dernier commit si disponible
+            if let Some(date) = branch.last_commit_date {
+                let timestamp_secs = date
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                lines.push(Line::from(vec![
+                    Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        format_relative_time(timestamp_secs),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                ]));
+            }
+
             if let Some(ref msg) = branch.last_commit_message {
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![Span::styled(
@@ -268,6 +284,21 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(format!("{} / {}", ahead, behind)),
+            ]));
+        }
+
+        // Afficher la date du dernier commit si disponible
+        if let Some(date) = branch.last_commit_date {
+            let timestamp_secs = date
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            lines.push(Line::from(vec![
+                Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format_relative_time(timestamp_secs),
+                    Style::default().fg(Color::Cyan),
+                ),
             ]));
         }
 

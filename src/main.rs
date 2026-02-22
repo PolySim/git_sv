@@ -1,5 +1,6 @@
 mod app;
 mod error;
+mod error_display;
 mod event;
 mod git;
 mod state;

@@ -1,5 +1,6 @@
 use crate::git::blame::FileBlame;
 use crate::state::BlameState;
+use crate::utils::time::format_relative_time;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -27,10 +28,16 @@ impl Widget for BlameView<'_> {
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area);
 
-        // Titre
+        // Titre avec le chemin du fichier
+        let title = if let Some(ref blame) = self.state.blame {
+            format!(" Blame: {} ", blame.path)
+        } else {
+            format!(" Blame: {} ", self.state.file_path)
+        };
+
         let title_block = Block::default()
             .borders(Borders::ALL)
-            .title(format!(" Blame: {} ", self.state.file_path))
+            .title(title)
             .style(Style::default().fg(Color::Cyan));
         title_block.render(chunks[0], buf);
 
@@ -70,7 +77,8 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
     // Calculer la largeur maximale des colonnes
     let max_line_num_width = blame.lines.len().to_string().len().max(4);
     let hash_width = 7;
-    let author_width = 15;
+    let author_width = 12;
+    let time_width = 10;
 
     // Rendu ligne par ligne
     for (i, blame_line) in blame.lines[start..end].iter().enumerate() {
@@ -107,6 +115,27 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
             Style::default().fg(Color::Cyan).bg(bg_color),
         );
 
+        // Date relative du commit
+        let timestamp_secs = blame_line
+            .timestamp
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let relative_time = format_relative_time(timestamp_secs);
+        // Tronquer pour garder un format compact
+        let time_display = if relative_time.len() > time_width {
+            format!("{:.width$}…", relative_time, width = time_width.saturating_sub(1))
+        } else {
+            format!("{:width$}", relative_time, width = time_width)
+        };
+        let time_span = Span::styled(
+            format!(" {} ", time_display),
+            Style::default()
+                .fg(Color::Gray)
+                .bg(bg_color)
+                .add_modifier(Modifier::DIM),
+        );
+
         // Numéro de ligne
         let line_num_span = Span::styled(
             format!(
@@ -124,7 +153,7 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         let content_span = Span::styled(&blame_line.content, Style::default().bg(bg_color));
 
         // Construire la ligne complète
-        let line = Line::from(vec![hash_span, author_span, line_num_span, content_span]);
+        let line = Line::from(vec![hash_span, author_span, time_span, line_num_span, content_span]);
 
         // Rendu de la ligne
         let line_area = Rect {

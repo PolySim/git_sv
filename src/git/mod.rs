@@ -5,6 +5,7 @@ pub mod conflict;
 pub mod diff;
 pub mod discard;
 pub mod graph;
+pub mod helpers;
 pub mod merge;
 pub mod remote;
 pub mod repo;

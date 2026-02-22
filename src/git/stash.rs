@@ -205,11 +205,10 @@ pub fn stash_file(repo_path: &str, file_path: &str, message: Option<&str>) -> Re
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(crate::error::GitSvError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("git stash failed: {}", stderr),
-        ))
-        .into());
+        return Err(crate::error::GitSvError::OperationFailed {
+            operation: "stash_file",
+            details: format!("git stash failed: {}", stderr),
+        });
     }
 
     Ok(())
@@ -229,11 +228,10 @@ pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<()
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(crate::error::GitSvError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("git stash failed: {}", stderr),
-        ))
-        .into());
+        return Err(crate::error::GitSvError::OperationFailed {
+            operation: "stash_unstaged_files",
+            details: format!("git stash failed: {}", stderr),
+        });
     }
 
     Ok(())

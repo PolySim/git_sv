@@ -2,6 +2,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
 
 use crate::error::{GitSvError, Result};
+use crate::error_display::format_error_message;
 use crate::state::{AppAction, AppState};
 use crate::ui;
 use crate::ui::confirm_dialog::ConfirmAction;
@@ -500,9 +501,16 @@ impl EventHandler {
         if self.state.show_branch_panel {
             self.state.show_branch_panel = false;
         } else {
-            self.state.branches = self.state.repo.branches().unwrap_or_default();
-            self.state.branch_selected = 0;
-            self.state.show_branch_panel = true;
+            match self.state.repo.branches() {
+                Ok(branches) => {
+                    self.state.branches = branches;
+                    self.state.branch_selected = 0;
+                    self.state.show_branch_panel = true;
+                }
+                Err(e) => {
+                    self.state.set_flash_message(format_error_message(&e));
+                }
+            }
         }
         Ok(())
     }
@@ -1256,7 +1264,7 @@ impl EventHandler {
         self.state.view_mode = ViewMode::Staging;
 
         // Rafraîchir les données de staging si nécessaire
-        let all_entries = self.state.repo.status().unwrap_or_default();
+        let all_entries = self.state.repo.status()?;
         self.state.staging_state.staged_files = all_entries
             .iter()
             .filter(|e| e.is_staged())
@@ -1310,7 +1318,9 @@ impl EventHandler {
                     );
                 } else {
                     // Demander confirmation
-                    let current_branch = self.state.current_branch.clone().unwrap_or_default();
+                    let current_branch = self.state.current_branch.clone().ok_or_else(|| {
+                        GitSvError::InvalidState("Aucune branche courante".into())
+                    })?;
                     self.state.pending_confirmation = Some(ConfirmAction::MergeBranch(
                         branch.name.clone(),
                         current_branch,
@@ -1327,11 +1337,13 @@ impl EventHandler {
     // Helper methods
     fn update_commit_files(&mut self) {
         if let Some(row) = self.state.graph.get(self.state.selected_index) {
-            self.state.commit_files = self
-                .state
-                .repo
-                .commit_diff(row.node.oid)
-                .unwrap_or_default();
+            match self.state.repo.commit_diff(row.node.oid) {
+                Ok(files) => self.state.commit_files = files,
+                Err(e) => {
+                    self.state.set_flash_message(format_error_message(&e));
+                    self.state.commit_files.clear();
+                }
+            }
         } else {
             self.state.commit_files.clear();
         }
@@ -1535,8 +1547,24 @@ impl EventHandler {
         use crate::state::MAX_COMMITS;
 
         self.state.current_branch = self.state.repo.current_branch().ok();
-        self.state.graph = self.state.repo.build_graph(MAX_COMMITS).unwrap_or_default();
-        self.state.status_entries = self.state.repo.status().unwrap_or_default();
+
+        // Rafraîchir le graph avec gestion d'erreur
+        match self.state.repo.build_graph(MAX_COMMITS) {
+            Ok(graph) => self.state.graph = graph,
+            Err(e) => {
+                self.state.set_flash_message(format_error_message(&e));
+                // Garder l'ancien graph plutôt que le vider
+            }
+        }
+
+        // Rafraîchir le status avec gestion d'erreur
+        match self.state.repo.status() {
+            Ok(entries) => self.state.status_entries = entries,
+            Err(e) => {
+                self.state.set_flash_message(format_error_message(&e));
+                self.state.status_entries.clear();
+            }
+        }
 
         // Réajuster la sélection si nécessaire.
         if self.state.selected_index >= self.state.graph.len() && !self.state.graph.is_empty() {
@@ -1613,8 +1641,24 @@ impl EventHandler {
 
         self.state.branches_view_state.local_branches = local_branches;
         self.state.branches_view_state.remote_branches = remote_branches;
-        self.state.branches_view_state.worktrees = self.state.repo.worktrees().unwrap_or_default();
-        self.state.branches_view_state.stashes = self.state.repo.stashes().unwrap_or_default();
+
+        // Rafraîchir les worktrees avec gestion d'erreur
+        match self.state.repo.worktrees() {
+            Ok(worktrees) => self.state.branches_view_state.worktrees = worktrees,
+            Err(e) => {
+                self.state.set_flash_message(format_error_message(&e));
+                self.state.branches_view_state.worktrees.clear();
+            }
+        }
+
+        // Rafraîchir les stashes avec gestion d'erreur
+        match self.state.repo.stashes() {
+            Ok(stashes) => self.state.branches_view_state.stashes = stashes,
+            Err(e) => {
+                self.state.set_flash_message(format_error_message(&e));
+                self.state.branches_view_state.stashes.clear();
+            }
+        }
 
         // Réajuster les sélections.
         if self.state.branches_view_state.branch_selected
@@ -2276,12 +2320,13 @@ impl EventHandler {
                 let ours_name =
                     crate::git::conflict::get_current_branch_name(&self.state.repo.repo);
                 let theirs_name = branch_name.to_string();
+                let current_branch = self.state.current_branch.clone().unwrap_or_else(|| "HEAD".to_string());
                 self.state.conflicts_state = Some(ConflictsState::new(
                     files,
                     format!(
                         "Merge de '{}' dans '{}'",
                         branch_name,
-                        self.state.current_branch.clone().unwrap_or_default()
+                        current_branch
                     ),
                     ours_name,
                     theirs_name,
