@@ -37,6 +37,10 @@ pub struct Theme {
     pub text_secondary: Color,
     /// Couleur de fond générale
     pub background: Color,
+    /// Couleur de fond pour "ours" (conflits)
+    pub ours_bg: Color,
+    /// Couleur de fond pour "theirs" (conflits)
+    pub theirs_bg: Color,
 }
 
 impl Theme {
@@ -59,6 +63,8 @@ impl Theme {
             text_normal: Color::White,
             text_secondary: Color::Gray,
             background: Color::Black,
+            ours_bg: Color::Indexed(22),    // Vert très foncé
+            theirs_bg: Color::Indexed(17),  // Bleu très foncé
         }
     }
 
@@ -81,6 +87,8 @@ impl Theme {
             text_normal: Color::Black,
             text_secondary: Color::DarkGray,
             background: Color::White,
+            ours_bg: Color::Indexed(194),   // Vert très clair
+            theirs_bg: Color::Indexed(189), // Bleu très clair
         }
     }
 

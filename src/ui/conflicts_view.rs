@@ -2,7 +2,7 @@
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
@@ -591,7 +591,7 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
 
     if cursor_col >= chars.len() {
         // Curseur en fin de ligne : tout le texte normal + espace inversé
-        spans.push(Span::raw(line.to_string()));
+        spans.push(Span::styled(line.to_string(), Style::default().fg(theme.text_normal)));
         spans.push(Span::styled(
             " ",
             Style::default().bg(theme.selection_fg).fg(theme.selection_bg),
@@ -600,7 +600,7 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
         // Texte avant le curseur
         if cursor_col > 0 {
             let before: String = chars[..cursor_col].iter().collect();
-            spans.push(Span::raw(before));
+            spans.push(Span::styled(before, Style::default().fg(theme.text_normal)));
         }
 
         // Caractère sous le curseur (inversé)
@@ -613,7 +613,7 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
         // Texte après le curseur
         if cursor_col + 1 < chars.len() {
             let after: String = chars[cursor_col + 1..].iter().collect();
-            spans.push(Span::raw(after));
+            spans.push(Span::styled(after, Style::default().fg(theme.text_normal)));
         }
     }
 
@@ -682,7 +682,7 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                     Line::from(vec![
                         Span::styled(line_num, Style::default().fg(theme.text_secondary)),
                         Span::raw(" "),
-                        Span::raw(content),
+                        Span::styled(content.to_string(), Style::default().fg(theme.text_normal)),
                     ])
                 }
             })
@@ -697,8 +697,8 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             .map(|(_idx, rline)| {
                 let style = match rline.source {
                     LineSource::Context => Style::default().fg(theme.text_normal),
-                    LineSource::Ours => Style::default().bg(Color::Indexed(22)).fg(theme.text_normal), // Vert foncé pour compatibilité
-                    LineSource::Theirs => Style::default().bg(Color::Indexed(17)).fg(theme.text_normal), // Bleu foncé pour compatibilité
+                    LineSource::Ours => Style::default().bg(theme.ours_bg).fg(theme.text_normal),
+                    LineSource::Theirs => Style::default().bg(theme.theirs_bg).fg(theme.text_normal),
                     LineSource::ConflictMarker => Style::default()
                         .fg(theme.warning)
                         .add_modifier(Modifier::BOLD),

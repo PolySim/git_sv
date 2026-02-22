@@ -2,7 +2,7 @@
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -47,7 +47,8 @@ pub fn render(
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
-        .border_style(border_style);
+        .border_style(border_style)
+        .style(Style::default().bg(theme.background));
 
     // Layout interne
     let inner = popup_area.inner(Margin::new(2, 1));
@@ -163,7 +164,8 @@ fn render_filter_field(
     let (bg_color, fg_color) = if is_selected {
         (theme.selection_bg, theme.selection_fg)
     } else {
-        (theme.background, theme.text_secondary)
+        // Utiliser text_normal pour une meilleure lisibilité (White sur Black en sombre, Black sur White en clair)
+        (theme.background, theme.text_normal)
     };
 
     let display_value = if value.is_empty() {
