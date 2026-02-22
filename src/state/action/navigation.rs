@@ -24,4 +24,6 @@ pub enum NavigationAction {
     FileUp,
     /// Naviguer vers le bas dans le panneau de fichiers
     FileDown,
+    /// Retourner au focus Graph (depuis BottomLeft/Files)
+    BackToGraph,
 }

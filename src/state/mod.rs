@@ -271,8 +271,20 @@ impl AppState {
     }
 
     /// Met à jour graph_view à partir de la sélection legacy.
+    /// Recharge également les fichiers du commit sélectionné.
     pub fn sync_legacy_selection(&mut self) {
         self.graph_view.rows.select(self.selected_index);
+        // Recharger les fichiers du commit sélectionné
+        if let Some(row) = self.graph.get(self.selected_index) {
+            self.commit_files = self.repo.commit_diff(row.node.oid).unwrap_or_default();
+            // Réinitialiser la sélection de fichier si nécessaire
+            if self.file_selected_index >= self.commit_files.len() {
+                self.file_selected_index = 0;
+            }
+        } else {
+            self.commit_files.clear();
+            self.file_selected_index = 0;
+        }
     }
 }
 

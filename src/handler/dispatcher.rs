@@ -4,7 +4,7 @@
 //! modulaire où chaque type d'action est géré par un handler spécialisé.
 
 use crate::error::Result;
-use crate::state::{AppAction, AppState, ViewMode};
+use crate::state::{AppAction, AppState, ViewMode, FocusPanel};
 use crate::state::action::{NavigationAction, GitAction, StagingAction, BranchAction, ConflictAction, SearchAction, EditAction, FilterAction};
 
 use super::traits::{ActionHandler, HandlerContext};
@@ -104,8 +104,19 @@ impl ActionDispatcher {
             }
 
             AppAction::Select => {
-                // Pour l'instant, Select ne fait rien de spécial en mode Graph général
-                // Les handlers spécifiques gèrent leurs propres logiques de sélection
+                // En mode Graph avec focus sur Graph, Enter bascule vers le panneau fichiers (BottomLeft)
+                // pour afficher les fichiers modifiés du commit sélectionné et leur diff.
+                if ctx.state.view_mode == ViewMode::Graph
+                    && ctx.state.focus == FocusPanel::Graph
+                {
+                    ctx.state.focus = FocusPanel::BottomLeft;
+                    // Réinitialiser la sélection de fichier pour commencer au début de la liste
+                    ctx.state.file_selected_index = 0;
+                    // S'assurer que les fichiers du commit actuel sont chargés
+                    if let Some(row) = ctx.state.graph.get(ctx.state.selected_index) {
+                        ctx.state.commit_files = ctx.state.repo.commit_diff(row.node.oid).unwrap_or_default();
+                    }
+                }
                 Ok(())
             }
 

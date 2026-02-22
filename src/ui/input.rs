@@ -169,10 +169,17 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return Some(AppAction::ToggleHelp);
     }
 
-    // Escape pour revenir au panneau précédent quand on est dans Files ou Detail.
+    // Escape pour revenir au panneau précédent quand on est dans Files, Detail ou BottomLeft.
     if key.code == KeyCode::Esc {
-        if state.focus == FocusPanel::Detail {
-            return Some(AppAction::SwitchBottomMode);
+        match state.focus {
+            FocusPanel::Detail => {
+                return Some(AppAction::SwitchBottomMode);
+            }
+            FocusPanel::Files | FocusPanel::BottomLeft => {
+                // Retourner au focus Graph depuis le panneau fichiers
+                return Some(AppAction::Navigation(crate::state::action::NavigationAction::BackToGraph));
+            }
+            _ => {}
         }
     }
 

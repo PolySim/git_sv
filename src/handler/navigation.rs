@@ -24,6 +24,7 @@ impl ActionHandler for NavigationHandler {
             NavigationAction::ScrollDiffDown => handle_scroll_diff_down(ctx.state),
             NavigationAction::FileUp => handle_file_up(ctx.state),
             NavigationAction::FileDown => handle_file_down(ctx.state),
+            NavigationAction::BackToGraph => handle_back_to_graph(ctx.state),
         }
 
         Ok(())
@@ -189,6 +190,13 @@ fn handle_file_down(state: &mut AppState) {
     if state.file_selected_index + 1 < state.commit_files.len() {
         state.file_selected_index += 1;
         state.graph_view.file_selected_index = state.file_selected_index;
+    }
+}
+
+fn handle_back_to_graph(state: &mut AppState) {
+    // Retourner au focus Graph (utilisé par Esc depuis BottomLeft/Files)
+    if state.view_mode == ViewMode::Graph {
+        state.focus = FocusPanel::Graph;
     }
 }
 
