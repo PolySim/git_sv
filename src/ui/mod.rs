@@ -18,6 +18,7 @@ pub mod layout;
 pub mod loading;
 pub mod merge_picker;
 pub mod nav_bar;
+pub mod search_bar;
 pub mod staging_layout;
 pub mod staging_view;
 pub mod status_bar;
@@ -127,7 +128,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
 /// Rend la vue Graph (vue principale).
 fn render_graph_view(frame: &mut Frame, state: &AppState) {
-    let layout = layout::build_layout(frame.area());
+    let layout = layout::build_layout(frame.area(), state.search_state.is_active);
 
     // Rendu de la status bar en haut.
     status_bar::render(
@@ -219,6 +220,11 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
         state.bottom_left_mode.clone(),
         layout.help_bar,
     );
+
+    // Rendu de la barre de recherche (si active).
+    if let Some(search_area) = layout.search_bar {
+        search_bar::render(frame, &state.search_state, search_area);
+    }
 
     // Panneau de branches (si actif).
     if state.show_branch_panel {

@@ -12,13 +12,15 @@ pub struct LayoutChunks {
     pub bottom_left: Rect,
     /// Zone du panneau bas-droit (détail).
     pub bottom_right: Rect,
+    /// Zone de la barre de recherche (3 lignes en bas, optionnelle).
+    pub search_bar: Option<Rect>,
     /// Zone de la barre d'aide (1 ligne en bas).
     pub help_bar: Rect,
 }
 
 /// Construit le layout principal de l'application.
 ///
-/// Disposition :
+/// Disposition sans recherche :
 /// ┌───────────────────────────┐
 /// │    Status Bar (1 ligne)   │
 /// ├───────────────────────────┤
@@ -30,15 +32,33 @@ pub struct LayoutChunks {
 /// ├──────────────┴────────────┤
 /// │       Help Bar (1 ligne)  │
 /// └───────────────────────────┘
-pub fn build_layout(area: Rect) -> LayoutChunks {
-    // Split vertical : status bar + nav bar + contenu principal + help bar.
+///
+/// Disposition avec recherche :
+/// ┌───────────────────────────┐
+/// │    Status Bar (1 ligne)   │
+/// ├───────────────────────────┤
+/// │    Navigation Bar (1)     │
+/// ├───────────────────────────┤
+/// │       Graph (60%)         │
+/// ├──────────────┬────────────┤
+/// │ Files (50%)  │Detail (50%)│
+/// ├──────────────┴────────────┤
+/// │      Search Bar (3 lignes)│
+/// ├───────────────────────────┤
+/// │       Help Bar (1 ligne)  │
+/// └───────────────────────────┘
+pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
+    let search_height = if show_search { 3 } else { 0 };
+
+    // Split vertical : status bar + nav bar + contenu principal + [search bar] + help bar.
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Status bar
-            Constraint::Length(1), // Navigation bar
-            Constraint::Min(0),    // Contenu principal
-            Constraint::Length(1), // Help bar
+            Constraint::Length(1),              // Status bar
+            Constraint::Length(1),              // Navigation bar
+            Constraint::Min(0),                 // Contenu principal
+            Constraint::Length(search_height),  // Search bar (optionnel)
+            Constraint::Length(1),              // Help bar
         ])
         .split(area);
 
@@ -60,6 +80,7 @@ pub fn build_layout(area: Rect) -> LayoutChunks {
         graph: main_chunks[0],
         bottom_left: bottom_chunks[0],
         bottom_right: bottom_chunks[1],
-        help_bar: outer[3],
+        search_bar: if show_search { Some(outer[3]) } else { None },
+        help_bar: outer[4],
     }
 }

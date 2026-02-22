@@ -15,6 +15,8 @@ impl ActionHandler for SearchHandler {
         match action {
             SearchAction::Open => handle_open(ctx.state),
             SearchAction::Close => handle_close(ctx.state),
+            SearchAction::InsertChar(c) => handle_insert_char(ctx.state, c),
+            SearchAction::DeleteChar => handle_delete_char(ctx.state),
             SearchAction::NextResult => handle_next_result(ctx.state),
             SearchAction::PreviousResult => handle_previous_result(ctx.state),
             SearchAction::ChangeType => handle_change_type(ctx.state),
@@ -35,6 +37,24 @@ fn handle_close(state: &mut AppState) -> Result<()> {
     state.search_state.is_active = false;
     state.search_state.query.clear();
     state.search_state.results.clear();
+    Ok(())
+}
+
+fn handle_insert_char(state: &mut AppState, c: char) -> Result<()> {
+    state.search_state.query.push(c);
+    state.search_state.cursor += 1;
+    // Exécuter la recherche incrémentale automatiquement
+    handle_execute(state)?;
+    Ok(())
+}
+
+fn handle_delete_char(state: &mut AppState) -> Result<()> {
+    if state.search_state.cursor > 0 && !state.search_state.query.is_empty() {
+        state.search_state.cursor -= 1;
+        state.search_state.query.remove(state.search_state.cursor);
+        // Exécuter la recherche incrémentale automatiquement
+        handle_execute(state)?;
+    }
     Ok(())
 }
 

@@ -6,6 +6,10 @@ pub enum SearchAction {
     Open,
     /// Fermer la recherche
     Close,
+    /// Insérer un caractère dans la recherche
+    InsertChar(char),
+    /// Supprimer le caractère avant le curseur
+    DeleteChar,
     /// Résultat suivant
     NextResult,
     /// Résultat précédent

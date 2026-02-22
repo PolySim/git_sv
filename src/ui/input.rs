@@ -5,6 +5,7 @@ use crate::state::{
     AppAction, AppState, BranchesFocus, BranchesSection, ConflictPanelFocus, FocusPanel,
     StagingFocus, ViewMode,
 };
+use crate::state::action::SearchAction;
 
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
@@ -58,17 +59,17 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Si la recherche est active, gérer les inputs de recherche
     if state.search_state.is_active {
         return match key.code {
-            KeyCode::Esc => Some(AppAction::CloseSearch),
-            KeyCode::Enter => Some(AppAction::NextSearchResult),
+            KeyCode::Esc => Some(AppAction::Search(SearchAction::Close)),
+            KeyCode::Enter => Some(AppAction::Search(SearchAction::Execute)),
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(AppAction::NextSearchResult)
+                Some(AppAction::Search(SearchAction::NextResult))
             }
             KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(AppAction::PrevSearchResult)
+                Some(AppAction::Search(SearchAction::PreviousResult))
             }
-            KeyCode::Tab => Some(AppAction::ChangeSearchType),
-            KeyCode::Char(c) => Some(AppAction::InsertChar(c)),
-            KeyCode::Backspace => Some(AppAction::DeleteChar),
+            KeyCode::Tab => Some(AppAction::Search(SearchAction::ChangeType)),
+            KeyCode::Char(c) => Some(AppAction::Search(SearchAction::InsertChar(c))),
+            KeyCode::Backspace => Some(AppAction::Search(SearchAction::DeleteChar)),
             _ => None,
         };
     }
