@@ -1,9 +1,9 @@
 //! Handler pour les actions d'édition de texte.
 
-use crate::error::Result;
-use crate::state::AppState;
-use crate::state::action::EditAction;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::state::action::EditAction;
+use crate::state::AppState;
 
 /// Handler pour les opérations d'édition de texte.
 pub struct EditHandler;

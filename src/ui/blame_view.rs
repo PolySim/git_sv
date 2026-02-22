@@ -124,7 +124,11 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         let relative_time = format_relative_time(timestamp_secs);
         // Tronquer pour garder un format compact
         let time_display = if relative_time.len() > time_width {
-            format!("{:.width$}…", relative_time, width = time_width.saturating_sub(1))
+            format!(
+                "{:.width$}…",
+                relative_time,
+                width = time_width.saturating_sub(1)
+            )
         } else {
             format!("{:width$}", relative_time, width = time_width)
         };
@@ -153,7 +157,13 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         let content_span = Span::styled(&blame_line.content, Style::default().bg(bg_color));
 
         // Construire la ligne complète
-        let line = Line::from(vec![hash_span, author_span, time_span, line_num_span, content_span]);
+        let line = Line::from(vec![
+            hash_span,
+            author_span,
+            time_span,
+            line_num_span,
+            content_span,
+        ]);
 
         // Rendu de la ligne
         let line_area = Rect {

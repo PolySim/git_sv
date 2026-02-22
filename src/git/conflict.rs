@@ -1156,11 +1156,20 @@ pub fn generate_resolved_content_with_source(
 
 /// Vérifie si toutes les sections d'un fichier sont résolues.
 pub fn all_sections_resolved(file: &MergeFile) -> bool {
-    file.conflicts.iter().all(|c| c.resolution.is_some() || c.line_level_resolution.as_ref().map_or(false, |lr| lr.touched))
+    file.conflicts.iter().all(|c| {
+        c.resolution.is_some()
+            || c.line_level_resolution
+                .as_ref()
+                .map_or(false, |lr| lr.touched)
+    })
 }
 
 /// Applique le contenu résolu d'un fichier sur le disque et met à jour l'index git.
-pub fn apply_resolved_content(repo: &Repository, file: &MergeFile, mode: ConflictResolutionMode) -> Result<()> {
+pub fn apply_resolved_content(
+    repo: &Repository,
+    file: &MergeFile,
+    mode: ConflictResolutionMode,
+) -> Result<()> {
     // Générer le contenu résolu
     let resolved_lines = generate_resolved_content_with_source(file, mode);
     let content: String = resolved_lines
@@ -1168,26 +1177,37 @@ pub fn apply_resolved_content(repo: &Repository, file: &MergeFile, mode: Conflic
         .map(|line| line.content)
         .collect::<Vec<_>>()
         .join("\n");
-    
+
     // Écrire le contenu sur le disque
-    std::fs::write(&file.path, &content)
-        .map_err(|e| GitSvError::Other(format!("Impossible d'écrire le fichier '{}': {}", file.path, e)))?;
-    
+    std::fs::write(&file.path, &content).map_err(|e| {
+        GitSvError::Other(format!(
+            "Impossible d'écrire le fichier '{}': {}",
+            file.path, e
+        ))
+    })?;
+
     // Mettre à jour l'index git
-    let mut index = repo.index()
+    let mut index = repo
+        .index()
         .map_err(|e| GitSvError::Other(format!("Impossible d'accéder à l'index: {}", e)))?;
-    
+
     // Supprimer les entrées de conflit (stages 1/2/3)
-    index.remove_path(Path::new(&file.path))
-        .map_err(|e| GitSvError::Other(format!("Impossible de supprimer le conflit de l'index: {}", e)))?;
-    
+    index.remove_path(Path::new(&file.path)).map_err(|e| {
+        GitSvError::Other(format!(
+            "Impossible de supprimer le conflit de l'index: {}",
+            e
+        ))
+    })?;
+
     // Ajouter le fichier résolu à l'index (stage 0)
-    index.add_path(Path::new(&file.path))
-        .map_err(|e| GitSvError::Other(format!("Impossible d'ajouter le fichier à l'index: {}", e)))?;
-    
+    index.add_path(Path::new(&file.path)).map_err(|e| {
+        GitSvError::Other(format!("Impossible d'ajouter le fichier à l'index: {}", e))
+    })?;
+
     // Écrire l'index
-    index.write()
+    index
+        .write()
         .map_err(|e| GitSvError::Other(format!("Impossible d'écrire l'index: {}", e)))?;
-    
+
     Ok(())
 }

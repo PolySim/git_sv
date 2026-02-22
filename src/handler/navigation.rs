@@ -1,9 +1,9 @@
 //! Handler pour les actions de navigation.
 
-use crate::error::Result;
-use crate::state::{AppState, ViewMode, FocusPanel, StagingFocus, BranchesSection};
-use crate::state::action::NavigationAction;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::state::action::NavigationAction;
+use crate::state::{AppState, BranchesSection, FocusPanel, StagingFocus, ViewMode};
 
 /// Handler pour la navigation dans les listes.
 pub struct NavigationHandler;
@@ -107,7 +107,8 @@ fn handle_page_down(state: &mut AppState) {
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {
                 let page_size = 10;
-                state.selected_index = (state.selected_index + page_size).min(state.graph.len() - 1);
+                state.selected_index =
+                    (state.selected_index + page_size).min(state.graph.len() - 1);
                 state.graph_state.select(Some(state.selected_index * 2));
                 state.sync_legacy_selection();
             }
@@ -252,7 +253,10 @@ fn handle_branches_navigation(state: &mut AppState, direction: i32) {
                 let new_idx = if direction > 0 {
                     (state.branches_view_state.branch_selected() + 1).min(max - 1)
                 } else {
-                    state.branches_view_state.branch_selected().saturating_sub(1)
+                    state
+                        .branches_view_state
+                        .branch_selected()
+                        .saturating_sub(1)
                 };
                 state.branches_view_state.set_branch_selected(new_idx);
             }
@@ -263,7 +267,10 @@ fn handle_branches_navigation(state: &mut AppState, direction: i32) {
                 let new_idx = if direction > 0 {
                     (state.branches_view_state.worktree_selected() + 1).min(max - 1)
                 } else {
-                    state.branches_view_state.worktree_selected().saturating_sub(1)
+                    state
+                        .branches_view_state
+                        .worktree_selected()
+                        .saturating_sub(1)
                 };
                 state.branches_view_state.set_worktree_selected(new_idx);
             }
@@ -302,9 +309,9 @@ fn handle_blame_navigation(state: &mut AppState, delta: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::graph::{CommitNode, GraphRow};
     use crate::git::repo::GitRepo;
     use crate::state::selection::ListSelection;
-    use crate::git::graph::{GraphRow, CommitNode};
     use git2::Oid;
 
     /// Helper pour créer un état de test avec un graph de taille donnée.
@@ -325,10 +332,12 @@ mod tests {
         let mut index = repo.index().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
 
         let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
-        let mut state = AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
+        let mut state =
+            AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
 
         // Créer un graph de test
         let graph: Vec<GraphRow> = (0..size)
@@ -395,7 +404,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
 
         assert_eq!(state.selected_index, 3);
     }
@@ -409,7 +420,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
 
         assert_eq!(state.selected_index, 4);
     }
@@ -439,7 +452,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::PageDown).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::PageDown)
+            .unwrap();
 
         assert_eq!(state.selected_index, 15); // 5 + 10 = 15
     }
@@ -467,7 +482,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::GoBottom).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::GoBottom)
+            .unwrap();
 
         assert_eq!(state.selected_index, 19);
     }

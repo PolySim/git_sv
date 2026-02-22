@@ -1,12 +1,12 @@
 //! Composant liste stylisé et réutilisable.
 
+use super::{block::StyledBlock, style::highlight_style};
 use ratatui::{
     layout::Rect,
     style::Style,
     widgets::{List, ListItem, ListState},
     Frame,
 };
-use super::{block::StyledBlock, style::highlight_style};
 
 /// Configuration pour une liste stylisée.
 pub struct StyledList<'a> {

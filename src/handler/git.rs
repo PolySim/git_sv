@@ -1,9 +1,9 @@
 //! Handler pour les actions Git (remote, blame, cherry-pick, etc.).
 
-use crate::error::Result;
-use crate::state::{AppState, ViewMode, FocusPanel, BlameState, StagingFocus};
-use crate::state::action::GitAction;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::state::action::GitAction;
+use crate::state::{AppState, BlameState, FocusPanel, StagingFocus, ViewMode};
 
 /// Handler pour les opérations Git.
 pub struct GitHandler;
@@ -31,16 +31,14 @@ impl ActionHandler for GitHandler {
 
 fn handle_push(state: &mut AppState) -> Result<()> {
     match crate::git::remote::has_remote(&state.repo.repo) {
-        Ok(true) => {
-            match crate::git::remote::push_current_branch(&state.repo.repo) {
-                Ok(msg) => {
-                    state.set_flash_message(format!("{} ✓", msg));
-                }
-                Err(e) => {
-                    state.set_flash_message(format!("Erreur lors du push: {}", e));
-                }
+        Ok(true) => match crate::git::remote::push_current_branch(&state.repo.repo) {
+            Ok(msg) => {
+                state.set_flash_message(format!("{} ✓", msg));
             }
-        }
+            Err(e) => {
+                state.set_flash_message(format!("Erreur lors du push: {}", e));
+            }
+        },
         Ok(false) => {
             state.set_flash_message("Aucun remote configuré".to_string());
         }
@@ -56,39 +54,40 @@ fn handle_pull(state: &mut AppState) -> Result<()> {
     use crate::state::ConflictsState;
 
     match crate::git::remote::has_remote(&state.repo.repo) {
-        Ok(true) => {
-            match crate::git::remote::pull_current_branch_with_result(&state.repo.repo) {
-                Ok(MergeResult::UpToDate) => {
-                    state.set_flash_message("Déjà à jour ✓".to_string());
-                }
-                Ok(MergeResult::FastForward) => {
-                    state.set_flash_message("Pull (fast-forward) réussi ✓".to_string());
-                    state.mark_dirty();
-                }
-                Ok(MergeResult::Success) => {
-                    state.set_flash_message("Pull réussi ✓".to_string());
-                    state.mark_dirty();
-                }
-                Ok(MergeResult::Conflicts(files)) => {
-                    let ours_name = crate::git::conflict::get_current_branch_name(&state.repo.repo);
-                    let theirs_name = format!(
-                        "origin/{}",
-                        state.current_branch.clone().unwrap_or_else(|| "HEAD".to_string())
-                    );
-                    state.conflicts_state = Some(ConflictsState::new(
-                        files,
-                        "Pull depuis origin".to_string(),
-                        ours_name,
-                        theirs_name,
-                    ));
-                    state.view_mode = ViewMode::Conflicts;
-                    state.set_flash_message("Conflits lors du pull - résolution requise".to_string());
-                }
-                Err(e) => {
-                    state.set_flash_message(format!("Erreur lors du pull: {}", e));
-                }
+        Ok(true) => match crate::git::remote::pull_current_branch_with_result(&state.repo.repo) {
+            Ok(MergeResult::UpToDate) => {
+                state.set_flash_message("Déjà à jour ✓".to_string());
             }
-        }
+            Ok(MergeResult::FastForward) => {
+                state.set_flash_message("Pull (fast-forward) réussi ✓".to_string());
+                state.mark_dirty();
+            }
+            Ok(MergeResult::Success) => {
+                state.set_flash_message("Pull réussi ✓".to_string());
+                state.mark_dirty();
+            }
+            Ok(MergeResult::Conflicts(files)) => {
+                let ours_name = crate::git::conflict::get_current_branch_name(&state.repo.repo);
+                let theirs_name = format!(
+                    "origin/{}",
+                    state
+                        .current_branch
+                        .clone()
+                        .unwrap_or_else(|| "HEAD".to_string())
+                );
+                state.conflicts_state = Some(ConflictsState::new(
+                    files,
+                    "Pull depuis origin".to_string(),
+                    ours_name,
+                    theirs_name,
+                ));
+                state.view_mode = ViewMode::Conflicts;
+                state.set_flash_message("Conflits lors du pull - résolution requise".to_string());
+            }
+            Err(e) => {
+                state.set_flash_message(format!("Erreur lors du pull: {}", e));
+            }
+        },
         Ok(false) => {
             state.set_flash_message("Aucun remote configuré".to_string());
         }
@@ -101,17 +100,15 @@ fn handle_pull(state: &mut AppState) -> Result<()> {
 
 fn handle_fetch(state: &mut AppState) -> Result<()> {
     match crate::git::remote::has_remote(&state.repo.repo) {
-        Ok(true) => {
-            match crate::git::remote::fetch_all(&state.repo.repo) {
-                Ok(_) => {
-                    state.set_flash_message("Fetch réussi ✓".to_string());
-                    state.mark_dirty();
-                }
-                Err(e) => {
-                    state.set_flash_message(format!("Erreur lors du fetch: {}", e));
-                }
+        Ok(true) => match crate::git::remote::fetch_all(&state.repo.repo) {
+            Ok(_) => {
+                state.set_flash_message("Fetch réussi ✓".to_string());
+                state.mark_dirty();
             }
-        }
+            Err(e) => {
+                state.set_flash_message(format!("Erreur lors du fetch: {}", e));
+            }
+        },
         Ok(false) => {
             state.set_flash_message("Aucun remote configuré".to_string());
         }
@@ -233,7 +230,11 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
                 state.view_mode = ViewMode::Graph;
 
                 // Chercher le commit dans le graphe
-                if let Some(index) = state.graph.iter().position(|row| row.node.oid == target_oid) {
+                if let Some(index) = state
+                    .graph
+                    .iter()
+                    .position(|row| row.node.oid == target_oid)
+                {
                     state.selected_index = index;
                     state.graph_state.select(Some(index * 2));
                     state.sync_legacy_selection();

@@ -1,7 +1,7 @@
 //! Création de states de test.
 
-use crate::state::{ViewMode, StagingState, BranchesViewState};
 use crate::state::selection::ListSelection;
+use crate::state::{BranchesViewState, StagingState, ViewMode};
 
 /// Builder pour créer des AppState de test.
 pub struct TestStateBuilder {

@@ -96,6 +96,9 @@ impl ConflictsState {
 
     /// Nombre de fichiers avec des conflits restants.
     pub fn remaining_conflicts(&self) -> usize {
-        self.all_files.iter().filter(|f| f.has_conflicts && !f.is_resolved).count()
+        self.all_files
+            .iter()
+            .filter(|f| f.has_conflicts && !f.is_resolved)
+            .count()
     }
 }

@@ -8,6 +8,7 @@ mod terminal;
 mod test_utils;
 mod ui;
 mod utils;
+mod watcher;
 
 use clap::{Parser, Subcommand};
 

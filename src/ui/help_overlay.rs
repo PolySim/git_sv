@@ -48,7 +48,6 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("Enter", "Détail / action"),
         key_line("Tab", "Basculer panneaux"),
         Line::from(""),
-
         // ── Vues ──
         section_header("Vues"),
         separator(),
@@ -57,7 +56,6 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("3", "Vue Branches"),
         key_line("4", "Vue Conflits (si actifs)"),
         Line::from(""),
-
         // ── Actions Git ──
         section_header("Actions Git"),
         separator(),
@@ -71,7 +69,6 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("x", "Cherry-pick"),
         key_line("B", "Blame du fichier"),
         Line::from(""),
-
         // ── Recherche & Filtre ──
         section_header("Recherche & Filtre"),
         separator(),
@@ -79,7 +76,6 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("n / N", "Résultat suivant / précédent"),
         key_line("F", "Filtre avancé"),
         Line::from(""),
-
         // ── Interface ──
         section_header("Interface"),
         separator(),
@@ -88,7 +84,6 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("y", "Copier dans le clipboard"),
         key_line("q", "Quitter"),
         Line::from(""),
-
         Line::from(vec![Span::styled(
             "Esc ou ? pour fermer",
             Style::default()

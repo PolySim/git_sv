@@ -73,15 +73,15 @@ impl RepositoryLike for MockRepo {
     fn current_branch(&self) -> Option<&str> {
         self.current_branch.as_deref()
     }
-    
+
     fn list_branches(&self) -> Vec<String> {
         self.branches.iter().map(|b| b.name.clone()).collect()
     }
-    
+
     fn staged_files(&self) -> &[String] {
         &self.staged_files
     }
-    
+
     fn unstaged_files(&self) -> &[String] {
         &self.unstaged_files
     }

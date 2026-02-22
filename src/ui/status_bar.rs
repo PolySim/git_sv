@@ -49,7 +49,10 @@ pub fn render(
     // Construire la ligne.
     let mut spans = vec![
         Span::styled("git_sv  ", Style::default().fg(theme.primary)),
-        Span::styled(format!("{}  ", branch), Style::default().fg(theme.commit_hash)),
+        Span::styled(
+            format!("{}  ", branch),
+            Style::default().fg(theme.commit_hash),
+        ),
         status_text,
     ];
 

@@ -1,9 +1,9 @@
 //! Handler pour les actions de filtrage du graph.
 
-use crate::error::Result;
-use crate::state::AppState;
-use crate::state::action::FilterAction;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::state::action::FilterAction;
+use crate::state::AppState;
 
 /// Handler pour les opérations de filtrage.
 pub struct FilterHandler;

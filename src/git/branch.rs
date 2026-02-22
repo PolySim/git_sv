@@ -45,7 +45,8 @@ fn build_local_branch_info(
     let name = branch.name()?.unwrap_or("???").to_string();
 
     // Récupérer les métadonnées du dernier commit.
-    let (last_msg, last_date, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit() {
+    let (last_msg, last_date, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit()
+    {
         let msg = reference.summary().map(|s| s.to_string());
 
         // Convertir le timestamp en SystemTime

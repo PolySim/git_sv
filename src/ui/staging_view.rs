@@ -213,14 +213,12 @@ fn render_commit_input(
         Style::default().fg(theme.text_normal)
     };
 
-    let paragraph = Paragraph::new(display_text)
-        .style(text_style)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(border_style),
-        );
+    let paragraph = Paragraph::new(display_text).style(text_style).block(
+        Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(border_style),
+    );
 
     frame.render_widget(paragraph, area);
 
@@ -249,7 +247,12 @@ fn render_commit_input(
 }
 
 /// Rend la barre d'aide de la vue staging.
-fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect, theme: &crate::ui::theme::Theme) {
+fn render_staging_help(
+    frame: &mut Frame,
+    focus: &StagingFocus,
+    area: Rect,
+    theme: &crate::ui::theme::Theme,
+) {
     let help_text = match focus {
         StagingFocus::Unstaged => {
             "j/k:nav  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit  P:push  1:graph  q:quit"
@@ -268,5 +271,8 @@ fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect, them
         Style::default().fg(theme.text_secondary),
     )]);
 
-    frame.render_widget(Paragraph::new(line).style(Style::default().bg(theme.background)), area);
+    frame.render_widget(
+        Paragraph::new(line).style(Style::default().bg(theme.background)),
+        area,
+    );
 }

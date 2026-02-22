@@ -1,12 +1,12 @@
 //! Composant de base pour les popups et dialogues.
 
+use super::{rect::centered_rect, style::border_style};
 use ratatui::{
     layout::Rect,
     text::Line,
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
-use super::{rect::centered_rect, style::border_style};
 
 /// Configuration pour un popup.
 pub struct Popup<'a> {

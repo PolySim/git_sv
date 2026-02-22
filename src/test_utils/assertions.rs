@@ -19,11 +19,9 @@ macro_rules! assert_selection_eq {
 macro_rules! assert_view_mode {
     ($state:expr, $expected:expr) => {
         assert_eq!(
-            $state.view_mode,
-            $expected,
+            $state.view_mode, $expected,
             "Le mode de vue devrait être {:?} mais est {:?}",
-            $expected,
-            $state.view_mode
+            $expected, $state.view_mode
         );
     };
 }
@@ -33,7 +31,11 @@ macro_rules! assert_view_mode {
 macro_rules! assert_flash_contains {
     ($state:expr, $text:expr) => {
         assert!(
-            $state.flash_message.as_ref().map(|(m, _)| m.contains($text)).unwrap_or(false),
+            $state
+                .flash_message
+                .as_ref()
+                .map(|(m, _)| m.contains($text))
+                .unwrap_or(false),
             "Le message flash devrait contenir '{}' mais est {:?}",
             $text,
             $state.flash_message

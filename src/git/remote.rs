@@ -291,7 +291,7 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     let remote = repo.find_remote(&remote_name)?;
     let raw_url = remote.url().unwrap_or("");
     let resolved_url = resolve_remote_url(raw_url);
-    
+
     eprintln!(
         "[DEBUG] Push - URL brute: {}, URL résolue: {}",
         raw_url, resolved_url
@@ -303,7 +303,7 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
 
     // Pousser la branche courante
     let push_refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
-    
+
     let result = if resolved_url != raw_url {
         // L'URL a été réécrite, utiliser un remote anonyme
         let mut push_remote = repo.remote_anonymous(&resolved_url)?;

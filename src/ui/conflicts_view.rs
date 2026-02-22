@@ -113,7 +113,8 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
     // Aide contextuelle selon le panneau actif et le mode
     let help_text = if state.is_editing {
         // Mode édition : raccourcis d'édition
-        "Esc:Annuler  Ctrl+S:Sauvegarder  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr".to_string()
+        "Esc:Annuler  Ctrl+S:Sauvegarder  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr"
+            .to_string()
     } else if state.panel_focus == ConflictPanelFocus::FileList {
         format!(
             "o/←:Ours  t/→:Theirs  Tab:Panneau  ↑↓:Nav  r:Résoudre  V:Finaliser  q:Quitter  A:Avorter | {}",
@@ -122,9 +123,7 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
     } else {
         // Aide contextuelle selon le mode de résolution
         let action_help = match state.resolution_mode {
-            ConflictResolutionMode::File => {
-                "Enter:Choisir  o:Ours  t:Theirs  Tab:Panneau  ↑↓:Nav"
-            }
+            ConflictResolutionMode::File => "Enter:Choisir  o:Ours  t:Theirs  Tab:Panneau  ↑↓:Nav",
             ConflictResolutionMode::Block => {
                 "Espace:Choisir  Enter:Valider  b:Les deux  Tab:Panneau  ↑↓:Nav"
             }
@@ -555,9 +554,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                     section.resolution,
                     Some(ConflictResolution::Theirs) | Some(ConflictResolution::Both)
                 ) {
-                Style::default()
-                    .fg(theme.info)
-                    .add_modifier(Modifier::BOLD)
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme.info)
             };
@@ -603,10 +600,15 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
 
     if cursor_col >= chars.len() {
         // Curseur en fin de ligne : tout le texte normal + espace inversé
-        spans.push(Span::styled(line.to_string(), Style::default().fg(theme.text_normal)));
+        spans.push(Span::styled(
+            line.to_string(),
+            Style::default().fg(theme.text_normal),
+        ));
         spans.push(Span::styled(
             " ",
-            Style::default().bg(theme.selection_fg).fg(theme.selection_bg),
+            Style::default()
+                .bg(theme.selection_fg)
+                .fg(theme.selection_bg),
         ));
     } else {
         // Texte avant le curseur
@@ -619,7 +621,9 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
         let cursor_char = chars[cursor_col].to_string();
         spans.push(Span::styled(
             cursor_char,
-            Style::default().bg(theme.selection_fg).fg(theme.selection_bg),
+            Style::default()
+                .bg(theme.selection_fg)
+                .fg(theme.selection_bg),
         ));
 
         // Texte après le curseur
@@ -710,7 +714,9 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 let style = match rline.source {
                     LineSource::Context => Style::default().fg(theme.text_normal),
                     LineSource::Ours => Style::default().bg(theme.ours_bg).fg(theme.text_normal),
-                    LineSource::Theirs => Style::default().bg(theme.theirs_bg).fg(theme.text_normal),
+                    LineSource::Theirs => {
+                        Style::default().bg(theme.theirs_bg).fg(theme.text_normal)
+                    }
                     LineSource::ConflictMarker => Style::default()
                         .fg(theme.warning)
                         .add_modifier(Modifier::BOLD),
@@ -742,10 +748,15 @@ pub fn render_nav_indicator(has_conflicts: bool) -> Line<'static> {
     ];
 
     if has_conflicts {
-        spans.push(Span::styled(" | ", Style::default().fg(theme.text_secondary)));
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.text_secondary),
+        ));
         spans.push(Span::styled(
             "4:Conflits",
-            Style::default().fg(theme.error).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.error)
+                .add_modifier(Modifier::BOLD),
         ));
     }
 

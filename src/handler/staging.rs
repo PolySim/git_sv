@@ -1,10 +1,10 @@
 //! Handler pour les actions de staging.
 
+use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
-use crate::state::{AppState, ViewMode, StagingFocus};
 use crate::state::action::StagingAction;
 use crate::state::cache::DiffCacheKey;
-use super::traits::{ActionHandler, HandlerContext};
+use crate::state::{AppState, StagingFocus, ViewMode};
 
 /// Handler pour les opérations de staging.
 pub struct StagingHandler;
@@ -112,9 +112,7 @@ fn handle_start_commit(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_confirm_commit(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging
-        && !state.staging_state.commit_message.is_empty()
-    {
+    if state.view_mode == ViewMode::Staging && !state.staging_state.commit_message.is_empty() {
         let message = state.staging_state.commit_message.clone();
         crate::git::commit::create_commit(&state.repo.repo, &message)?;
 
@@ -177,7 +175,7 @@ pub fn refresh_staging_with_entries(
             .iter()
             .filter(|e| e.is_staged())
             .cloned()
-            .collect()
+            .collect(),
     );
 
     state.staging_state.set_unstaged_files(
@@ -185,13 +183,11 @@ pub fn refresh_staging_with_entries(
             .iter()
             .filter(|e| e.is_unstaged())
             .cloned()
-            .collect()
+            .collect(),
     );
 
     // Réajuster les sélections
-    if state.staging_state.unstaged_selected()
-        >= state.staging_state.unstaged_files().len()
-    {
+    if state.staging_state.unstaged_selected() >= state.staging_state.unstaged_files().len() {
         let new_idx = state.staging_state.unstaged_files().len().saturating_sub(1);
         state.staging_state.set_unstaged_selected(new_idx);
     }
@@ -266,7 +262,8 @@ mod tests {
         let mut index = repo.index().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
 
         let git_repo = GitRepo::open(dir.path().to_str().unwrap()).unwrap();
         (dir, git_repo)
@@ -286,22 +283,28 @@ mod tests {
         state.staging_state.focus = StagingFocus::Unstaged;
 
         let mut handler = StagingHandler;
-        
+
         {
             let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, StagingAction::SwitchFocus).unwrap();
+            handler
+                .handle(&mut ctx, StagingAction::SwitchFocus)
+                .unwrap();
         }
         assert_eq!(state.staging_state.focus, StagingFocus::Staged);
 
         {
             let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, StagingAction::SwitchFocus).unwrap();
+            handler
+                .handle(&mut ctx, StagingAction::SwitchFocus)
+                .unwrap();
         }
         assert_eq!(state.staging_state.focus, StagingFocus::Diff);
 
         {
             let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, StagingAction::SwitchFocus).unwrap();
+            handler
+                .handle(&mut ctx, StagingAction::SwitchFocus)
+                .unwrap();
         }
         assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
     }
@@ -315,7 +318,9 @@ mod tests {
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, StagingAction::StartCommitMessage).unwrap();
+        handler
+            .handle(&mut ctx, StagingAction::StartCommitMessage)
+            .unwrap();
 
         drop(ctx);
         assert!(state.staging_state.is_committing);
@@ -334,7 +339,9 @@ mod tests {
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, StagingAction::CancelCommit).unwrap();
+        handler
+            .handle(&mut ctx, StagingAction::CancelCommit)
+            .unwrap();
 
         drop(ctx);
         assert!(!state.staging_state.is_committing);
@@ -353,7 +360,9 @@ mod tests {
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, StagingAction::ConfirmCommit).unwrap();
+        handler
+            .handle(&mut ctx, StagingAction::ConfirmCommit)
+            .unwrap();
 
         drop(ctx);
         // L'état ne devrait pas changer car le message est vide
@@ -403,7 +412,10 @@ mod tests {
         state.view_mode = ViewMode::Staging;
 
         refresh_staging(&mut state).unwrap();
-        assert!(!state.staging_state.staged_files().is_empty(), "Devrait avoir des fichiers stagés");
+        assert!(
+            !state.staging_state.staged_files().is_empty(),
+            "Devrait avoir des fichiers stagés"
+        );
 
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
@@ -443,7 +455,10 @@ mod tests {
         refresh_staging(&mut state).unwrap();
 
         // Un fichier de moins en unstaged
-        assert_eq!(state.staging_state.unstaged_files().len(), initial_unstaged - 1);
+        assert_eq!(
+            state.staging_state.unstaged_files().len(),
+            initial_unstaged - 1
+        );
         assert_eq!(state.staging_state.staged_files().len(), 1);
     }
 
@@ -470,7 +485,9 @@ mod tests {
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, StagingAction::UnstageFile).unwrap();
+        handler
+            .handle(&mut ctx, StagingAction::UnstageFile)
+            .unwrap();
 
         refresh_staging(&mut state).unwrap();
 
@@ -487,7 +504,9 @@ mod tests {
         create_test_file(&dir, "new_file.txt", "new content");
         let repo_ref = &repo.repo;
         let mut index = repo_ref.index().unwrap();
-        index.add_path(std::path::Path::new("new_file.txt")).unwrap();
+        index
+            .add_path(std::path::Path::new("new_file.txt"))
+            .unwrap();
         index.write().unwrap();
 
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
@@ -502,7 +521,9 @@ mod tests {
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, StagingAction::ConfirmCommit).unwrap();
+        handler
+            .handle(&mut ctx, StagingAction::ConfirmCommit)
+            .unwrap();
 
         // Vérifier que le commit a été créé
         let repo_ref = &state.repo.repo;

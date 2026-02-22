@@ -103,9 +103,8 @@ impl<T> ListSelection<T> {
 
     /// Descend d'une page.
     pub fn page_down(&mut self) {
-        self.selected = (self.selected + self.visible_height).min(
-            self.items.len().saturating_sub(1)
-        );
+        self.selected =
+            (self.selected + self.visible_height).min(self.items.len().saturating_sub(1));
         self.adjust_scroll();
     }
 
@@ -155,7 +154,7 @@ impl<T> ListSelection<T> {
 
 impl<T> Deref for ListSelection<T> {
     type Target = Vec<T>;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.items
     }
@@ -193,15 +192,15 @@ mod tests {
     fn test_select_next() {
         let mut sel = ListSelection::with_items(vec![1, 2, 3, 4, 5]);
         assert_eq!(sel.selected_index(), 0);
-        
+
         sel.select_next();
         assert_eq!(sel.selected_index(), 1);
-        
+
         sel.select_next();
         sel.select_next();
         sel.select_next();
         assert_eq!(sel.selected_index(), 4);
-        
+
         // Ne dépasse pas la fin
         sel.select_next();
         assert_eq!(sel.selected_index(), 4);
@@ -211,9 +210,9 @@ mod tests {
     fn test_scroll_adjustment() {
         let mut sel = ListSelection::with_items(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         sel.set_visible_height(3);
-        
+
         assert_eq!(sel.scroll_offset(), 0);
-        
+
         sel.select(5);
         assert!(sel.scroll_offset() > 0);
     }

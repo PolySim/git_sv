@@ -237,6 +237,11 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
 
     // Popup de filtre (si ouvert).
     if state.filter_popup.is_open {
-        filter_popup::render(frame, &state.filter_popup, &state.graph_filter, frame.area());
+        filter_popup::render(
+            frame,
+            &state.filter_popup,
+            &state.graph_filter,
+            frame.area(),
+        );
     }
 }

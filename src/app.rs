@@ -32,14 +32,14 @@ impl App {
                 .iter()
                 .filter(|e| e.is_staged())
                 .cloned()
-                .collect()
+                .collect(),
         );
         state.staging_state.set_unstaged_files(
             all_entries
                 .iter()
                 .filter(|e| e.is_unstaged())
                 .cloned()
-                .collect()
+                .collect(),
         );
 
         Ok(Self { state })
@@ -49,7 +49,7 @@ impl App {
     pub fn run(self) -> Result<()> {
         let mut terminal = setup_terminal()?;
 
-        let mut handler = crate::handler::EventHandler::new(self.state);
+        let mut handler = crate::handler::EventHandler::new(self.state)?;
         let result = handler.run(&mut terminal);
 
         restore_terminal(&mut terminal)?;

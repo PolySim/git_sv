@@ -31,7 +31,8 @@ impl TestRepo {
             let mut index = repo.index().unwrap();
             let tree_oid = index.write_tree().unwrap();
             let tree = repo.find_tree(tree_oid).unwrap();
-            repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+                .unwrap();
         }
 
         Self {
@@ -97,9 +98,8 @@ impl TestRepo {
             .branches(Some(git2::BranchType::Local))
             .unwrap()
             .filter_map(|b| {
-                b.ok().and_then(|(branch, _)| {
-                    branch.name().ok()?.map(|s| s.to_string())
-                })
+                b.ok()
+                    .and_then(|(branch, _)| branch.name().ok()?.map(|s| s.to_string()))
             })
             .collect()
     }
@@ -122,7 +122,10 @@ impl TestRepo {
 
     /// Checkout une branche.
     pub fn checkout_branch(&self, name: &str) {
-        let branch = self.repo.find_branch(name, git2::BranchType::Local).unwrap();
+        let branch = self
+            .repo
+            .find_branch(name, git2::BranchType::Local)
+            .unwrap();
         let reference = branch.get();
         self.repo.set_head(reference.name().unwrap()).unwrap();
     }
@@ -130,10 +133,12 @@ impl TestRepo {
     /// Liste les stashes.
     pub fn list_stashes(&mut self) -> Vec<(usize, String)> {
         let mut stashes = Vec::new();
-        self.repo.stash_foreach(|index, message, _| {
-            stashes.push((index, message.to_string()));
-            true
-        }).unwrap();
+        self.repo
+            .stash_foreach(|index, message, _| {
+                stashes.push((index, message.to_string()));
+                true
+            })
+            .unwrap();
         stashes
     }
 }
@@ -191,7 +196,7 @@ fn test_stash_save_and_apply() {
     test_repo.create_file("test.txt", "initial content");
     test_repo.stage_file("test.txt");
     test_repo.commit("Add test file");
-    
+
     // Modifier le fichier (maintenant tracked)
     test_repo.create_file("test.txt", "modified content");
 
@@ -204,13 +209,23 @@ fn test_stash_save_and_apply() {
 
     // Sauvegarder le stash (inclure les fichiers tracked modifiés)
     let sig = git2::Signature::now("Test User", "test@example.com").unwrap();
-    test_repo.repo.stash_save(&sig, "stash test", Some(git2::StashFlags::INCLUDE_UNTRACKED)).unwrap();
+    test_repo
+        .repo
+        .stash_save(
+            &sig,
+            "stash test",
+            Some(git2::StashFlags::INCLUDE_UNTRACKED),
+        )
+        .unwrap();
 
     // Vérifier que le working directory est propre
     {
         let mut opts = git2::StatusOptions::new();
         let statuses = test_repo.repo.statuses(Some(&mut opts)).unwrap();
-        assert!(statuses.is_empty(), "Le working directory devrait être propre");
+        assert!(
+            statuses.is_empty(),
+            "Le working directory devrait être propre"
+        );
     }
 
     // Vérifier qu'il y a un stash
@@ -224,6 +239,9 @@ fn test_stash_save_and_apply() {
     {
         let mut opts = git2::StatusOptions::new();
         let statuses = test_repo.repo.statuses(Some(&mut opts)).unwrap();
-        assert!(!statuses.is_empty(), "Les modifications devraient être revenues");
+        assert!(
+            !statuses.is_empty(),
+            "Les modifications devraient être revenues"
+        );
     }
 }

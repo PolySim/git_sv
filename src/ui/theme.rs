@@ -63,8 +63,8 @@ impl Theme {
             text_normal: Color::White,
             text_secondary: Color::Gray,
             background: Color::Black,
-            ours_bg: Color::Indexed(22),    // Vert très foncé
-            theirs_bg: Color::Indexed(17),  // Bleu très foncé
+            ours_bg: Color::Indexed(22),   // Vert très foncé
+            theirs_bg: Color::Indexed(17), // Bleu très foncé
         }
     }
 

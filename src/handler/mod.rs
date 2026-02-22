@@ -3,20 +3,20 @@
 //! Ce module remplace event.rs par un système modulaire de handlers.
 //! Chaque handler spécialisé gère un domaine fonctionnel spécifique.
 
-pub mod traits;
-pub mod navigation;
-pub mod staging;
-pub mod git;
 pub mod branch;
 pub mod conflict;
-pub mod search;
+pub mod dispatcher;
 pub mod edit;
 pub mod filter;
-pub mod dispatcher;
+pub mod git;
+pub mod navigation;
+pub mod search;
+pub mod staging;
+pub mod traits;
 
 // Re-exports des handlers et dispatcher
-pub use traits::{ActionHandler, HandlerContext};
 pub use dispatcher::ActionDispatcher;
+pub use traits::{ActionHandler, HandlerContext};
 
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
@@ -25,6 +25,7 @@ use crate::error::Result;
 use crate::state::{AppState, ViewMode};
 use crate::ui;
 use crate::ui::input::handle_input_with_timeout;
+use crate::watcher::GitWatcher;
 
 /// Gestionnaire principal de la boucle événementielle.
 ///
@@ -33,15 +34,18 @@ use crate::ui::input::handle_input_with_timeout;
 pub struct EventHandler {
     state: AppState,
     dispatcher: ActionDispatcher,
+    watcher: GitWatcher,
 }
 
 impl EventHandler {
     /// Crée un nouveau gestionnaire d'événements.
-    pub fn new(state: AppState) -> Self {
-        Self {
+    pub fn new(state: AppState) -> Result<Self> {
+        let watcher = GitWatcher::new(&state.repo_path)?;
+        Ok(Self {
             state,
             dispatcher: ActionDispatcher::new(),
-        }
+            watcher,
+        })
     }
 
     /// Lance la boucle événementielle principale.
@@ -56,6 +60,11 @@ impl EventHandler {
             terminal.draw(|frame| {
                 ui::render(frame, &self.state);
             })?;
+
+            // Vérifier les changements dans le repository git (auto-refresh)
+            if self.watcher.check_changed()? {
+                self.state.dirty = true;
+            }
 
             // Input avec timeout adaptatif
             let timeout_ms = if self.state.flash_message.is_some() {
@@ -90,12 +99,15 @@ impl EventHandler {
 
         // Construire le graphe avec ou sans filtres
         self.state.graph = if self.state.graph_filter.is_active() {
-            self.state.repo.build_graph_filtered(
-                crate::state::MAX_COMMITS,
-                &self.state.graph_filter,
-            ).unwrap_or_default()
+            self.state
+                .repo
+                .build_graph_filtered(crate::state::MAX_COMMITS, &self.state.graph_filter)
+                .unwrap_or_default()
         } else {
-            self.state.repo.build_graph(crate::state::MAX_COMMITS).unwrap_or_default()
+            self.state
+                .repo
+                .build_graph(crate::state::MAX_COMMITS)
+                .unwrap_or_default()
         };
 
         self.state.status_entries = self.state.repo.status().unwrap_or_default();
@@ -113,7 +125,9 @@ impl EventHandler {
 
         // Synchroniser graph_state (ListState de ratatui) avec la sélection
         // Le graphe contient 2 items par commit (ligne + connexion)
-        self.state.graph_state.select(Some(self.state.selected_index * 2));
+        self.state
+            .graph_state
+            .select(Some(self.state.selected_index * 2));
 
         // Clamper file_selected_index pour éviter les index hors limites
         if self.state.file_selected_index >= self.state.commit_files.len() {
@@ -122,7 +136,11 @@ impl EventHandler {
 
         // Mise à jour des fichiers du commit sélectionné
         if let Some(row) = self.state.graph.get(self.state.selected_index) {
-            self.state.commit_files = self.state.repo.commit_diff(row.node.oid).unwrap_or_default();
+            self.state.commit_files = self
+                .state
+                .repo
+                .commit_diff(row.node.oid)
+                .unwrap_or_default();
         } else {
             self.state.commit_files.clear();
         }
@@ -130,28 +148,46 @@ impl EventHandler {
         // Mise à jour du staging
         let all_entries = self.state.repo.status().unwrap_or_default();
         self.state.staging_state.set_staged_files(
-            all_entries.iter().filter(|e| e.is_staged()).cloned().collect()
+            all_entries
+                .iter()
+                .filter(|e| e.is_staged())
+                .cloned()
+                .collect(),
         );
         self.state.staging_state.set_unstaged_files(
-            all_entries.iter().filter(|e| e.is_unstaged()).cloned().collect()
+            all_entries
+                .iter()
+                .filter(|e| e.is_unstaged())
+                .cloned()
+                .collect(),
         );
 
         // Charger les données de la vue branches
         if self.state.view_mode == ViewMode::Branches {
             match crate::git::branch::list_all_branches(&self.state.repo.repo) {
                 Ok((local, remote)) => {
-                    self.state.branches_view_state.local_branches.set_items(local);
-                    self.state.branches_view_state.remote_branches.set_items(remote);
+                    self.state
+                        .branches_view_state
+                        .local_branches
+                        .set_items(local);
+                    self.state
+                        .branches_view_state
+                        .remote_branches
+                        .set_items(remote);
                 }
                 Err(e) => {
-                    self.state.set_flash_message(format!("Erreur chargement branches: {}", e));
+                    self.state
+                        .set_flash_message(format!("Erreur chargement branches: {}", e));
                 }
             }
 
             // Charger les worktrees
             match crate::git::worktree::list_worktrees(&self.state.repo.repo) {
                 Ok(worktrees) => {
-                    self.state.branches_view_state.worktrees.set_items(worktrees);
+                    self.state
+                        .branches_view_state
+                        .worktrees
+                        .set_items(worktrees);
                 }
                 Err(_) => {}
             }
@@ -167,6 +203,9 @@ impl EventHandler {
 
         // Réinitialiser le flag dirty
         self.state.dirty = false;
+
+        // Réinitialiser le watcher pour éviter de redétecter les mêmes changements
+        self.watcher.reset()?;
 
         Ok(())
     }

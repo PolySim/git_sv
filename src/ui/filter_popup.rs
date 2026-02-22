@@ -55,15 +55,15 @@ pub fn render(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),  // Description
-            Constraint::Length(1),  // Espacement
-            Constraint::Length(3),  // Auteur
-            Constraint::Length(3),  // Date de début
-            Constraint::Length(3),  // Date de fin
-            Constraint::Length(3),  // Chemin
-            Constraint::Length(3),  // Message
-            Constraint::Length(2),  // Espacement
-            Constraint::Length(1),  // Aide
+            Constraint::Length(1), // Description
+            Constraint::Length(1), // Espacement
+            Constraint::Length(3), // Auteur
+            Constraint::Length(3), // Date de début
+            Constraint::Length(3), // Date de fin
+            Constraint::Length(3), // Chemin
+            Constraint::Length(3), // Message
+            Constraint::Length(2), // Espacement
+            Constraint::Length(1), // Aide
         ])
         .split(inner);
 
@@ -150,7 +150,9 @@ fn render_filter_field(
 
     // Label
     let label_style = if is_selected {
-        Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.warning)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(theme.text_secondary)
     };
@@ -168,11 +170,7 @@ fn render_filter_field(
         (theme.background, theme.text_normal)
     };
 
-    let display_value = if value.is_empty() {
-        " (vide) "
-    } else {
-        value
-    };
+    let display_value = if value.is_empty() { " (vide) " } else { value };
 
     let value_style = if value.is_empty() && is_selected {
         Style::default().fg(theme.text_secondary).bg(bg_color)

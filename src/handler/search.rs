@@ -1,9 +1,9 @@
 //! Handler pour les actions de recherche.
 
-use crate::error::Result;
-use crate::state::AppState;
-use crate::state::action::SearchAction;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::state::action::SearchAction;
+use crate::state::AppState;
 
 /// Handler pour les opérations de recherche.
 pub struct SearchHandler;
@@ -59,9 +59,14 @@ fn handle_delete_char(state: &mut AppState) -> Result<()> {
 
 fn handle_next_result(state: &mut AppState) -> Result<()> {
     if !state.search_state.results.is_empty() {
-        state.search_state.current_result = (state.search_state.current_result + 1) % state.search_state.results.len();
+        state.search_state.current_result =
+            (state.search_state.current_result + 1) % state.search_state.results.len();
         // Naviguer vers le résultat sélectionné
-        if let Some(&index) = state.search_state.results.get(state.search_state.current_result) {
+        if let Some(&index) = state
+            .search_state
+            .results
+            .get(state.search_state.current_result)
+        {
             if index < state.graph.len() {
                 state.selected_index = index;
                 state.graph_state.select(Some(index * 2));
@@ -77,7 +82,11 @@ fn handle_previous_result(state: &mut AppState) -> Result<()> {
         let len = state.search_state.results.len();
         state.search_state.current_result = (state.search_state.current_result + len - 1) % len;
         // Naviguer vers le résultat sélectionné
-        if let Some(&index) = state.search_state.results.get(state.search_state.current_result) {
+        if let Some(&index) = state
+            .search_state
+            .results
+            .get(state.search_state.current_result)
+        {
             if index < state.graph.len() {
                 state.selected_index = index;
                 state.graph_state.select(Some(index * 2));
@@ -122,7 +131,10 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
                 state.sync_legacy_selection();
             }
         }
-        state.set_flash_message(format!("{} résultats trouvés", state.search_state.results.len()));
+        state.set_flash_message(format!(
+            "{} résultats trouvés",
+            state.search_state.results.len()
+        ));
     } else {
         state.set_flash_message("Aucun résultat".to_string());
     }

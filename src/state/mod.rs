@@ -1,16 +1,16 @@
 //! État global de l'application.
 
 pub mod action;
-pub mod view;
-pub mod selection;
 pub mod cache;
 pub mod filter;
+pub mod selection;
+pub mod view;
 
 pub use action::AppAction;
-pub use view::*;
+pub use cache::{DiffCache, DiffCacheKey, LazyBlame, LazyDiff};
+pub use filter::{FilterField, FilterPopupState, GraphFilter};
 pub use selection::ListSelection;
-pub use cache::{DiffCache, DiffCacheKey, LazyDiff, LazyBlame};
-pub use filter::{GraphFilter, FilterPopupState, FilterField};
+pub use view::*;
 
 use crate::git::branch::BranchInfo;
 use crate::git::diff::{DiffFile, DiffViewMode};
@@ -27,20 +27,18 @@ pub struct AppState {
     // ═══════════════════════════════════════════════════
     // Core
     // ═══════════════════════════════════════════════════
-    
     /// Repository git.
     pub repo: GitRepo,
-    
+
     /// Chemin du repository.
     pub repo_path: String,
-    
+
     /// Branche courante.
     pub current_branch: Option<String>,
-    
+
     // ═══════════════════════════════════════════════════
     // Vue active
     // ═══════════════════════════════════════════════════
-    
     /// Mode de vue actuel.
     pub view_mode: ViewMode,
 
@@ -49,42 +47,40 @@ pub struct AppState {
 
     /// État indiquant si un refresh est nécessaire.
     pub dirty: bool,
-    
+
     // ═══════════════════════════════════════════════════
     // Vue Graph (toujours chargée)
     // ═══════════════════════════════════════════════════
-    
     /// Lignes du graph de commits (compatibilité - migrer vers graph_view.rows).
     pub graph: Vec<GraphRow>,
-    
+
     /// État de la vue graph avec sélection générique.
     pub graph_view: GraphViewState,
-    
+
     /// Mode d'affichage du panneau bottom-left.
     pub bottom_left_mode: BottomLeftMode,
-    
+
     /// Panneau avec focus.
     pub focus: FocusPanel,
-    
+
     /// Index sélectionné (compatibilité - migrer vers graph_view.rows.selected_index()).
     pub selected_index: usize,
-    
+
     /// État de la liste pour ratatui (compatibilité).
     pub graph_state: ListState,
-    
+
     // ═══════════════════════════════════════════════════
     // Données associées au commit sélectionné (compatibilité)
     // ═══════════════════════════════════════════════════
-    
     /// Fichiers du commit sélectionné.
     pub commit_files: Vec<DiffFile>,
-    
+
     /// Index du fichier sélectionné (compatibilité - migrer vers graph_view.file_selected_index).
     pub file_selected_index: usize,
-    
+
     /// Diff du fichier sélectionné.
     pub selected_file_diff: Option<crate::git::diff::FileDiff>,
-    
+
     /// Offset de scroll dans le diff (compatibilité - migrer vers graph_view.diff_scroll_offset).
     pub diff_scroll_offset: usize,
 
@@ -93,65 +89,61 @@ pub struct AppState {
 
     /// Entrées de status (pour la vue staging, compatibilité).
     pub status_entries: Vec<StatusEntry>,
-    
+
     /// Branches (compatibilité).
     pub branches: Vec<BranchInfo>,
-    
+
     // ═══════════════════════════════════════════════════
     // Vues optionnelles (chargées à la demande)
     // ═══════════════════════════════════════════════════
-    
     /// État de la vue staging.
     pub staging_state: StagingState,
-    
+
     /// État de la vue branches.
     pub branches_view_state: BranchesViewState,
-    
+
     /// État du blame (si actif).
     pub blame_state: Option<BlameState>,
-    
+
     /// État de résolution de conflits (si actif).
     pub conflicts_state: Option<ConflictsState>,
-    
+
     /// État de la recherche.
     pub search_state: SearchState,
-    
+
     /// Picker de merge (si actif).
     pub merge_picker: Option<MergePickerState>,
-    
+
     // ═══════════════════════════════════════════════════
     // UI transient
     // ═══════════════════════════════════════════════════
-    
     /// Message flash à afficher.
     pub flash_message: Option<(String, Instant)>,
-    
+
     /// Action en attente de confirmation (dialogue modal).
     pub pending_confirmation: Option<crate::ui::confirm_dialog::ConfirmAction>,
-    
+
     /// Spinner de chargement actif.
     pub loading_spinner: Option<crate::ui::loading::LoadingSpinner>,
-    
+
     /// Panneau de branches ouvert (compatibilité).
     pub show_branch_panel: bool,
-    
+
     /// Index de la branche sélectionnée dans le panneau (compatibilité).
     pub branch_selected: usize,
-    
+
     /// Flag pour quitter l'application.
     pub should_quit: bool,
-    
+
     // ═══════════════════════════════════════════════════
     // Cache
     // ═══════════════════════════════════════════════════
-    
     /// Cache des diffs.
     pub diff_cache: DiffCache,
 
     // ═══════════════════════════════════════════════════
     // Filtres pour le graph
     // ═══════════════════════════════════════════════════
-
     /// Filtres actifs sur le graph.
     pub graph_filter: GraphFilter,
 
@@ -164,7 +156,7 @@ impl AppState {
     pub fn new(repo: GitRepo, repo_path: String) -> crate::error::Result<Self> {
         let mut graph_state = ListState::default();
         graph_state.select(Some(0));
-        
+
         let current_branch = repo.current_branch().ok();
 
         let state = Self {
@@ -289,4 +281,7 @@ impl AppState {
 }
 
 // Compatibilité: types exportés depuis l'ancien state.rs
-pub use action::{NavigationAction, GitAction, StagingAction, BranchAction, ConflictAction, SearchAction, EditAction, FilterAction};
+pub use action::{
+    BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
+    SearchAction, StagingAction,
+};

@@ -54,11 +54,11 @@ pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),              // Status bar
-            Constraint::Length(1),              // Navigation bar
-            Constraint::Min(0),                 // Contenu principal
-            Constraint::Length(search_height),  // Search bar (optionnel)
-            Constraint::Length(1),              // Help bar
+            Constraint::Length(1),             // Status bar
+            Constraint::Length(1),             // Navigation bar
+            Constraint::Min(0),                // Contenu principal
+            Constraint::Length(search_height), // Search bar (optionnel)
+            Constraint::Length(1),             // Help bar
         ])
         .split(area);
 

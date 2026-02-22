@@ -1,7 +1,7 @@
 //! Builder pour les blocs stylisés.
 
-use ratatui::widgets::{Block, Borders};
 use super::style::{border_style, title_style};
+use ratatui::widgets::{Block, Borders};
 
 /// Builder pour créer des blocs avec un style cohérent.
 pub struct StyledBlock {

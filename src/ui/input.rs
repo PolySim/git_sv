@@ -1,11 +1,11 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use std::time::Duration;
 
+use crate::state::action::SearchAction;
 use crate::state::{
     AppAction, AppState, BranchesFocus, BranchesSection, ConflictPanelFocus, FocusPanel,
     StagingFocus, ViewMode,
 };
-use crate::state::action::SearchAction;
 
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
@@ -177,7 +177,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             }
             FocusPanel::Files | FocusPanel::BottomLeft => {
                 // Retourner au focus Graph depuis le panneau fichiers
-                return Some(AppAction::Navigation(crate::state::action::NavigationAction::BackToGraph));
+                return Some(AppAction::Navigation(
+                    crate::state::action::NavigationAction::BackToGraph,
+                ));
             }
             _ => {}
         }

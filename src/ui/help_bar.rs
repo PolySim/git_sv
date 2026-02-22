@@ -56,18 +56,20 @@ pub fn render(
 
     let line = Line::from(spans);
 
-    let paragraph = Paragraph::new(line)
-        .block(
-            Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(theme.border_inactive)),
-        );
+    let paragraph = Paragraph::new(line).block(
+        Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(theme.border_inactive)),
+    );
 
     frame.render_widget(paragraph, area);
 }
 
 /// Construit les spans pour la barre d'aide.
-fn build_help_spans<'a>(keys: &'a [(&'a str, &'a str)], theme: &crate::ui::theme::Theme) -> Vec<Span<'a>> {
+fn build_help_spans<'a>(
+    keys: &'a [(&'a str, &'a str)],
+    theme: &crate::ui::theme::Theme,
+) -> Vec<Span<'a>> {
     let mut spans: Vec<Span<'a>> = Vec::with_capacity(keys.len() * 3);
 
     for (i, (key, desc)) in keys.iter().enumerate() {

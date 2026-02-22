@@ -13,7 +13,7 @@ use crate::ui::theme::current_theme;
 /// Rend le panneau de branches en overlay.
 pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize, area: Rect) {
     let theme = current_theme();
-    
+
     // Créer une zone centrale pour le popup (60% largeur, 50% hauteur).
     let popup_area = centered_rect(60, 50, area);
 
@@ -71,8 +71,7 @@ fn build_branch_line(branch: &BranchInfo, is_selected: bool) -> ListItem<'static
             .fg(theme.selection_fg)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default()
-            .fg(theme.text_normal)
+        Style::default().fg(theme.text_normal)
     };
 
     let line = Line::from(vec![

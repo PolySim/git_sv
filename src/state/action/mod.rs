@@ -1,57 +1,57 @@
 //! Actions de l'application organisées par domaine.
 
-mod navigation;
-mod git;
-mod staging;
 mod branch;
 mod conflict;
-mod search;
 mod edit;
 mod filter;
+mod git;
+mod navigation;
+mod search;
+mod staging;
 
-pub use navigation::NavigationAction;
-pub use git::GitAction;
-pub use staging::StagingAction;
 pub use branch::BranchAction;
 pub use conflict::ConflictAction;
-pub use search::SearchAction;
 pub use edit::EditAction;
 pub use filter::FilterAction;
+pub use git::GitAction;
+pub use navigation::NavigationAction;
+pub use search::SearchAction;
+pub use staging::StagingAction;
 
 use super::view::ViewMode;
 
 /// Action principale de l'application.
-/// 
+///
 /// Délègue vers des sous-enums spécialisés pour une meilleure organisation.
-/// 
+///
 /// Note: Les variantes legacy ci-dessous sont maintenues pour compatibilité
 /// et seront dépréciées dans une future version.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppAction {
     /// Quitter l'application
     Quit,
-    
+
     /// Rafraîchir les données
     Refresh,
-    
+
     /// Actions de navigation (nouvelle structure)
     Navigation(NavigationAction),
-    
+
     /// Actions git (push, pull, fetch, etc.) (nouvelle structure)
     Git(GitAction),
-    
+
     /// Actions de staging/commit (nouvelle structure)
     Staging(StagingAction),
-    
+
     /// Actions sur les branches (nouvelle structure)
     Branch(BranchAction),
-    
+
     /// Actions de résolution de conflits (nouvelle structure)
     Conflict(ConflictAction),
-    
+
     /// Actions de recherche (nouvelle structure)
     Search(SearchAction),
-    
+
     /// Actions d'édition de texte (nouvelle structure)
     Edit(EditAction),
 
@@ -60,41 +60,40 @@ pub enum AppAction {
 
     /// Changer de mode de vue
     SwitchView(ViewMode),
-    
+
     /// Afficher/masquer l'aide
     ToggleHelp,
-    
+
     /// Copier dans le presse-papier (nouvelle structure)
     CopyToClipboard,
     /// Copier le contenu du panneau (legacy - utiliser CopyToClipboard)
     CopyPanelContent,
-    
+
     /// Sélectionner l'élément courant (Enter général)
     Select,
-    
+
     /// Basculer le mode du panneau bas-gauche
     SwitchBottomMode,
-    
+
     /// Fermer le panneau de branches
     CloseBranchPanel,
-    
+
     /// Confirmer une action destructive
     ConfirmAction,
-    
+
     /// Annuler une action destructive
     CancelAction,
-    
+
     /// Navigation dans le merge picker
     MergePickerUp,
     MergePickerDown,
     MergePickerConfirm,
     MergePickerCancel,
-    
+
     // ═══════════════════════════════════════════════════
     // Variantes legacy pour compatibilité ascendante
     // TODO: Migrer vers les sous-enums et supprimer ces variantes
     // ═══════════════════════════════════════════════════
-    
     /// Navigation: Monter (legacy - utiliser Navigation(MoveUp))
     MoveUp,
     /// Navigation: Descendre (legacy - utiliser Navigation(MoveDown))
@@ -115,7 +114,7 @@ pub enum AppAction {
     DiffScrollUp,
     /// Navigation: Scroll diff down (legacy - utiliser Navigation(ScrollDiffDown))
     DiffScrollDown,
-    
+
     /// Git: Push (legacy - utiliser Git(Push))
     GitPush,
     /// Git: Pull (legacy - utiliser Git(Pull))
@@ -140,7 +139,7 @@ pub enum AppAction {
     MergePrompt,
     /// Git: Branch list (legacy - utiliser Git(BranchList))
     BranchList,
-    
+
     /// Staging: Stage file (legacy - utiliser Staging(StageFile))
     StageFile,
     /// Staging: Unstage file (legacy - utiliser Staging(UnstageFile))
@@ -165,7 +164,7 @@ pub enum AppAction {
     StashSelectedFile,
     /// Staging: Stash unstaged files (legacy - utiliser Staging(StashUnstagedFiles))
     StashUnstagedFiles,
-    
+
     /// Branch: Checkout (legacy - utiliser Branch(Checkout))
     BranchCheckout,
     /// Branch: Create (legacy - utiliser Branch(Create))
@@ -196,7 +195,7 @@ pub enum AppAction {
     ConfirmInput,
     /// Branch: Cancel input (legacy - utiliser Branch(CancelInput))
     CancelInput,
-    
+
     /// Search: Ouvrir (legacy - utiliser Search(Open))
     OpenSearch,
     /// Search: Fermer (legacy - utiliser Search(Close))
@@ -207,7 +206,7 @@ pub enum AppAction {
     NextSearchResult,
     /// Search: Résultat précédent (legacy - utiliser Search(PreviousResult))
     PrevSearchResult,
-    
+
     /// Edit: Insérer caractère (legacy - utiliser Edit(InsertChar(c)))
     InsertChar(char),
     /// Edit: Supprimer caractère (legacy - utiliser Edit(DeleteCharBefore))
@@ -216,7 +215,7 @@ pub enum AppAction {
     MoveCursorLeft,
     /// Edit: Curseur droite (legacy - utiliser Edit(CursorRight))
     MoveCursorRight,
-    
+
     /// Vue: Graph (legacy - utiliser SwitchView(Graph))
     SwitchToGraph,
     /// Vue: Staging (legacy - utiliser SwitchView(Staging))
@@ -225,7 +224,7 @@ pub enum AppAction {
     SwitchToBranches,
     /// Vue: Conflits (legacy - utiliser SwitchView(Conflicts))
     SwitchToConflicts,
-    
+
     /// Conflit: Fichier précédent (legacy - utiliser Conflict(PreviousFile))
     ConflictPrevFile,
     /// Conflit: Fichier suivant (legacy - utiliser Conflict(NextFile))

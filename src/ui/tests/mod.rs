@@ -1,11 +1,6 @@
 //! Tests snapshot pour les composants UI.
 
-use ratatui::{
-    backend::TestBackend,
-    buffer::Buffer,
-    layout::Rect,
-    Terminal,
-};
+use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, Terminal};
 
 /// Helper pour capturer le rendu d'un composant.
 pub fn render_to_string<F>(width: u16, height: u16, render_fn: F) -> String
@@ -15,9 +10,11 @@ where
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
 
-    terminal.draw(|frame| {
-        render_fn(frame);
-    }).unwrap();
+    terminal
+        .draw(|frame| {
+            render_fn(frame);
+        })
+        .unwrap();
 
     let buffer = terminal.backend().buffer();
     buffer_to_string(buffer)

@@ -71,15 +71,16 @@ pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
     if !search_state.results.is_empty() {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            format!("{}/{}", search_state.current_result + 1, search_state.results.len()),
+            format!(
+                "{}/{}",
+                search_state.current_result + 1,
+                search_state.results.len()
+            ),
             Style::default().fg(theme.success),
         ));
     } else if !query_text.is_empty() {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled(
-            "0/0",
-            Style::default().fg(theme.error),
-        ));
+        spans.push(Span::styled("0/0", Style::default().fg(theme.error)));
     }
 
     let line = Line::from(spans);

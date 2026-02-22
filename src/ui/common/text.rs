@@ -77,6 +77,9 @@ mod tests {
 
     #[test]
     fn test_truncate_start() {
-        assert_eq!(truncate_start("/a/very/long/path/file.rs", 15, true), "…g/path/file.rs");
+        assert_eq!(
+            truncate_start("/a/very/long/path/file.rs", 15, true),
+            "…g/path/file.rs"
+        );
     }
 }

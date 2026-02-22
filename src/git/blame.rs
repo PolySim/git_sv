@@ -46,10 +46,8 @@ pub fn blame_file(repo: &Repository, commit_oid: Oid, file_path: &str) -> Result
     let tree = commit.tree()?;
     let tree_entry = tree
         .get_path(std::path::Path::new(file_path))
-        .map_err(|_| {
-            crate::error::GitSvError::FileNotFound {
-                path: file_path.to_string(),
-            }
+        .map_err(|_| crate::error::GitSvError::FileNotFound {
+            path: file_path.to_string(),
         })?;
 
     let blob = repo.find_blob(tree_entry.id())?;

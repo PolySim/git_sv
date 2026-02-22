@@ -1,20 +1,20 @@
 //! États spécifiques à chaque vue.
 
-mod graph;
-mod staging;
-mod branches;
 mod blame;
+mod branches;
 mod conflicts;
-mod search;
+mod graph;
 mod merge_picker;
+mod search;
+mod staging;
 
-pub use graph::GraphViewState;
-pub use staging::{StagingState, StagingFocus};
-pub use branches::{BranchesViewState, BranchesSection, BranchesFocus, InputAction};
 pub use blame::BlameState;
-pub use conflicts::{ConflictsState, ConflictPanelFocus};
-pub use search::SearchState;
+pub use branches::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
+pub use conflicts::{ConflictPanelFocus, ConflictsState};
+pub use graph::GraphViewState;
 pub use merge_picker::MergePickerState;
+pub use search::SearchState;
+pub use staging::{StagingFocus, StagingState};
 
 /// Mode de vue actif.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

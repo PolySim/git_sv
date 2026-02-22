@@ -30,7 +30,9 @@ pub fn render(
 
     match effective_mode {
         DiffViewMode::Unified => render_unified(frame, diff, scroll_offset, area, is_focused),
-        DiffViewMode::SideBySide => render_side_by_side(frame, diff, scroll_offset, area, is_focused),
+        DiffViewMode::SideBySide => {
+            render_side_by_side(frame, diff, scroll_offset, area, is_focused)
+        }
     }
 }
 
@@ -85,7 +87,10 @@ fn render_side_by_side(
     };
 
     let title = match diff {
-        Some(d) => format!(" Diff (side-by-side) — {} (+{}/-{}) ", d.path, d.additions, d.deletions),
+        Some(d) => format!(
+            " Diff (side-by-side) — {} (+{}/-{}) ",
+            d.path, d.additions, d.deletions
+        ),
         None => " Diff (side-by-side) ".to_string(),
     };
 
@@ -94,7 +99,7 @@ fn render_side_by_side(
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(50),
-            Constraint::Length(1),  // Séparateur
+            Constraint::Length(1), // Séparateur
             Constraint::Percentage(50),
         ])
         .margin(0)
@@ -131,18 +136,16 @@ fn render_side_by_side(
         let (left_lines, right_lines) = build_side_by_side_lines(d);
 
         // Colonne ancienne (suppressions + contexte).
-        let left_paragraph = Paragraph::new(left_lines)
-            .scroll((scroll_offset as u16, 0));
+        let left_paragraph = Paragraph::new(left_lines).scroll((scroll_offset as u16, 0));
         frame.render_widget(left_paragraph, inner_chunks[0]);
 
         // Séparateur vertical.
-        let separator = Paragraph::new(vec![Line::from("│")])
-            .style(Style::default().fg(Color::DarkGray));
+        let separator =
+            Paragraph::new(vec![Line::from("│")]).style(Style::default().fg(Color::DarkGray));
         frame.render_widget(separator, inner_chunks[1]);
 
         // Colonne nouvelle (ajouts + contexte).
-        let right_paragraph = Paragraph::new(right_lines)
-            .scroll((scroll_offset as u16, 0));
+        let right_paragraph = Paragraph::new(right_lines).scroll((scroll_offset as u16, 0));
         frame.render_widget(right_paragraph, inner_chunks[2]);
     } else {
         let msg = vec![Line::from("Sélectionnez un fichier pour voir le diff")];
@@ -235,7 +238,9 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
                     _ => (Color::Reset, None),
                 };
 
-                let lineno = line.old_lineno.map(|n| format!("{:4}", n))
+                let lineno = line
+                    .old_lineno
+                    .map(|n| format!("{:4}", n))
                     .unwrap_or_else(|| "    ".to_string());
 
                 let mut spans = Vec::new();
@@ -256,10 +261,7 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
             }
             None => {
                 // Placeholder pour alignement.
-                Line::from(Span::styled(
-                    "     ",
-                    Style::default().fg(Color::DarkGray),
-                ))
+                Line::from(Span::styled("     ", Style::default().fg(Color::DarkGray)))
             }
         };
         left_lines.push(left_line);
@@ -273,7 +275,9 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
                     _ => (Color::Reset, None),
                 };
 
-                let lineno = line.new_lineno.map(|n| format!("{:4}", n))
+                let lineno = line
+                    .new_lineno
+                    .map(|n| format!("{:4}", n))
                     .unwrap_or_else(|| "    ".to_string());
 
                 let mut spans = Vec::new();
@@ -294,10 +298,7 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
             }
             None => {
                 // Placeholder pour alignement.
-                Line::from(Span::styled(
-                    "     ",
-                    Style::default().fg(Color::DarkGray),
-                ))
+                Line::from(Span::styled("     ", Style::default().fg(Color::DarkGray)))
             }
         };
         right_lines.push(right_line);
@@ -419,7 +420,12 @@ mod tests {
     use super::*;
     use crate::git::diff::{DiffLine, DiffLineType};
 
-    fn create_test_line(line_type: DiffLineType, content: &str, old_no: Option<u32>, new_no: Option<u32>) -> DiffLine {
+    fn create_test_line(
+        line_type: DiffLineType,
+        content: &str,
+        old_no: Option<u32>,
+        new_no: Option<u32>,
+    ) -> DiffLine {
         DiffLine {
             line_type,
             content: content.to_string(),
@@ -447,9 +453,12 @@ mod tests {
 
     #[test]
     fn test_align_diff_lines_with_deletion() {
-        let lines = vec![
-            create_test_line(DiffLineType::Deletion, "old line", Some(5), None),
-        ];
+        let lines = vec![create_test_line(
+            DiffLineType::Deletion,
+            "old line",
+            Some(5),
+            None,
+        )];
 
         let pairs = align_diff_lines(&lines);
         assert_eq!(pairs.len(), 1);
@@ -461,9 +470,12 @@ mod tests {
 
     #[test]
     fn test_align_diff_lines_with_addition() {
-        let lines = vec![
-            create_test_line(DiffLineType::Addition, "new line", None, Some(5)),
-        ];
+        let lines = vec![create_test_line(
+            DiffLineType::Addition,
+            "new line",
+            None,
+            Some(5),
+        )];
 
         let pairs = align_diff_lines(&lines);
         assert_eq!(pairs.len(), 1);
@@ -504,7 +516,10 @@ mod tests {
         // Le header doit avoir left mais pas right.
         assert!(pairs[0].left.is_some());
         assert!(pairs[0].right.is_none());
-        assert_eq!(pairs[0].left.as_ref().unwrap().line_type, DiffLineType::HunkHeader);
+        assert_eq!(
+            pairs[0].left.as_ref().unwrap().line_type,
+            DiffLineType::HunkHeader
+        );
     }
 
     #[test]

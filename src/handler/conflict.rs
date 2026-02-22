@@ -1,10 +1,10 @@
 //! Handler pour les actions de résolution de conflits.
 
-use crate::error::Result;
-use crate::state::{AppState, ViewMode, ConflictPanelFocus};
-use crate::state::action::ConflictAction;
-use crate::git::conflict::ConflictResolutionMode;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::git::conflict::ConflictResolutionMode;
+use crate::state::action::ConflictAction;
+use crate::state::{AppState, ConflictPanelFocus, ViewMode};
 
 /// Handler pour les opérations de résolution de conflits.
 pub struct ConflictHandler;
@@ -117,11 +117,23 @@ fn handle_switch_panel(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, ConflictType, resolve_file_with_strategy, resolve_special_file};
+    use crate::git::conflict::{
+        resolve_file_with_strategy, resolve_special_file, ConflictResolution, ConflictType,
+    };
 
-    let (file_path, is_special) = state.conflicts_state.as_ref()
+    let (file_path, is_special) = state
+        .conflicts_state
+        .as_ref()
         .and_then(|c| c.all_files.get(c.file_selected))
-        .map(|f| (f.path.clone(), matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem))))
+        .map(|f| {
+            (
+                f.path.clone(),
+                matches!(
+                    f.conflict_type,
+                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                ),
+            )
+        })
         .unzip();
 
     let file_path = match file_path {
@@ -129,7 +141,11 @@ fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
         None => return Ok(()),
     };
     let is_special = is_special.unwrap_or(false);
-    let file_index = state.conflicts_state.as_ref().map(|c| c.file_selected).unwrap_or(0);
+    let file_index = state
+        .conflicts_state
+        .as_ref()
+        .map(|c| c.file_selected)
+        .unwrap_or(0);
 
     let result = if is_special {
         // Pour les conflits de suppression, utiliser resolve_special_file
@@ -144,7 +160,8 @@ fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
         }
     } else {
         // Pour les conflits classiques, utiliser resolve_file_with_strategy
-        resolve_file_with_strategy(&state.repo.repo, &file_path, ConflictResolution::Ours).map(|_| false)
+        resolve_file_with_strategy(&state.repo.repo, &file_path, ConflictResolution::Ours)
+            .map(|_| false)
     };
 
     match result {
@@ -172,11 +189,23 @@ fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, ConflictType, resolve_file_with_strategy, resolve_special_file};
+    use crate::git::conflict::{
+        resolve_file_with_strategy, resolve_special_file, ConflictResolution, ConflictType,
+    };
 
-    let (file_path, is_special) = state.conflicts_state.as_ref()
+    let (file_path, is_special) = state
+        .conflicts_state
+        .as_ref()
         .and_then(|c| c.all_files.get(c.file_selected))
-        .map(|f| (f.path.clone(), matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem))))
+        .map(|f| {
+            (
+                f.path.clone(),
+                matches!(
+                    f.conflict_type,
+                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                ),
+            )
+        })
         .unzip();
 
     let file_path = match file_path {
@@ -184,7 +213,11 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
         None => return Ok(()),
     };
     let is_special = is_special.unwrap_or(false);
-    let file_index = state.conflicts_state.as_ref().map(|c| c.file_selected).unwrap_or(0);
+    let file_index = state
+        .conflicts_state
+        .as_ref()
+        .map(|c| c.file_selected)
+        .unwrap_or(0);
 
     let result = if is_special {
         // Pour les conflits de suppression, utiliser resolve_special_file
@@ -199,7 +232,8 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
         }
     } else {
         // Pour les conflits classiques, utiliser resolve_file_with_strategy
-        resolve_file_with_strategy(&state.repo.repo, &file_path, ConflictResolution::Theirs).map(|_| false)
+        resolve_file_with_strategy(&state.repo.repo, &file_path, ConflictResolution::Theirs)
+            .map(|_| false)
     };
 
     match result {
@@ -227,7 +261,7 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, all_sections_resolved, apply_resolved_content};
+    use crate::git::conflict::{all_sections_resolved, apply_resolved_content, ConflictResolution};
 
     let should_apply = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
@@ -259,7 +293,10 @@ fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
         if let Some(conflicts) = &mut state.conflicts_state {
             if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
                 if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                    state.set_flash_message(format!("Erreur lors de l'application de la résolution: {}", e));
+                    state.set_flash_message(format!(
+                        "Erreur lors de l'application de la résolution: {}",
+                        e
+                    ));
                     return Ok(());
                 }
 
@@ -279,12 +316,12 @@ fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_theirs_block(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, all_sections_resolved, apply_resolved_content};
+    use crate::git::conflict::{all_sections_resolved, apply_resolved_content, ConflictResolution};
 
     let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
         let file_selected = conflicts.file_selected;
-        
+
         if let Some(file) = conflicts.all_files.get_mut(file_selected) {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 conflict.resolution = Some(ConflictResolution::Theirs);
@@ -322,7 +359,7 @@ fn handle_accept_theirs_block(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_both(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, all_sections_resolved, apply_resolved_content};
+    use crate::git::conflict::{all_sections_resolved, apply_resolved_content, ConflictResolution};
 
     let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
@@ -452,11 +489,16 @@ fn handle_cancel_edit(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{apply_resolved_content, all_sections_resolved};
+    use crate::git::conflict::{all_sections_resolved, apply_resolved_content};
 
     let (file_path, all_resolved) = if let Some(conflicts) = &state.conflicts_state {
-        let path = conflicts.all_files.get(conflicts.file_selected).map(|f| f.path.clone());
-        let resolved = conflicts.all_files.get(conflicts.file_selected)
+        let path = conflicts
+            .all_files
+            .get(conflicts.file_selected)
+            .map(|f| f.path.clone());
+        let resolved = conflicts
+            .all_files
+            .get(conflicts.file_selected)
             .map(|f| all_sections_resolved(f))
             .unwrap_or(false);
         (path, resolved)
@@ -476,7 +518,10 @@ fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
                 if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
                     // Appliquer la résolution sur le disque
                     if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                        state.set_flash_message(format!("Erreur lors de l'application de la résolution: {}", e));
+                        state.set_flash_message(format!(
+                            "Erreur lors de l'application de la résolution: {}",
+                            e
+                        ));
                         return Ok(());
                     }
 
@@ -487,7 +532,10 @@ fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
             state.set_flash_message(format!("{} résolu et sauvegardé", path));
             state.mark_dirty();
         } else {
-            state.set_flash_message(format!("{}: toutes les sections ne sont pas résolues", path));
+            state.set_flash_message(format!(
+                "{}: toutes les sections ne sont pas résolues",
+                path
+            ));
         }
     }
     Ok(())
@@ -541,13 +589,21 @@ fn handle_set_mode_block(state: &mut AppState) -> Result<()> {
 
     if let Some(ref mut conflicts) = state.conflicts_state {
         // Vérifier si le fichier courant est un conflit de suppression
-        let is_deletion_conflict = conflicts.all_files
+        let is_deletion_conflict = conflicts
+            .all_files
             .get(conflicts.file_selected)
-            .map(|f| matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)))
+            .map(|f| {
+                matches!(
+                    f.conflict_type,
+                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                )
+            })
             .unwrap_or(false);
 
         if is_deletion_conflict {
-            state.set_flash_message("Mode bloc non disponible pour les conflits de suppression".to_string());
+            state.set_flash_message(
+                "Mode bloc non disponible pour les conflits de suppression".to_string(),
+            );
             return Ok(());
         }
 
@@ -563,13 +619,21 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
 
     if let Some(ref mut conflicts) = state.conflicts_state {
         // Vérifier si le fichier courant est un conflit de suppression
-        let is_deletion_conflict = conflicts.all_files
+        let is_deletion_conflict = conflicts
+            .all_files
             .get(conflicts.file_selected)
-            .map(|f| matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)))
+            .map(|f| {
+                matches!(
+                    f.conflict_type,
+                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                )
+            })
             .unwrap_or(false);
 
         if is_deletion_conflict {
-            state.set_flash_message("Mode ligne non disponible pour les conflits de suppression".to_string());
+            state.set_flash_message(
+                "Mode ligne non disponible pour les conflits de suppression".to_string(),
+            );
             return Ok(());
         }
 
@@ -581,8 +645,8 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_toggle_line(state: &mut AppState) -> Result<()> {
-    use crate::state::ConflictPanelFocus;
     use crate::git::conflict::{all_sections_resolved, apply_resolved_content};
+    use crate::state::ConflictPanelFocus;
 
     let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
@@ -593,16 +657,18 @@ fn handle_toggle_line(state: &mut AppState) -> Result<()> {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 // Assurer que line_level_resolution existe
                 if conflict.line_level_resolution.is_none() {
-                    conflict.line_level_resolution = Some(crate::git::conflict::LineLevelResolution::new(
-                        conflict.ours.len(),
-                        conflict.theirs.len(),
-                    ));
+                    conflict.line_level_resolution =
+                        Some(crate::git::conflict::LineLevelResolution::new(
+                            conflict.ours.len(),
+                            conflict.theirs.len(),
+                        ));
                 }
 
                 match conflicts.panel_focus {
                     ConflictPanelFocus::OursPanel => {
                         if let Some(resolution) = &mut conflict.line_level_resolution {
-                            if let Some(included) = resolution.ours_lines_included.get_mut(line_idx) {
+                            if let Some(included) = resolution.ours_lines_included.get_mut(line_idx)
+                            {
                                 *included = !*included;
                                 resolution.touched = true;
                             }
@@ -610,7 +676,9 @@ fn handle_toggle_line(state: &mut AppState) -> Result<()> {
                     }
                     ConflictPanelFocus::TheirsPanel => {
                         if let Some(resolution) = &mut conflict.line_level_resolution {
-                            if let Some(included) = resolution.theirs_lines_included.get_mut(line_idx) {
+                            if let Some(included) =
+                                resolution.theirs_lines_included.get_mut(line_idx)
+                            {
                                 *included = !*included;
                                 resolution.touched = true;
                             }
@@ -736,10 +804,7 @@ fn handle_start_editing(state: &mut AppState) -> Result<()> {
             let resolved = generate_resolved_content_with_source(file, mode);
 
             // Convertir les ResolvedLine en String
-            conflicts.edit_buffer = resolved
-                .into_iter()
-                .map(|line| line.content)
-                .collect();
+            conflicts.edit_buffer = resolved.into_iter().map(|line| line.content).collect();
 
             // Positionner le curseur au début
             conflicts.edit_cursor_line = 0;
@@ -918,13 +983,11 @@ fn handle_enter_resolve(state: &mut AppState) -> Result<()> {
 
     if let Some(conflicts) = &mut state.conflicts_state {
         match conflicts.resolution_mode {
-            ConflictResolutionMode::File => {
-                match conflicts.panel_focus {
-                    ConflictPanelFocus::OursPanel => handle_accept_ours_file(state)?,
-                    ConflictPanelFocus::TheirsPanel => handle_accept_theirs_file(state)?,
-                    _ => {}
-                }
-            }
+            ConflictResolutionMode::File => match conflicts.panel_focus {
+                ConflictPanelFocus::OursPanel => handle_accept_ours_file(state)?,
+                ConflictPanelFocus::TheirsPanel => handle_accept_theirs_file(state)?,
+                _ => {}
+            },
             ConflictResolutionMode::Block => {
                 use crate::git::conflict::ConflictResolution;
 

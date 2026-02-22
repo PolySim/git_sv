@@ -25,14 +25,19 @@ pub fn render(
     is_focused: bool,
 ) {
     let theme = current_theme();
-    
+
     // Construire les lignes du graphe avec les edges de connexion.
     let items = build_graph_items(graph, selected_index);
 
     let branch_name = current_branch.as_deref().unwrap_or("???");
     let title = if graph.len() < total_commits {
         // Afficher le compteur filtré
-        format!(" Graphe — {} ({} / {}) ", branch_name, graph.len(), total_commits)
+        format!(
+            " Graphe — {} ({} / {}) ",
+            branch_name,
+            graph.len(),
+            total_commits
+        )
     } else {
         format!(" Graphe — {} ", branch_name)
     };
@@ -288,7 +293,7 @@ fn get_branch_color(index: usize) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::graph::{GraphRow, CommitNode, GraphCell, EdgeType};
+    use crate::git::graph::{CommitNode, EdgeType, GraphCell, GraphRow};
     use git2::Oid;
     use ratatui::widgets::ListState;
 
@@ -306,7 +311,10 @@ mod tests {
                     column: 0,
                     color_index: 0,
                 },
-                cells: vec![Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 0 })],
+                cells: vec![Some(GraphCell {
+                    edge_type: EdgeType::Vertical,
+                    color_index: 0,
+                })],
                 connection: None,
             },
             GraphRow {
@@ -321,7 +329,10 @@ mod tests {
                     column: 0,
                     color_index: 0,
                 },
-                cells: vec![Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 0 })],
+                cells: vec![Some(GraphCell {
+                    edge_type: EdgeType::Vertical,
+                    color_index: 0,
+                })],
                 connection: None,
             },
         ]
@@ -343,9 +354,7 @@ mod tests {
         let line = build_commit_line(row, false);
 
         // La ligne devrait contenir le message
-        let line_text: String = line.spans.iter()
-            .map(|s| s.content.as_ref())
-            .collect();
+        let line_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(line_text.contains("First commit"));
     }
 
@@ -369,19 +378,21 @@ mod tests {
         let mut state = ListState::default();
         state.select(Some(0));
 
-        terminal.draw(|frame| {
-            let area = frame.area();
-            render(
-                frame,
-                &graph,
-                &Some("main".to_string()),
-                0,
-                graph.len(),
-                area,
-                &mut state,
-                true,
-            );
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render(
+                    frame,
+                    &graph,
+                    &Some("main".to_string()),
+                    0,
+                    graph.len(),
+                    area,
+                    &mut state,
+                    true,
+                );
+            })
+            .unwrap();
 
         // Vérifier que quelque chose a été rendu
         let buffer = terminal.backend().buffer();
@@ -399,19 +410,21 @@ mod tests {
         let mut state = ListState::default();
         state.select(Some(2)); // Sélectionner le deuxième commit
 
-        terminal.draw(|frame| {
-            let area = frame.area();
-            render(
-                frame,
-                &graph,
-                &Some("feature".to_string()),
-                1, // selected_index = 1
-                graph.len(),
-                area,
-                &mut state,
-                false,
-            );
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render(
+                    frame,
+                    &graph,
+                    &Some("feature".to_string()),
+                    1, // selected_index = 1
+                    graph.len(),
+                    area,
+                    &mut state,
+                    false,
+                );
+            })
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         assert!(buffer.content.len() > 0);

@@ -1,9 +1,9 @@
 //! Handler pour les actions sur les branches.
 
-use crate::error::Result;
-use crate::state::{AppState, ViewMode, BranchesSection};
-use crate::state::action::BranchAction;
 use super::traits::{ActionHandler, HandlerContext};
+use crate::error::Result;
+use crate::state::action::BranchAction;
+use crate::state::{AppState, BranchesSection, ViewMode};
 
 /// Handler pour les opérations sur les branches.
 pub struct BranchHandler;
@@ -29,7 +29,7 @@ impl ActionHandler for BranchHandler {
             BranchAction::NextSection => handle_next_section(ctx.state),
             BranchAction::PrevSection => handle_prev_section(ctx.state),
             BranchAction::ConfirmInput => Ok(()), // Géré par le handler d'édition
-            BranchAction::CancelInput => Ok(()), // Géré par le handler d'édition
+            BranchAction::CancelInput => Ok(()),  // Géré par le handler d'édition
         }
     }
 }
@@ -58,7 +58,10 @@ fn handle_list(state: &mut AppState) -> Result<()> {
 
 fn handle_checkout(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Graph && state.show_branch_panel {
-        let branch_name = state.branches.get(state.branch_selected).map(|b| b.name.clone());
+        let branch_name = state
+            .branches
+            .get(state.branch_selected)
+            .map(|b| b.name.clone());
         if let Some(branch_name) = branch_name {
             match crate::git::branch::checkout_branch(&state.repo.repo, &branch_name) {
                 Ok(_) => {
