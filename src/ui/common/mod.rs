@@ -1,43 +1,33 @@
 //! Widgets et utilitaires UI réutilisables.
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
 };
 
-/// Calcule un rectangle centré de dimensions données (en pourcentage).
-///
-/// # Arguments
-/// * `percent_x` - Pourcentage de largeur (0-100)
-/// * `percent_y` - Pourcentage de hauteur (0-100)
-/// * `r` - Rectangle de référence dans lequel centrer
-///
-/// # Exemple
-/// ```rust,ignore
-/// let popup_area = centered_rect(70, 80, frame.area());
-/// ```
-pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
+// Déclaration des sous-modules
+pub mod block;
+pub mod help_bar;
+pub mod list;
+pub mod popup;
+pub mod rect;
+pub mod style;
+pub mod text;
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
+// Re-exports pour un accès plus simple
+pub use block::StyledBlock;
+pub use help_bar::{HelpBar, KeyBinding};
+pub use list::{list_item, list_item_styled, StyledList};
+pub use popup::Popup;
+pub use rect::{centered_rect, centered_rect_fixed, is_terminal_size_adequate};
+pub use style::{
+    border_style, diff_add_style, diff_header_style, diff_remove_style, dim_style, error_style,
+    highlight_style, success_style, title_style, FOCUS_COLOR, INACTIVE_COLOR,
+};
+pub use text::{pad_left, pad_right, truncate, truncate_start};
 
 /// Configuration pour une status bar.
 pub struct StatusBarConfig<'a> {
