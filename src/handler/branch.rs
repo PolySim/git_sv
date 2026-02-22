@@ -38,12 +38,14 @@ fn handle_list(state: &mut AppState) -> Result<()> {
     if matches!(state.view_mode, ViewMode::Graph | ViewMode::Branches) {
         state.show_branch_panel = !state.show_branch_panel;
         if state.show_branch_panel {
-            // Recharger les branches
             match crate::git::branch::list_all_branches(&state.repo.repo) {
-                Ok((local, _remote)) => {
-                    // Convertir BranchInfo en String (noms uniquement)
-                    state.branches = local.into_iter().collect();
+                Ok((local, remote)) => {
+                    // Legacy (pour le panneau overlay en Graph view)
+                    state.branches = local.clone();
                     state.branch_selected = 0;
+                    // Nouveau système (pour la vue Branches)
+                    state.branches_view_state.local_branches.set_items(local);
+                    state.branches_view_state.remote_branches.set_items(remote);
                 }
                 Err(e) => {
                     state.set_flash_message(format!("Erreur: {}", e));

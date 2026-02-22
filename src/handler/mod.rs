@@ -22,7 +22,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
 
 use crate::error::Result;
-use crate::state::AppState;
+use crate::state::{AppState, ViewMode};
 use crate::ui;
 use crate::ui::input::handle_input_with_timeout;
 
@@ -126,6 +126,35 @@ impl EventHandler {
         self.state.staging_state.set_unstaged_files(
             all_entries.iter().filter(|e| e.is_unstaged()).cloned().collect()
         );
+
+        // Charger les données de la vue branches
+        if self.state.view_mode == ViewMode::Branches {
+            match crate::git::branch::list_all_branches(&self.state.repo.repo) {
+                Ok((local, remote)) => {
+                    self.state.branches_view_state.local_branches.set_items(local);
+                    self.state.branches_view_state.remote_branches.set_items(remote);
+                }
+                Err(e) => {
+                    self.state.set_flash_message(format!("Erreur chargement branches: {}", e));
+                }
+            }
+
+            // Charger les worktrees
+            match crate::git::worktree::list_worktrees(&self.state.repo.repo) {
+                Ok(worktrees) => {
+                    self.state.branches_view_state.worktrees.set_items(worktrees);
+                }
+                Err(_) => {}
+            }
+
+            // Charger les stashes
+            match crate::git::stash::list_stashes(&mut self.state.repo.repo) {
+                Ok(stashes) => {
+                    self.state.branches_view_state.stashes.set_items(stashes);
+                }
+                Err(_) => {}
+            }
+        }
 
         // Réinitialiser le flag dirty
         self.state.dirty = false;
