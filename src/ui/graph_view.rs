@@ -19,6 +19,7 @@ pub fn render(
     graph: &[GraphRow],
     current_branch: &Option<String>,
     selected_index: usize,
+    total_commits: usize,
     area: Rect,
     state: &mut ListState,
     is_focused: bool,
@@ -29,7 +30,12 @@ pub fn render(
     let items = build_graph_items(graph, selected_index);
 
     let branch_name = current_branch.as_deref().unwrap_or("???");
-    let title = format!(" Graphe — {} ", branch_name);
+    let title = if graph.len() < total_commits {
+        // Afficher le compteur filtré
+        format!(" Graphe — {} ({} / {}) ", branch_name, graph.len(), total_commits)
+    } else {
+        format!(" Graphe — {} ", branch_name)
+    };
 
     let border_style = if is_focused {
         Style::default().fg(theme.border_active)
@@ -370,6 +376,7 @@ mod tests {
                 &graph,
                 &Some("main".to_string()),
                 0,
+                graph.len(),
                 area,
                 &mut state,
                 true,
@@ -399,6 +406,7 @@ mod tests {
                 &graph,
                 &Some("feature".to_string()),
                 1, // selected_index = 1
+                graph.len(),
                 area,
                 &mut state,
                 false,

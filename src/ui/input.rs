@@ -140,6 +140,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     }
 
     // Ctrl+d / Ctrl+u pour page down/up
+    // Ctrl+R pour effacer les filtres si actifs
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('d') => {
@@ -153,6 +154,11 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                     return Some(AppAction::DiffScrollUp);
                 }
                 return Some(AppAction::PageUp);
+            }
+            KeyCode::Char('r') => {
+                if state.graph_filter.is_active() {
+                    return Some(AppAction::ClearFilter);
+                }
             }
             _ => {}
         }

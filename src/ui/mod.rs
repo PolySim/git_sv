@@ -156,11 +156,14 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
 
     // Rendu du graphe.
     let is_graph_focused = state.focus == FocusPanel::Graph;
+    // Utiliser le total de commits (si filtres actifs, c'est le dernier total connu)
+    let total_commits = state.graph_view.rows.len().max(state.graph.len());
     graph_view::render(
         frame,
         &state.graph,
         &state.current_branch,
         state.selected_index,
+        total_commits,
         layout.graph,
         &mut state.graph_state.clone(),
         is_graph_focused,
@@ -218,6 +221,7 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
         state.selected_index,
         state.graph.len(),
         state.bottom_left_mode.clone(),
+        state.graph_filter.is_active(),
         layout.help_bar,
     );
 

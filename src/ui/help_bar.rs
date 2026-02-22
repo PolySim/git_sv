@@ -15,6 +15,7 @@ pub fn render(
     selected_index: usize,
     total_commits: usize,
     bottom_left_mode: BottomLeftMode,
+    filter_active: bool,
     area: Rect,
 ) {
     let theme = current_theme();
@@ -34,6 +35,11 @@ pub fn render(
     match bottom_left_mode {
         BottomLeftMode::CommitFiles | BottomLeftMode::Files => keys.push(("Tab", "fichiers")),
         BottomLeftMode::WorkingDir | BottomLeftMode::Parents => keys.push(("Tab", "commit")),
+    }
+
+    // Ajouter le raccourci pour effacer les filtres s'ils sont actifs
+    if filter_active {
+        keys.push(("Ctrl+R", "effacer filtres"));
     }
 
     keys.extend(vec![("r", "rafraîchir"), ("?", "aide"), ("q", "quitter")]);
