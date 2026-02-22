@@ -75,8 +75,13 @@ fn handle_checkout(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_create(_state: &mut AppState) -> Result<()> {
-    // Ouvre un input pour créer une branche (géré par le handler d'édition)
+fn handle_create(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.focus = crate::state::BranchesFocus::Input;
+        state.branches_view_state.input_action = Some(crate::state::InputAction::CreateBranch);
+        state.branches_view_state.input_text.clear();
+        state.branches_view_state.input_cursor = 0;
+    }
     Ok(())
 }
 
@@ -90,8 +95,16 @@ fn handle_delete(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_rename(_state: &mut AppState) -> Result<()> {
-    // Ouvre un input pour renommer (géré par le handler d'édition)
+fn handle_rename(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        if let Some(branch) = state.branches_view_state.selected_branch() {
+            let current_name = branch.name.clone();
+            state.branches_view_state.focus = crate::state::BranchesFocus::Input;
+            state.branches_view_state.input_action = Some(crate::state::InputAction::RenameBranch);
+            state.branches_view_state.input_text = current_name;
+            state.branches_view_state.input_cursor = state.branches_view_state.input_text.len();
+        }
+    }
     Ok(())
 }
 
@@ -132,8 +145,13 @@ fn handle_merge(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_stash_save(_state: &mut AppState) -> Result<()> {
-    // Ouvre un input pour le message du stash (géré par le handler d'édition)
+fn handle_stash_save(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.focus = crate::state::BranchesFocus::Input;
+        state.branches_view_state.input_action = Some(crate::state::InputAction::SaveStash);
+        state.branches_view_state.input_text.clear();
+        state.branches_view_state.input_cursor = 0;
+    }
     Ok(())
 }
 
@@ -219,5 +237,80 @@ fn handle_prev_section(state: &mut AppState) -> Result<()> {
         BranchesSection::Worktrees => BranchesSection::Branches,
         BranchesSection::Stashes => BranchesSection::Worktrees,
     };
+    Ok(())
+}
+
+fn handle_confirm_input(state: &mut AppState) -> Result<()> {
+    let input = state.branches_view_state.input_text.trim().to_string();
+    if input.is_empty() {
+        state.branches_view_state.focus = crate::state::BranchesFocus::List;
+        state.branches_view_state.input_action = None;
+        return Ok(());
+    }
+
+    match state.branches_view_state.input_action {
+        Some(crate::state::InputAction::CreateBranch) => {
+            match crate::git::branch::create_branch(&state.repo.repo, &input) {
+                Ok(_) => {
+                    state.set_flash_message(format!("Branche '{}' créée ✓", input));
+                    state.mark_dirty();
+                }
+                Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+            }
+        }
+        Some(crate::state::InputAction::RenameBranch) => {
+            if let Some(branch) = state.branches_view_state.selected_branch() {
+                let old_name = branch.name.clone();
+                match crate::git::branch::rename_branch(&state.repo.repo, &old_name, &input) {
+                    Ok(_) => {
+                        state.set_flash_message(format!("Branche renommée → '{}' ✓", input));
+                        state.mark_dirty();
+                    }
+                    Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+                }
+            }
+        }
+        Some(crate::state::InputAction::SaveStash) => {
+            match crate::git::stash::save_stash(&mut state.repo.repo, Some(&input)) {
+                Ok(_) => {
+                    state.set_flash_message(format!("Stash créé: {} ✓", input));
+                    state.mark_dirty();
+                }
+                Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+            }
+        }
+        Some(crate::state::InputAction::CreateWorktree) => {
+            // Le format attendu est "nom chemin [branche]"
+            let parts: Vec<&str> = input.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let name = parts[0];
+                let path = parts[1];
+                let branch = parts.get(2).copied();
+                match crate::git::worktree::create_worktree(&state.repo.repo, name, path, branch) {
+                    Ok(_) => {
+                        state.set_flash_message(format!("Worktree '{}' créé ✓", name));
+                        state.mark_dirty();
+                    }
+                    Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+                }
+            } else {
+                state.set_flash_message("Format: nom chemin [branche]".to_string());
+            }
+        }
+        None => {}
+    }
+
+    state.branches_view_state.focus = crate::state::BranchesFocus::List;
+    state.branches_view_state.input_action = None;
+    state.branches_view_state.input_text.clear();
+    state.branches_view_state.input_cursor = 0;
+    Ok(())
+}
+
+fn handle_cancel_input(state: &mut AppState) -> Result<()> {
+    state.branches_view_state.focus = crate::state::BranchesFocus::List;
+    state.branches_view_state.input_action = None;
+    state.branches_view_state.input_text.clear();
+    state.branches_view_state.input_cursor = 0;
     Ok(())
 }

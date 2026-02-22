@@ -79,14 +79,27 @@ fn handle_unstage_all(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_discard_file(state: &mut AppState) -> Result<()> {
-    // Cette action nécessite une confirmation
-    // Elle sera traitée par le confirm handler
+    use crate::ui::confirm_dialog::ConfirmAction;
+
+    if state.view_mode == ViewMode::Staging {
+        if let Some(file) = state
+            .staging_state
+            .unstaged_files()
+            .get(state.staging_state.unstaged_selected())
+        {
+            let path = file.path.clone();
+            state.pending_confirmation = Some(ConfirmAction::DiscardFile(path));
+        }
+    }
     Ok(())
 }
 
 fn handle_discard_all(state: &mut AppState) -> Result<()> {
-    // Cette action nécessite une confirmation
-    // Elle sera traitée par le confirm handler
+    use crate::ui::confirm_dialog::ConfirmAction;
+
+    if state.view_mode == ViewMode::Staging {
+        state.pending_confirmation = Some(ConfirmAction::DiscardAll);
+    }
     Ok(())
 }
 
