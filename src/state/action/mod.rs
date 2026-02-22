@@ -7,6 +7,7 @@ mod branch;
 mod conflict;
 mod search;
 mod edit;
+mod filter;
 
 pub use navigation::NavigationAction;
 pub use git::GitAction;
@@ -15,6 +16,7 @@ pub use branch::BranchAction;
 pub use conflict::ConflictAction;
 pub use search::SearchAction;
 pub use edit::EditAction;
+pub use filter::FilterAction;
 
 use super::view::ViewMode;
 
@@ -52,7 +54,10 @@ pub enum AppAction {
     
     /// Actions d'édition de texte (nouvelle structure)
     Edit(EditAction),
-    
+
+    /// Actions de filtrage du graph (nouvelle structure)
+    Filter(FilterAction),
+
     /// Changer de mode de vue
     SwitchView(ViewMode),
     
@@ -282,7 +287,24 @@ pub enum AppAction {
     ConflictEditNewline,
     /// Conflit: Mark resolved (legacy - utiliser Conflict(MarkResolved))
     ConflictResolveFile,
-    
+
+    /// Filter: Ouvrir (legacy - utiliser Filter(Open))
+    OpenFilter,
+    /// Filter: Fermer (legacy - utiliser Filter(Close))
+    CloseFilter,
+    /// Filter: Champ suivant (legacy - utiliser Filter(NextField))
+    FilterNextField,
+    /// Filter: Champ précédent (legacy - utiliser Filter(PreviousField))
+    FilterPrevField,
+    /// Filter: Appliquer (legacy - utiliser Filter(Apply))
+    ApplyFilter,
+    /// Filter: Effacer (legacy - utiliser Filter(Clear))
+    ClearFilter,
+    /// Filter: Insérer caractère (legacy - utiliser Filter(InsertChar(c)))
+    FilterInsertChar(char),
+    /// Filter: Supprimer caractère (legacy - utiliser Filter(DeleteChar))
+    FilterDeleteChar,
+
     /// Aucune action (événement ignoré)
     None,
 }

@@ -77,6 +77,27 @@ impl GitRepo {
         Ok(graph)
     }
 
+    /// Construit le graphe de commits avec filtrage.
+    pub fn build_graph_filtered(
+        &self,
+        max_count: usize,
+        filter: &crate::state::GraphFilter,
+    ) -> Result<Vec<GraphRow>> {
+        // Récupérer plus de commits que demandé car le filtrage peut réduire la liste
+        let fetch_count = max_count * 3;
+        let commits = self.log_all_branches(fetch_count)?;
+
+        // Appliquer le filtre
+        let filtered_commits = filter.filter_commits(&commits);
+
+        // Limiter au nombre demandé
+        let limited_commits: Vec<_> = filtered_commits.into_iter().take(max_count).collect();
+
+        // Construire le graphe avec les commits filtrés
+        let graph = super::graph::build_graph(&self.repo, &limited_commits)?;
+        Ok(graph)
+    }
+
     /// Retourne le status du working directory.
     pub fn status(&self) -> Result<Vec<StatusEntry>> {
         let mut opts = StatusOptions::new();

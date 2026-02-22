@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::git::repo::StatusEntry;
+use crate::state::GraphFilter;
 
 /// Rend la status bar en haut de l'écran.
 pub fn render(
@@ -15,6 +16,7 @@ pub fn render(
     _repo_path: &str,
     status_entries: &[StatusEntry],
     flash_message: Option<&str>,
+    filter: &GraphFilter,
     area: Rect,
 ) {
     let branch = current_branch.as_deref().unwrap_or("???");
@@ -48,6 +50,17 @@ pub fn render(
         Span::styled(format!("{}  ", branch), Style::default().fg(Color::Yellow)),
         status_text,
     ];
+
+    // Ajouter l'indicateur de filtre actif s'il y en a un.
+    if filter.is_active() {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            "[FILTRÉ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
     // Ajouter le message flash s'il existe.
     if let Some(msg) = flash_message {

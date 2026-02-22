@@ -4,11 +4,13 @@ pub mod action;
 pub mod view;
 pub mod selection;
 pub mod cache;
+pub mod filter;
 
 pub use action::AppAction;
 pub use view::*;
 pub use selection::ListSelection;
 pub use cache::{DiffCache, DiffCacheKey, LazyDiff, LazyBlame};
+pub use filter::{GraphFilter, FilterPopupState, FilterField};
 
 use crate::git::branch::BranchInfo;
 use crate::git::diff::DiffFile;
@@ -139,6 +141,16 @@ pub struct AppState {
     
     /// Cache des diffs.
     pub diff_cache: DiffCache,
+
+    // ═══════════════════════════════════════════════════
+    // Filtres pour le graph
+    // ═══════════════════════════════════════════════════
+
+    /// Filtres actifs sur le graph.
+    pub graph_filter: GraphFilter,
+
+    /// État du popup de filtre.
+    pub filter_popup: FilterPopupState,
 }
 
 impl AppState {
@@ -180,6 +192,8 @@ impl AppState {
             branch_selected: 0,
             should_quit: false,
             diff_cache: DiffCache::new(50),
+            graph_filter: GraphFilter::new(),
+            filter_popup: FilterPopupState::new(),
         };
 
         Ok(state)
@@ -254,4 +268,4 @@ impl AppState {
 }
 
 // Compatibilité: types exportés depuis l'ancien state.rs
-pub use action::{NavigationAction, GitAction, StagingAction, BranchAction, ConflictAction, SearchAction, EditAction};
+pub use action::{NavigationAction, GitAction, StagingAction, BranchAction, ConflictAction, SearchAction, EditAction, FilterAction};

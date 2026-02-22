@@ -8,6 +8,7 @@ pub mod conflicts_view;
 pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;
+pub mod filter_popup;
 pub mod graph_legend;
 pub mod graph_view;
 pub mod help_bar;
@@ -113,6 +114,7 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
         &state.repo_path,
         &state.status_entries,
         state.current_flash_message(),
+        &state.graph_filter,
         layout.status_bar,
     );
 
@@ -198,5 +200,10 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
     // Panneau de branches (si actif).
     if state.show_branch_panel {
         branch_panel::render(frame, &state.branches, state.branch_selected, frame.area());
+    }
+
+    // Popup de filtre (si ouvert).
+    if state.filter_popup.is_open {
+        filter_popup::render(frame, &state.filter_popup, &state.graph_filter, frame.area());
     }
 }

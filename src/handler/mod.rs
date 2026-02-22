@@ -11,17 +11,11 @@ pub mod branch;
 pub mod conflict;
 pub mod search;
 pub mod edit;
+pub mod filter;
 pub mod dispatcher;
 
 // Re-exports des handlers et dispatcher
 pub use traits::{ActionHandler, HandlerContext};
-pub use navigation::NavigationHandler;
-pub use staging::StagingHandler;
-pub use git::GitHandler;
-pub use branch::BranchHandler;
-pub use conflict::ConflictHandler;
-pub use search::SearchHandler;
-pub use edit::EditHandler;
 pub use dispatcher::ActionDispatcher;
 
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -93,17 +87,35 @@ impl EventHandler {
     fn refresh(&mut self) -> Result<()> {
         // Mise à jour des données de base
         self.state.current_branch = self.state.repo.current_branch().ok();
-        self.state.graph = self.state.repo.build_graph(crate::state::MAX_COMMITS).unwrap_or_default();
+
+        // Construire le graphe avec ou sans filtres
+        self.state.graph = if self.state.graph_filter.is_active() {
+            self.state.repo.build_graph_filtered(
+                crate::state::MAX_COMMITS,
+                &self.state.graph_filter,
+            ).unwrap_or_default()
+        } else {
+            self.state.repo.build_graph(crate::state::MAX_COMMITS).unwrap_or_default()
+        };
+
         self.state.status_entries = self.state.repo.status().unwrap_or_default();
 
-        // Synchronisation de la sélection
+        // Synchronisation de la sélection - ne pas dépasser les bornes
         if self.state.selected_index >= self.state.graph.len() && !self.state.graph.is_empty() {
             self.state.selected_index = self.state.graph.len() - 1;
         }
+        if self.state.graph.is_empty() {
+            self.state.selected_index = 0;
+        }
+
+        // Synchroniser graph_view avec la nouvelle sélection
+        self.state.graph_view.rows.select(self.state.selected_index);
 
         // Mise à jour des fichiers du commit sélectionné
         if let Some(row) = self.state.graph.get(self.state.selected_index) {
             self.state.commit_files = self.state.repo.commit_diff(row.node.oid).unwrap_or_default();
+        } else {
+            self.state.commit_files.clear();
         }
 
         // Mise à jour du staging

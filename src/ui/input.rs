@@ -73,6 +73,22 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
 
+    // Si le popup de filtre est ouvert, gérer ses inputs
+    if state.filter_popup.is_open {
+        return match key.code {
+            KeyCode::Esc => Some(AppAction::CloseFilter),
+            KeyCode::Enter => Some(AppAction::ApplyFilter),
+            KeyCode::Tab | KeyCode::Down => Some(AppAction::FilterNextField),
+            KeyCode::BackTab | KeyCode::Up => Some(AppAction::FilterPrevField),
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(AppAction::ClearFilter)
+            }
+            KeyCode::Char(c) => Some(AppAction::FilterInsertChar(c)),
+            KeyCode::Backspace => Some(AppAction::FilterDeleteChar),
+            _ => None,
+        };
+    }
+
     // Si on est en mode Staging avec focus sur CommitMessage, dispatcher immédiatement
     // sans intercepter les raccourcis globaux (permet de taper "1", "2", "3" dans le message)
     if state.view_mode == ViewMode::Staging
@@ -212,6 +228,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('/') => Some(AppAction::OpenSearch),
         KeyCode::Char('n') => Some(AppAction::NextSearchResult),
         KeyCode::Char('N') => Some(AppAction::PrevSearchResult),
+
+        // Filtre
+        KeyCode::Char('F') => Some(AppAction::OpenFilter),
 
         // Vue blame
         KeyCode::Char('B') => Some(AppAction::OpenBlame),
