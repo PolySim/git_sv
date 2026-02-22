@@ -49,7 +49,7 @@ impl App {
     pub fn run(self) -> Result<()> {
         let mut terminal = setup_terminal()?;
 
-        let mut handler = crate::event::EventHandler::new(self.state);
+        let mut handler = crate::handler::EventHandler::new(self.state);
         let result = handler.run(&mut terminal);
 
         restore_terminal(&mut terminal)?;

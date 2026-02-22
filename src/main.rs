@@ -1,8 +1,8 @@
 mod app;
 mod error;
 mod error_display;
-mod event;
 mod git;
+mod handler;
 mod state;
 mod terminal;
 mod ui;
