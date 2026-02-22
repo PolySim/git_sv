@@ -261,7 +261,16 @@ fn handle_commit_prompt(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_stash_prompt(state: &mut AppState) -> Result<()> {
-    // Ouvre le prompt de stash (affichage UI)
+    // Créer un stash rapide sans message (WIP par défaut)
+    match crate::git::stash::save_stash(&mut state.repo.repo, None) {
+        Ok(_) => {
+            state.set_flash_message("Stash créé ✓".to_string());
+            state.mark_dirty();
+        }
+        Err(e) => {
+            state.set_flash_message(format!("Erreur stash: {}", e));
+        }
+    }
     Ok(())
 }
 
