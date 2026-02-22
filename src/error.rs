@@ -9,9 +9,6 @@ pub enum GitSvError {
     #[error("Erreur I/O : {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Erreur terminal : {0}")]
-    Terminal(String),
-
     #[error("Erreur clipboard : {0}")]
     Clipboard(String),
 

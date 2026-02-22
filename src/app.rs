@@ -55,6 +55,6 @@ impl App {
 
 // Ré-export des types publiquement utilisés
 pub use crate::state::{
-    AppAction, AppState, BottomLeftMode, BranchesFocus, BranchesSection, BranchesViewState,
-    FocusPanel, InputAction, StagingFocus, StagingState, ViewMode,
+    BottomLeftMode, BranchesFocus, BranchesSection, BranchesViewState, InputAction, StagingFocus,
+    StagingState,
 };

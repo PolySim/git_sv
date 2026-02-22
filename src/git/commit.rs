@@ -67,7 +67,7 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
 
 /// Amende le dernier commit avec le message donné et l'index courant.
 pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
-    let sig = repo
+    let _sig = repo
         .signature()
         .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
 

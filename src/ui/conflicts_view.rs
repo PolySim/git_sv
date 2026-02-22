@@ -132,7 +132,9 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
 fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_focused = state.panel_focus == ConflictPanelFocus::FileList;
     let title_style = if is_focused {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
@@ -172,14 +174,14 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             // Déterminer la résolution choisie pour l'affichage
             let resolution_label = if file.is_resolved {
                 // Prendre la résolution de la première section (toutes identiques après résolution rapide)
-                file.conflicts.first().and_then(|s| s.resolution).map_or(
-                    String::new(),
-                    |r| match r {
+                file.conflicts
+                    .first()
+                    .and_then(|s| s.resolution)
+                    .map_or(String::new(), |r| match r {
                         ConflictResolution::Ours => " [Ours]".to_string(),
                         ConflictResolution::Theirs => " [Theirs]".to_string(),
                         ConflictResolution::Both => " [Les deux]".to_string(),
-                    },
-                )
+                    })
             } else {
                 String::new()
             };
@@ -199,7 +201,10 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 Style::default().fg(color)
             };
 
-            let label = format!("{} {}{}{}", status_icon, type_icon, file.path, resolution_label);
+            let label = format!(
+                "{} {}{}{}",
+                status_icon, type_icon, file.path, resolution_label
+            );
             ListItem::new(label).style(style)
         })
         .collect();
@@ -216,7 +221,9 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
     let title_style = if is_focused {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
@@ -313,13 +320,22 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 let is_included = section
                     .line_level_resolution
                     .as_ref()
-                    .map(|lr| lr.ours_lines_included.get(line_idx).copied().unwrap_or(false))
+                    .map(|lr| {
+                        lr.ours_lines_included
+                            .get(line_idx)
+                            .copied()
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(true);
 
                 let indicator = if is_included { "[x]" } else { "[ ]" };
                 let style = if is_current_line {
                     Style::default()
-                        .fg(if is_included { Color::Green } else { Color::DarkGray })
+                        .fg(if is_included {
+                            Color::Green
+                        } else {
+                            Color::DarkGray
+                        })
                         .bg(Color::DarkGray)
                         .add_modifier(Modifier::BOLD)
                 } else if is_included {
@@ -380,7 +396,9 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
     let title_style = if is_focused {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };
@@ -477,13 +495,22 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 let is_included = section
                     .line_level_resolution
                     .as_ref()
-                    .map(|lr| lr.theirs_lines_included.get(line_idx).copied().unwrap_or(false))
+                    .map(|lr| {
+                        lr.theirs_lines_included
+                            .get(line_idx)
+                            .copied()
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(false);
 
                 let indicator = if is_included { "[x]" } else { "[ ]" };
                 let style = if is_current_line {
                     Style::default()
-                        .fg(if is_included { Color::Blue } else { Color::DarkGray })
+                        .fg(if is_included {
+                            Color::Blue
+                        } else {
+                            Color::DarkGray
+                        })
                         .bg(Color::DarkGray)
                         .add_modifier(Modifier::BOLD)
                 } else if is_included {
@@ -541,7 +568,10 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
     let mut spans = Vec::new();
 
     // Numéro de ligne
-    spans.push(Span::styled(line_num.to_string(), Style::default().fg(Color::DarkGray)));
+    spans.push(Span::styled(
+        line_num.to_string(),
+        Style::default().fg(Color::DarkGray),
+    ));
     spans.push(Span::raw(" "));
 
     let chars: Vec<char> = line.chars().collect();
@@ -588,9 +618,13 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         "Résultat"
     };
     let title_style = if state.is_editing {
-        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Magenta)
+            .add_modifier(Modifier::BOLD)
     } else if is_focused {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().add_modifier(Modifier::BOLD)
     };

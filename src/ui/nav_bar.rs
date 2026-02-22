@@ -35,7 +35,7 @@ pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_
     ];
 
     // Rendre les onglets fixes
-    for (i, (key, label, mode)) in tabs.iter().enumerate() {
+    for (_i, (key, label, mode)) in tabs.iter().enumerate() {
         let is_active = *mode == current_view;
 
         let style = if is_active {

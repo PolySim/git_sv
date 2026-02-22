@@ -12,10 +12,6 @@ pub struct BlameLine {
     pub commit_oid: Oid,
     /// Nom de l'auteur.
     pub author: String,
-    /// Email de l'auteur.
-    pub author_email: String,
-    /// Timestamp du commit (epoch seconds).
-    pub timestamp: i64,
     /// Hash court du commit (7 premiers caractères).
     pub short_hash: String,
 }
@@ -23,8 +19,6 @@ pub struct BlameLine {
 /// Résultat complet du blame pour un fichier.
 #[derive(Debug, Clone)]
 pub struct FileBlame {
-    /// Chemin du fichier.
-    pub path: String,
     /// Lignes annotées.
     pub lines: Vec<BlameLine>,
 }
@@ -75,17 +69,12 @@ pub fn blame_file(repo: &Repository, commit_oid: Oid, file_path: &str) -> Result
                 content: line_content.to_string(),
                 commit_oid: hunk_commit_oid,
                 author: author.name().unwrap_or("Unknown").to_string(),
-                author_email: author.email().unwrap_or("").to_string(),
-                timestamp: author.when().seconds(),
                 short_hash,
             });
         }
     }
 
-    Ok(FileBlame {
-        path: file_path.to_string(),
-        lines: blame_lines,
-    })
+    Ok(FileBlame { lines: blame_lines })
 }
 
 #[cfg(test)]

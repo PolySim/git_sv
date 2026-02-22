@@ -56,7 +56,7 @@ impl EventHandler {
             }
 
             // Vérifier si le message flash a expiré.
-            let had_flash = self.state.flash_message.is_some();
+            let _had_flash = self.state.flash_message.is_some();
             self.state.check_flash_expired();
 
             // Rafraîchissement conditionnel : seulement si dirty
@@ -1712,7 +1712,10 @@ impl EventHandler {
                         // car la branche de tracking est souvent origin/<branche_courante>
                         let theirs_name = format!(
                             "origin/{}",
-                            self.state.current_branch.clone().unwrap_or_else(|| "HEAD".to_string())
+                            self.state
+                                .current_branch
+                                .clone()
+                                .unwrap_or_else(|| "HEAD".to_string())
                         );
                         self.state.conflicts_state = Some(ConflictsState::new(
                             files,
@@ -1806,11 +1809,18 @@ impl EventHandler {
             self.state.search_state.current_result = (self.state.search_state.current_result + 1)
                 % self.state.search_state.results.len();
 
-            // Mettre à jour la sélection du graphe
+            // Mettre à jour la sélection du graphe avec vérification des limites
             let idx = self.state.search_state.results[self.state.search_state.current_result];
-            self.state.selected_index = idx;
-            self.state.graph_state.select(Some(idx * 2));
-            self.update_commit_files();
+            if idx < self.state.graph.len() {
+                self.state.selected_index = idx;
+                self.state.graph_state.select(Some(idx * 2));
+                self.update_commit_files();
+            } else {
+                // Invalider les résultats de recherche obsolètes
+                self.state.search_state.results.clear();
+                self.state
+                    .set_flash_message("Résultats de recherche obsolètes".into());
+            }
         }
     }
 
@@ -1823,11 +1833,18 @@ impl EventHandler {
                 self.state.search_state.current_result -= 1;
             }
 
-            // Mettre à jour la sélection du graphe
+            // Mettre à jour la sélection du graphe avec vérification des limites
             let idx = self.state.search_state.results[self.state.search_state.current_result];
-            self.state.selected_index = idx;
-            self.state.graph_state.select(Some(idx * 2));
-            self.update_commit_files();
+            if idx < self.state.graph.len() {
+                self.state.selected_index = idx;
+                self.state.graph_state.select(Some(idx * 2));
+                self.update_commit_files();
+            } else {
+                // Invalider les résultats de recherche obsolètes
+                self.state.search_state.results.clear();
+                self.state
+                    .set_flash_message("Résultats de recherche obsolètes".into());
+            }
         }
     }
 
@@ -2586,17 +2603,11 @@ impl EventHandler {
                     conflicts_state.section_selected += 1;
                     conflicts_state.line_selected = 0;
                     // Calculer et synchroniser le scroll
-                    let target_line = Self::calculate_section_scroll_line(
-                        file,
-                        conflicts_state.section_selected,
-                    );
+                    let target_line =
+                        Self::calculate_section_scroll_line(file, conflicts_state.section_selected);
                     // Hauteur par défaut du panneau (sera ajustée par le rendu)
                     let panel_height = 20usize;
-                    Self::auto_scroll(
-                        &mut conflicts_state.ours_scroll,
-                        target_line,
-                        panel_height,
-                    );
+                    Self::auto_scroll(&mut conflicts_state.ours_scroll, target_line, panel_height);
                     conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
                 }
             }
@@ -2610,16 +2621,10 @@ impl EventHandler {
                 conflicts_state.line_selected = 0;
                 // Calculer et synchroniser le scroll
                 if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
-                    let target_line = Self::calculate_section_scroll_line(
-                        file,
-                        conflicts_state.section_selected,
-                    );
+                    let target_line =
+                        Self::calculate_section_scroll_line(file, conflicts_state.section_selected);
                     let panel_height = 20usize;
-                    Self::auto_scroll(
-                        &mut conflicts_state.ours_scroll,
-                        target_line,
-                        panel_height,
-                    );
+                    Self::auto_scroll(&mut conflicts_state.ours_scroll, target_line, panel_height);
                     conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
                 }
             }
@@ -2896,13 +2901,15 @@ impl EventHandler {
                         match panel_focus {
                             ConflictPanelFocus::OursPanel => {
                                 if line_idx < lr.ours_lines_included.len() {
-                                    lr.ours_lines_included[line_idx] = !lr.ours_lines_included[line_idx];
+                                    lr.ours_lines_included[line_idx] =
+                                        !lr.ours_lines_included[line_idx];
                                     lr.touched = true;
                                 }
                             }
                             ConflictPanelFocus::TheirsPanel => {
                                 if line_idx < lr.theirs_lines_included.len() {
-                                    lr.theirs_lines_included[line_idx] = !lr.theirs_lines_included[line_idx];
+                                    lr.theirs_lines_included[line_idx] =
+                                        !lr.theirs_lines_included[line_idx];
                                     lr.touched = true;
                                 }
                             }
@@ -2913,7 +2920,8 @@ impl EventHandler {
                         // Une section est considérée comme résolue si l'utilisateur a touché aux lignes
                         // et qu'au moins une ligne est sélectionnée
                         if lr.touched && lr.has_selection() {
-                            section.resolution = Some(crate::git::conflict::ConflictResolution::Both);
+                            section.resolution =
+                                Some(crate::git::conflict::ConflictResolution::Both);
                         }
                     }
                 }
@@ -2954,16 +2962,10 @@ impl EventHandler {
                 // Mettre à jour le scroll pour suivre la ligne
                 if let Some(file) = conflicts_state.all_files.get(conflicts_state.file_selected) {
                     let panel_height = 20usize;
-                    let base_line = Self::calculate_section_scroll_line(
-                        file,
-                        conflicts_state.section_selected,
-                    );
+                    let base_line =
+                        Self::calculate_section_scroll_line(file, conflicts_state.section_selected);
                     let target_line = base_line + 2 + conflicts_state.line_selected;
-                    Self::auto_scroll(
-                        &mut conflicts_state.ours_scroll,
-                        target_line,
-                        panel_height,
-                    );
+                    Self::auto_scroll(&mut conflicts_state.ours_scroll, target_line, panel_height);
                     conflicts_state.theirs_scroll = conflicts_state.ours_scroll;
                 }
             }
@@ -3004,7 +3006,10 @@ impl EventHandler {
                     .conflicts
                     .iter()
                     .map(|s| {
-                        s.context_before.len() + s.ours.len().max(s.theirs.len()) + s.context_after.len() + 2
+                        s.context_before.len()
+                            + s.ours.len().max(s.theirs.len())
+                            + s.context_after.len()
+                            + 2
                     })
                     .sum();
                 let panel_height = 20usize;
@@ -3226,7 +3231,7 @@ impl EventHandler {
     fn handle_copy_panel_content(&mut self) -> Result<()> {
         use crate::state::{FocusPanel, StagingFocus, ViewMode};
 
-        let mut text_to_copy = String::new();
+        let mut text_to_copy;
 
         match self.state.view_mode {
             ViewMode::Graph => {

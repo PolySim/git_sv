@@ -137,7 +137,7 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
 
     // Hash du commit.
     let hash = node.oid.to_string();
-    let short_hash = &hash[..7];
+    let short_hash = if hash.len() >= 7 { &hash[..7] } else { &hash };
     spans.push(Span::styled(
         format!("{} ", short_hash),
         Style::default().fg(Color::Yellow),

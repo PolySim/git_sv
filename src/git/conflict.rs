@@ -510,9 +510,7 @@ pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
 
     // Supprimer explicitement toutes les entrées pour ce chemin (stages 0, 1, 2, 3)
     // Cela nettoie les entrées de conflit (stages 1, 2, 3) si elles existent
-    index
-        .remove_path(std::path::Path::new(&file.path))
-        .ok(); // Ignorer l'erreur si le chemin n'existe pas
+    index.remove_path(std::path::Path::new(&file.path)).ok(); // Ignorer l'erreur si le chemin n'existe pas
 
     // Ajouter le fichier résolu à l'index (stage 0)
     index
@@ -553,9 +551,7 @@ pub fn finalize_merge(repo: &Repository, message: &str) -> Result<()> {
         // Lister les conflits restants pour un message d'erreur utile
         let remaining: Vec<String> = index
             .conflicts()
-            .map_err(|e| {
-                GitSvError::Other(format!("Impossible de lister les conflits: {}", e))
-            })?
+            .map_err(|e| GitSvError::Other(format!("Impossible de lister les conflits: {}", e)))?
             .filter_map(|c| c.ok())
             .filter_map(|c| {
                 c.our
@@ -895,7 +891,10 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                                 context_after: vec![],
                                 resolution: None,
                                 line_resolutions: vec![],
-                                line_level_resolution: Some(LineLevelResolution::new(0, theirs_content.len())),
+                                line_level_resolution: Some(LineLevelResolution::new(
+                                    0,
+                                    theirs_content.len(),
+                                )),
                             }]
                         }
                         ConflictType::DeletedByThem => {
@@ -908,7 +907,10 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                                 context_after: vec![],
                                 resolution: None,
                                 line_resolutions: vec![],
-                                line_level_resolution: Some(LineLevelResolution::new(ours_content.len(), 0)),
+                                line_level_resolution: Some(LineLevelResolution::new(
+                                    ours_content.len(),
+                                    0,
+                                )),
                             }]
                         }
                     };
@@ -965,7 +967,10 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                         context_after: vec![],
                         resolution: None,
                         line_resolutions: vec![],
-                        line_level_resolution: Some(LineLevelResolution::new(0, theirs_content.len())),
+                        line_level_resolution: Some(LineLevelResolution::new(
+                            0,
+                            theirs_content.len(),
+                        )),
                     }]
                 }
                 _ => vec![],

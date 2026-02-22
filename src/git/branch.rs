@@ -7,11 +7,8 @@ use crate::error::Result;
 pub struct BranchInfo {
     pub name: String,
     pub is_head: bool,
-    pub is_remote: bool,
     /// Dernier message de commit sur cette branche.
     pub last_commit_message: Option<String>,
-    /// Date du dernier commit.
-    pub last_commit_date: Option<i64>,
     /// Nombre de commits d'avance/retard par rapport à la branche tracking.
     pub ahead: Option<usize>,
     pub behind: Option<usize>,
@@ -19,13 +16,11 @@ pub struct BranchInfo {
 
 impl BranchInfo {
     /// Crée un BranchInfo simple (pour compatibilité avec le code existant).
-    pub fn simple(name: String, is_head: bool, is_remote: bool) -> Self {
+    pub fn simple(name: String, is_head: bool, _is_remote: bool) -> Self {
         Self {
             name,
             is_head,
-            is_remote,
             last_commit_message: None,
-            last_commit_date: None,
             ahead: None,
             behind: None,
         }
@@ -43,10 +38,8 @@ fn build_local_branch_info(
     let name = branch.name()?.unwrap_or("???").to_string();
 
     // Récupérer les métadonnées du dernier commit.
-    let (last_msg, last_date, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit()
-    {
+    let (last_msg, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit() {
         let msg = reference.summary().map(|s| s.to_string());
-        let date = Some(reference.time().seconds());
 
         // Calculer ahead/behind si tracking.
         // CORRECTION: Un seul appel à graph_ahead_behind au lieu de deux
@@ -62,17 +55,15 @@ fn build_local_branch_info(
             (None, None)
         };
 
-        (msg, date, ahead_count, behind_count)
+        (msg, ahead_count, behind_count)
     } else {
-        (None, None, None, None)
+        (None, None, None)
     };
 
     Ok(BranchInfo {
         name,
         is_head,
-        is_remote: false,
         last_commit_message: last_msg,
-        last_commit_date: last_date,
         ahead,
         behind,
     })
@@ -83,20 +74,16 @@ fn build_remote_branch_info(branch: &Branch) -> Result<BranchInfo> {
     let name = branch.name()?.unwrap_or("???").to_string();
 
     // Récupérer les métadonnées du dernier commit.
-    let (last_msg, last_date) = if let Ok(reference) = branch.get().peel_to_commit() {
-        let msg = reference.summary().map(|s| s.to_string());
-        let date = Some(reference.time().seconds());
-        (msg, date)
+    let last_msg = if let Ok(reference) = branch.get().peel_to_commit() {
+        reference.summary().map(|s| s.to_string())
     } else {
-        (None, None)
+        None
     };
 
     Ok(BranchInfo {
         name,
         is_head: false,
-        is_remote: true,
         last_commit_message: last_msg,
-        last_commit_date: last_date,
         ahead: None,
         behind: None,
     })
@@ -233,7 +220,6 @@ mod tests {
 
         let new_branch = branches.iter().find(|b| b.name == "new-feature").unwrap();
         assert!(!new_branch.is_head); // N'est pas HEAD
-        assert!(!new_branch.is_remote);
     }
 
     #[test]

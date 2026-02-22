@@ -12,7 +12,7 @@ use crate::git::repo::StatusEntry;
 pub fn render(
     frame: &mut Frame,
     current_branch: &Option<String>,
-    repo_path: &str,
+    _repo_path: &str,
     status_entries: &[StatusEntry],
     flash_message: Option<&str>,
     area: Rect,

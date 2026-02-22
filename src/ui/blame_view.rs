@@ -91,9 +91,14 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
             Style::default().fg(Color::Yellow).bg(bg_color),
         );
 
-        // Auteur (tronqué si nécessaire)
+        // Auteur (tronqué si nécessaire - safe UTF-8)
         let author = if blame_line.author.len() > author_width {
-            format!("{}…", &blame_line.author[..author_width - 1])
+            let truncated: String = blame_line
+                .author
+                .chars()
+                .take(author_width.saturating_sub(1))
+                .collect();
+            format!("{}…", truncated)
         } else {
             format!("{:width$}", blame_line.author, width = author_width)
         };
