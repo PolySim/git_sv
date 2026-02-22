@@ -462,10 +462,29 @@ fn handle_enter_resolve(state: &mut AppState) -> Result<()> {
                 }
             }
             ConflictResolutionMode::Block => {
-                match conflicts.panel_focus {
-                    ConflictPanelFocus::OursPanel => handle_accept_ours_block(state)?,
-                    ConflictPanelFocus::TheirsPanel => handle_accept_theirs_block(state)?,
-                    _ => {}
+                use crate::git::conflict::ConflictResolution;
+
+                let section_idx = conflicts.section_selected;
+                if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                    if let Some(conflict) = file.conflicts.get_mut(section_idx) {
+                        match conflicts.panel_focus {
+                            ConflictPanelFocus::OursPanel => {
+                                if conflict.resolution == Some(ConflictResolution::Ours) {
+                                    conflict.resolution = None; // Désélectionner
+                                } else {
+                                    conflict.resolution = Some(ConflictResolution::Ours);
+                                }
+                            }
+                            ConflictPanelFocus::TheirsPanel => {
+                                if conflict.resolution == Some(ConflictResolution::Theirs) {
+                                    conflict.resolution = None; // Désélectionner
+                                } else {
+                                    conflict.resolution = Some(ConflictResolution::Theirs);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
             ConflictResolutionMode::Line => {
