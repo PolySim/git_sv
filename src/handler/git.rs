@@ -1,7 +1,7 @@
 //! Handler pour les actions Git (remote, blame, cherry-pick, etc.).
 
 use crate::error::Result;
-use crate::state::{AppState, ViewMode, FocusPanel, BlameState};
+use crate::state::{AppState, ViewMode, FocusPanel, BlameState, StagingFocus};
 use crate::state::action::GitAction;
 use super::traits::{ActionHandler, HandlerContext};
 
@@ -250,8 +250,13 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_commit_prompt(state: &mut AppState) -> Result<()> {
-    // Ouvre le prompt de commit (affichage UI - pas d'opération directe)
-    // L'UI s'occupera d'afficher le dialogue
+    // Basculer en vue Staging avec le focus sur le message de commit
+    state.view_mode = ViewMode::Staging;
+    state.staging_state.is_committing = true;
+    state.staging_state.focus = StagingFocus::CommitMessage;
+    state.staging_state.commit_message.clear();
+    state.staging_state.cursor_position = 0;
+    state.mark_dirty();
     Ok(())
 }
 

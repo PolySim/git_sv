@@ -175,43 +175,139 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::ConflictResolution;
+    use crate::git::conflict::{ConflictResolution, all_sections_resolved, apply_resolved_content};
 
-    if let Some(conflicts) = &mut state.conflicts_state {
+    let should_apply = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
-        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+        let file_selected = conflicts.file_selected;
+
+        if let Some(file) = conflicts.all_files.get_mut(file_selected) {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 conflict.resolution = Some(ConflictResolution::Ours);
             }
+
+            // Vérifier si toutes les sections sont résolues
+            all_sections_resolved(file)
+        } else {
+            false
         }
+    } else {
+        false
+    };
+
+    if should_apply {
+        // Appliquer la résolution sur le disque
+        let (file_path, mode) = if let Some(conflicts) = &state.conflicts_state {
+            let file = &conflicts.all_files[conflicts.file_selected];
+            (file.path.clone(), conflicts.resolution_mode)
+        } else {
+            return Ok(());
+        };
+
+        if let Some(conflicts) = &mut state.conflicts_state {
+            if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
+                    state.set_flash_message(format!("Erreur lors de l'application de la résolution: {}", e));
+                    return Ok(());
+                }
+
+                file.is_resolved = true;
+            }
+        }
+
+        state.set_flash_message(format!("{} résolu (ours)", file_path));
+
+        if let Some(conflicts) = &mut state.conflicts_state {
+            advance_to_next_unresolved(conflicts);
+        }
+        state.mark_dirty();
     }
+
     Ok(())
 }
 
 fn handle_accept_theirs_block(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::ConflictResolution;
+    use crate::git::conflict::{ConflictResolution, all_sections_resolved, apply_resolved_content};
 
-    if let Some(conflicts) = &mut state.conflicts_state {
+    let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
-        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+        let file_selected = conflicts.file_selected;
+        
+        if let Some(file) = conflicts.all_files.get_mut(file_selected) {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 conflict.resolution = Some(ConflictResolution::Theirs);
             }
+            all_sections_resolved(file)
+        } else {
+            false
         }
+    } else {
+        false
+    };
+
+    if should_resolve {
+        let (path, mode) = if let Some(conflicts) = &state.conflicts_state {
+            let file = &conflicts.all_files[conflicts.file_selected];
+            (file.path.clone(), conflicts.resolution_mode)
+        } else {
+            return Ok(());
+        };
+
+        if let Some(conflicts) = &mut state.conflicts_state {
+            if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
+                    state.set_flash_message(format!("Erreur: {}", e));
+                    return Ok(());
+                }
+                file.is_resolved = true;
+            }
+            advance_to_next_unresolved(conflicts);
+        }
+        state.set_flash_message(format!("{} résolu (theirs)", path));
+        state.mark_dirty();
     }
     Ok(())
 }
 
 fn handle_accept_both(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::ConflictResolution;
+    use crate::git::conflict::{ConflictResolution, all_sections_resolved, apply_resolved_content};
 
-    if let Some(conflicts) = &mut state.conflicts_state {
+    let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
-        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+        let file_selected = conflicts.file_selected;
+
+        if let Some(file) = conflicts.all_files.get_mut(file_selected) {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 conflict.resolution = Some(ConflictResolution::Both);
             }
+            all_sections_resolved(file)
+        } else {
+            false
         }
+    } else {
+        false
+    };
+
+    if should_resolve {
+        let (path, mode) = if let Some(conflicts) = &state.conflicts_state {
+            let file = &conflicts.all_files[conflicts.file_selected];
+            (file.path.clone(), conflicts.resolution_mode)
+        } else {
+            return Ok(());
+        };
+
+        if let Some(conflicts) = &mut state.conflicts_state {
+            if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
+                    state.set_flash_message(format!("Erreur: {}", e));
+                    return Ok(());
+                }
+                file.is_resolved = true;
+            }
+            advance_to_next_unresolved(conflicts);
+        }
+        state.set_flash_message(format!("{} résolu (both)", path));
+        state.mark_dirty();
     }
     Ok(())
 }
@@ -304,15 +400,43 @@ fn handle_cancel_edit(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
-    let file_path = state.conflicts_state.as_ref()
-        .and_then(|c| c.all_files.get(c.file_selected))
-        .map(|f| f.path.clone());
+    use crate::git::conflict::{apply_resolved_content, all_sections_resolved};
 
-    if let (Some(ref mut conflicts), Some(path)) = (state.conflicts_state.as_mut(), file_path) {
-        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
-            file.is_resolved = true;
+    let (file_path, all_resolved) = if let Some(conflicts) = &state.conflicts_state {
+        let path = conflicts.all_files.get(conflicts.file_selected).map(|f| f.path.clone());
+        let resolved = conflicts.all_files.get(conflicts.file_selected)
+            .map(|f| all_sections_resolved(f))
+            .unwrap_or(false);
+        (path, resolved)
+    } else {
+        (None, false)
+    };
+
+    if let Some(path) = file_path {
+        if all_resolved {
+            let mode = if let Some(conflicts) = &state.conflicts_state {
+                conflicts.resolution_mode
+            } else {
+                return Ok(());
+            };
+
+            if let Some(conflicts) = &mut state.conflicts_state {
+                if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                    // Appliquer la résolution sur le disque
+                    if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
+                        state.set_flash_message(format!("Erreur lors de l'application de la résolution: {}", e));
+                        return Ok(());
+                    }
+
+                    file.is_resolved = true;
+                }
+                advance_to_next_unresolved(conflicts);
+            }
+            state.set_flash_message(format!("{} résolu et sauvegardé", path));
+            state.mark_dirty();
+        } else {
+            state.set_flash_message(format!("{}: toutes les sections ne sont pas résolues", path));
         }
-        state.set_flash_message(format!("{} marqué comme résolu", path));
     }
     Ok(())
 }
@@ -380,12 +504,14 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
 
 fn handle_toggle_line(state: &mut AppState) -> Result<()> {
     use crate::state::ConflictPanelFocus;
+    use crate::git::conflict::{all_sections_resolved, apply_resolved_content};
 
-    if let Some(conflicts) = &mut state.conflicts_state {
+    let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
         let line_idx = conflicts.line_selected;
+        let file_selected = conflicts.file_selected;
 
-        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+        if let Some(file) = conflicts.all_files.get_mut(file_selected) {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 // Assurer que line_level_resolution existe
                 if conflict.line_level_resolution.is_none() {
@@ -415,7 +541,36 @@ fn handle_toggle_line(state: &mut AppState) -> Result<()> {
                     _ => {}
                 }
             }
+
+            // Vérifier si toutes les sections sont résolues (toutes touchées en mode ligne)
+            all_sections_resolved(file)
+        } else {
+            false
         }
+    } else {
+        false
+    };
+
+    if should_resolve {
+        let (path, mode) = if let Some(conflicts) = &state.conflicts_state {
+            let file = &conflicts.all_files[conflicts.file_selected];
+            (file.path.clone(), conflicts.resolution_mode)
+        } else {
+            return Ok(());
+        };
+
+        if let Some(conflicts) = &mut state.conflicts_state {
+            if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
+                    state.set_flash_message(format!("Erreur: {}", e));
+                    return Ok(());
+                }
+                file.is_resolved = true;
+            }
+            advance_to_next_unresolved(conflicts);
+        }
+        state.set_flash_message(format!("{} résolu (ligne par ligne)", path));
+        state.mark_dirty();
     }
     Ok(())
 }
@@ -471,61 +626,20 @@ fn handle_result_scroll_up(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_start_editing(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::ConflictResolution;
+    use crate::git::conflict::generate_resolved_content_with_source;
 
     if let Some(ref mut conflicts) = state.conflicts_state {
-        // Générer le contenu résolu actuel
+        // Générer le contenu résolu actuel en utilisant la fonction qui prend
+        // en compte les résolutions ligne par ligne (line_level_resolution)
         if let Some(file) = conflicts.all_files.get(conflicts.file_selected) {
-            let mut resolved_lines = Vec::new();
+            let mode = conflicts.resolution_mode;
+            let resolved = generate_resolved_content_with_source(file, mode);
 
-            for conflict in &file.conflicts {
-                // Contexte avant
-                for line in &conflict.context_before {
-                    resolved_lines.push(line.clone());
-                }
-
-                // Contenu résolu selon la résolution
-                match conflict.resolution {
-                    Some(ConflictResolution::Ours) => {
-                        for line in &conflict.ours {
-                            resolved_lines.push(line.clone());
-                        }
-                    }
-                    Some(ConflictResolution::Theirs) => {
-                        for line in &conflict.theirs {
-                            resolved_lines.push(line.clone());
-                        }
-                    }
-                    Some(ConflictResolution::Both) => {
-                        for line in &conflict.ours {
-                            resolved_lines.push(line.clone());
-                        }
-                        for line in &conflict.theirs {
-                            resolved_lines.push(line.clone());
-                        }
-                    }
-                    None => {
-                        // Pas de résolution : afficher les marqueurs de conflit
-                        resolved_lines.push(format!("<<<<<<< ours"));
-                        for line in &conflict.ours {
-                            resolved_lines.push(line.clone());
-                        }
-                        resolved_lines.push(format!("======="));
-                        for line in &conflict.theirs {
-                            resolved_lines.push(line.clone());
-                        }
-                        resolved_lines.push(format!(">>>>>>> theirs"));
-                    }
-                }
-
-                // Contexte après
-                for line in &conflict.context_after {
-                    resolved_lines.push(line.clone());
-                }
-            }
-
-            // Remplir le buffer d'édition
-            conflicts.edit_buffer = resolved_lines;
+            // Convertir les ResolvedLine en String
+            conflicts.edit_buffer = resolved
+                .into_iter()
+                .map(|line| line.content)
+                .collect();
 
             // Positionner le curseur au début
             conflicts.edit_cursor_line = 0;
