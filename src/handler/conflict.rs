@@ -216,9 +216,75 @@ fn handle_start_edit(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_confirm_edit(state: &mut AppState) -> Result<()> {
+    use std::io::Write;
+
+    let (file_path, content) = if let Some(ref conflicts) = state.conflicts_state {
+        if let Some(file) = conflicts.all_files.get(conflicts.file_selected) {
+            let path = file.path.clone();
+            let buf_content = conflicts.edit_buffer.join("\n");
+            (Some(path), Some(buf_content))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    let (file_path, content) = match (file_path, content) {
+        (Some(p), Some(c)) => (p, c),
+        _ => return Ok(()),
+    };
+
+    // Écrire le contenu du buffer dans le fichier
+    match std::fs::File::create(&file_path) {
+        Ok(mut file_handle) => {
+            if let Err(e) = file_handle.write_all(content.as_bytes()) {
+                state.set_flash_message(format!("Erreur écriture fichier: {}", e));
+                return Ok(());
+            }
+
+            // Mettre à jour l'index git
+            match state.repo.repo.index() {
+                Ok(mut index) => {
+                    // Supprimer les entrées existantes pour ce chemin
+                    index.remove_path(std::path::Path::new(&file_path)).ok();
+
+                    // Ajouter le fichier résolu à l'index
+                    if let Err(e) = index.add_path(std::path::Path::new(&file_path)) {
+                        state.set_flash_message(format!("Erreur git add: {}", e));
+                        return Ok(());
+                    }
+
+                    if let Err(e) = index.write() {
+                        state.set_flash_message(format!("Erreur écriture index: {}", e));
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    state.set_flash_message(format!("Erreur accès index: {}", e));
+                    return Ok(());
+                }
+            }
+
+            // Marquer le fichier comme résolu dans l'état
+            if let Some(ref mut conflicts) = state.conflicts_state {
+                if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+                    file.is_resolved = true;
+                }
+            }
+
+            state.mark_dirty();
+            state.set_flash_message(format!("{} sauvegardé et marqué comme résolu", file_path));
+        }
+        Err(e) => {
+            state.set_flash_message(format!("Erreur création fichier: {}", e));
+        }
+    }
+
     if let Some(ref mut conflicts) = state.conflicts_state {
         conflicts.is_editing = false;
     }
+
     Ok(())
 }
 
@@ -394,7 +460,67 @@ fn handle_result_scroll_up(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_start_editing(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictResolution;
+
     if let Some(ref mut conflicts) = state.conflicts_state {
+        // Générer le contenu résolu actuel
+        if let Some(file) = conflicts.all_files.get(conflicts.file_selected) {
+            let mut resolved_lines = Vec::new();
+
+            for conflict in &file.conflicts {
+                // Contexte avant
+                for line in &conflict.context_before {
+                    resolved_lines.push(line.clone());
+                }
+
+                // Contenu résolu selon la résolution
+                match conflict.resolution {
+                    Some(ConflictResolution::Ours) => {
+                        for line in &conflict.ours {
+                            resolved_lines.push(line.clone());
+                        }
+                    }
+                    Some(ConflictResolution::Theirs) => {
+                        for line in &conflict.theirs {
+                            resolved_lines.push(line.clone());
+                        }
+                    }
+                    Some(ConflictResolution::Both) => {
+                        for line in &conflict.ours {
+                            resolved_lines.push(line.clone());
+                        }
+                        for line in &conflict.theirs {
+                            resolved_lines.push(line.clone());
+                        }
+                    }
+                    None => {
+                        // Pas de résolution : afficher les marqueurs de conflit
+                        resolved_lines.push(format!("<<<<<<< ours"));
+                        for line in &conflict.ours {
+                            resolved_lines.push(line.clone());
+                        }
+                        resolved_lines.push(format!("======="));
+                        for line in &conflict.theirs {
+                            resolved_lines.push(line.clone());
+                        }
+                        resolved_lines.push(format!(">>>>>>> theirs"));
+                    }
+                }
+
+                // Contexte après
+                for line in &conflict.context_after {
+                    resolved_lines.push(line.clone());
+                }
+            }
+
+            // Remplir le buffer d'édition
+            conflicts.edit_buffer = resolved_lines;
+
+            // Positionner le curseur au début
+            conflicts.edit_cursor_line = 0;
+            conflicts.edit_cursor_col = 0;
+        }
+
         conflicts.is_editing = true;
     }
     Ok(())
@@ -407,37 +533,150 @@ fn handle_stop_editing(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_edit_insert_char(_state: &mut AppState, _c: char) -> Result<()> {
-    // Logique à implémenter
+fn handle_edit_insert_char(state: &mut AppState, c: char) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        let line_idx = conflicts.edit_cursor_line;
+        let col_idx = conflicts.edit_cursor_col;
+
+        if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
+            // Insérer le caractère à la position du curseur
+            if col_idx <= line.len() {
+                line.insert(col_idx, c);
+                conflicts.edit_cursor_col += 1;
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_backspace(_state: &mut AppState) -> Result<()> {
-    // Logique à implémenter
+fn handle_edit_backspace(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        let line_idx = conflicts.edit_cursor_line;
+        let col_idx = conflicts.edit_cursor_col;
+
+        if col_idx > 0 {
+            // Supprimer le caractère avant le curseur
+            if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
+                if col_idx <= line.len() {
+                    line.remove(col_idx - 1);
+                    conflicts.edit_cursor_col -= 1;
+                }
+            }
+        } else if line_idx > 0 {
+            // Fusionner avec la ligne précédente
+            let current_line = conflicts.edit_buffer.remove(line_idx);
+            conflicts.edit_cursor_line -= 1;
+            if let Some(prev_line) = conflicts.edit_buffer.get_mut(conflicts.edit_cursor_line) {
+                conflicts.edit_cursor_col = prev_line.len();
+                prev_line.push_str(&current_line);
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_delete(_state: &mut AppState) -> Result<()> {
+fn handle_edit_delete(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        let line_idx = conflicts.edit_cursor_line;
+        let col_idx = conflicts.edit_cursor_col;
+        let buffer_len = conflicts.edit_buffer.len();
+
+        // Vérifier d'abord si on doit supprimer un caractère ou fusionner
+        let should_merge = if let Some(line) = conflicts.edit_buffer.get(line_idx) {
+            col_idx >= line.len() && line_idx + 1 < buffer_len
+        } else {
+            false
+        };
+
+        if should_merge {
+            // Fusionner avec la ligne suivante
+            let next_line = conflicts.edit_buffer.remove(line_idx + 1);
+            if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
+                line.push_str(&next_line);
+            }
+        } else if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
+            if col_idx < line.len() {
+                // Supprimer le caractère sous le curseur
+                line.remove(col_idx);
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_cursor_up(_state: &mut AppState) -> Result<()> {
+fn handle_edit_cursor_up(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        if conflicts.edit_cursor_line > 0 {
+            conflicts.edit_cursor_line -= 1;
+            // Ajuster la colonne si la ligne précédente est plus courte
+            if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
+                if conflicts.edit_cursor_col > line.len() {
+                    conflicts.edit_cursor_col = line.len();
+                }
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_cursor_down(_state: &mut AppState) -> Result<()> {
+fn handle_edit_cursor_down(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        if conflicts.edit_cursor_line + 1 < conflicts.edit_buffer.len() {
+            conflicts.edit_cursor_line += 1;
+            // Ajuster la colonne si la ligne suivante est plus courte
+            if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
+                if conflicts.edit_cursor_col > line.len() {
+                    conflicts.edit_cursor_col = line.len();
+                }
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_cursor_left(_state: &mut AppState) -> Result<()> {
+fn handle_edit_cursor_left(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        if conflicts.edit_cursor_col > 0 {
+            conflicts.edit_cursor_col -= 1;
+        } else if conflicts.edit_cursor_line > 0 {
+            // Aller à la fin de la ligne précédente
+            conflicts.edit_cursor_line -= 1;
+            if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
+                conflicts.edit_cursor_col = line.len();
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_cursor_right(_state: &mut AppState) -> Result<()> {
+fn handle_edit_cursor_right(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
+            if conflicts.edit_cursor_col < line.len() {
+                conflicts.edit_cursor_col += 1;
+            } else if conflicts.edit_cursor_line + 1 < conflicts.edit_buffer.len() {
+                // Aller au début de la ligne suivante
+                conflicts.edit_cursor_line += 1;
+                conflicts.edit_cursor_col = 0;
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_edit_newline(_state: &mut AppState) -> Result<()> {
+fn handle_edit_newline(state: &mut AppState) -> Result<()> {
+    if let Some(ref mut conflicts) = state.conflicts_state {
+        let line_idx = conflicts.edit_cursor_line;
+        let col_idx = conflicts.edit_cursor_col;
+
+        if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
+            // Splitter la ligne en deux
+            let new_line = line.split_off(col_idx);
+            conflicts.edit_buffer.insert(line_idx + 1, new_line);
+            conflicts.edit_cursor_line += 1;
+            conflicts.edit_cursor_col = 0;
+        }
+    }
     Ok(())
 }
 
