@@ -672,16 +672,38 @@ fn handle_line_down(state: &mut AppState) -> Result<()> {
         };
 
         if conflicts.line_selected < max_lines.saturating_sub(1) {
+            // Naviguer dans les lignes du block courant
             conflicts.line_selected += 1;
+        } else {
+            // En fin de block, passer au block suivant si disponible
+            let file = &conflicts.all_files[conflicts.file_selected];
+            if conflicts.section_selected + 1 < file.conflicts.len() {
+                conflicts.section_selected += 1;
+                conflicts.line_selected = 0;
+            }
         }
     }
     Ok(())
 }
 
 fn handle_line_up(state: &mut AppState) -> Result<()> {
+    use crate::state::ConflictPanelFocus;
+
     if let Some(ref mut conflicts) = state.conflicts_state {
         if conflicts.line_selected > 0 {
+            // Naviguer dans les lignes du block courant
             conflicts.line_selected -= 1;
+        } else if conflicts.section_selected > 0 {
+            // En début de block, passer au block précédent
+            conflicts.section_selected -= 1;
+            let file = &conflicts.all_files[conflicts.file_selected];
+            let prev_section = &file.conflicts[conflicts.section_selected];
+            let max_lines = match conflicts.panel_focus {
+                ConflictPanelFocus::OursPanel => prev_section.ours.len(),
+                ConflictPanelFocus::TheirsPanel => prev_section.theirs.len(),
+                _ => 0,
+            };
+            conflicts.line_selected = max_lines.saturating_sub(1);
         }
     }
     Ok(())
