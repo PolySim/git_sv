@@ -59,6 +59,10 @@ fn handle_previous_file(state: &mut AppState) -> Result<()> {
         if conflicts.file_selected > 0 {
             conflicts.file_selected -= 1;
             conflicts.section_selected = 0;
+            conflicts.line_selected = 0;
+            conflicts.result_scroll = 0;
+            conflicts.ours_scroll = 0;
+            conflicts.theirs_scroll = 0;
         }
     }
     Ok(())
@@ -70,6 +74,10 @@ fn handle_next_file(state: &mut AppState) -> Result<()> {
         if conflicts.file_selected + 1 < file_count {
             conflicts.file_selected += 1;
             conflicts.section_selected = 0;
+            conflicts.line_selected = 0;
+            conflicts.result_scroll = 0;
+            conflicts.ours_scroll = 0;
+            conflicts.theirs_scroll = 0;
         }
     }
     Ok(())
@@ -347,6 +355,7 @@ fn handle_set_mode_file(state: &mut AppState) -> Result<()> {
     if let Some(ref mut conflicts) = state.conflicts_state {
         conflicts.resolution_mode = ConflictResolutionMode::File;
         conflicts.line_selected = 0;
+        conflicts.result_scroll = 0;
     }
     Ok(())
 }
@@ -355,6 +364,7 @@ fn handle_set_mode_block(state: &mut AppState) -> Result<()> {
     if let Some(ref mut conflicts) = state.conflicts_state {
         conflicts.resolution_mode = ConflictResolutionMode::Block;
         conflicts.line_selected = 0;
+        conflicts.result_scroll = 0;
     }
     Ok(())
 }
@@ -363,6 +373,7 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
     if let Some(ref mut conflicts) = state.conflicts_state {
         conflicts.resolution_mode = ConflictResolutionMode::Line;
         conflicts.line_selected = 0;
+        conflicts.result_scroll = 0;
     }
     Ok(())
 }
