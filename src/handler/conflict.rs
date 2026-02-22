@@ -85,7 +85,14 @@ fn handle_previous_section(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_next_section(state: &mut AppState) -> Result<()> {
-    // Logique à implémenter selon la structure de ConflictsState
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let file = &conflicts.all_files[conflicts.file_selected];
+        let max_section = file.conflicts.len().saturating_sub(1);
+        if conflicts.section_selected < max_section {
+            conflicts.section_selected += 1;
+            conflicts.line_selected = 0; // Reset la sélection de ligne
+        }
+    }
     Ok(())
 }
 
@@ -159,18 +166,45 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_accept_ours_block(_state: &mut AppState) -> Result<()> {
-    // Logique à implémenter
+fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictResolution;
+
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let section_idx = conflicts.section_selected;
+        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+            if let Some(conflict) = file.conflicts.get_mut(section_idx) {
+                conflict.resolution = Some(ConflictResolution::Ours);
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_accept_theirs_block(_state: &mut AppState) -> Result<()> {
-    // Logique à implémenter
+fn handle_accept_theirs_block(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictResolution;
+
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let section_idx = conflicts.section_selected;
+        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+            if let Some(conflict) = file.conflicts.get_mut(section_idx) {
+                conflict.resolution = Some(ConflictResolution::Theirs);
+            }
+        }
+    }
     Ok(())
 }
 
-fn handle_accept_both(_state: &mut AppState) -> Result<()> {
-    // Logique à implémenter
+fn handle_accept_both(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictResolution;
+
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let section_idx = conflicts.section_selected;
+        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+            if let Some(conflict) = file.conflicts.get_mut(section_idx) {
+                conflict.resolution = Some(ConflictResolution::Both);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -267,14 +301,69 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_toggle_line(_state: &mut AppState) -> Result<()> {
-    // Logique à implémenter
+fn handle_toggle_line(state: &mut AppState) -> Result<()> {
+    use crate::state::ConflictPanelFocus;
+
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let section_idx = conflicts.section_selected;
+        let line_idx = conflicts.line_selected;
+
+        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+            if let Some(conflict) = file.conflicts.get_mut(section_idx) {
+                // Assurer que line_level_resolution existe
+                if conflict.line_level_resolution.is_none() {
+                    conflict.line_level_resolution = Some(crate::git::conflict::LineLevelResolution::new(
+                        conflict.ours.len(),
+                        conflict.theirs.len(),
+                    ));
+                }
+
+                match conflicts.panel_focus {
+                    ConflictPanelFocus::OursPanel => {
+                        if let Some(resolution) = &mut conflict.line_level_resolution {
+                            if let Some(included) = resolution.ours_lines_included.get_mut(line_idx) {
+                                *included = !*included;
+                                resolution.touched = true;
+                            }
+                        }
+                    }
+                    ConflictPanelFocus::TheirsPanel => {
+                        if let Some(resolution) = &mut conflict.line_level_resolution {
+                            if let Some(included) = resolution.theirs_lines_included.get_mut(line_idx) {
+                                *included = !*included;
+                                resolution.touched = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
     Ok(())
 }
 
 fn handle_line_down(state: &mut AppState) -> Result<()> {
-    if let Some(ref mut conflicts) = state.conflicts_state {
-        conflicts.line_selected += 1;
+    use crate::state::ConflictPanelFocus;
+
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let max_lines = if let Some(file) = conflicts.all_files.get(conflicts.file_selected) {
+            if let Some(conflict) = file.conflicts.get(conflicts.section_selected) {
+                match conflicts.panel_focus {
+                    ConflictPanelFocus::OursPanel => conflict.ours.len(),
+                    ConflictPanelFocus::TheirsPanel => conflict.theirs.len(),
+                    _ => 0,
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        if conflicts.line_selected < max_lines.saturating_sub(1) {
+            conflicts.line_selected += 1;
+        }
     }
     Ok(())
 }
@@ -359,8 +448,31 @@ fn handle_leave_view(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_enter_resolve(_state: &mut AppState) -> Result<()> {
-    // Logique à implémenter
+fn handle_enter_resolve(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictResolutionMode;
+    use crate::state::ConflictPanelFocus;
+
+    if let Some(conflicts) = &mut state.conflicts_state {
+        match conflicts.resolution_mode {
+            ConflictResolutionMode::File => {
+                match conflicts.panel_focus {
+                    ConflictPanelFocus::OursPanel => handle_accept_ours_file(state)?,
+                    ConflictPanelFocus::TheirsPanel => handle_accept_theirs_file(state)?,
+                    _ => {}
+                }
+            }
+            ConflictResolutionMode::Block => {
+                match conflicts.panel_focus {
+                    ConflictPanelFocus::OursPanel => handle_accept_ours_block(state)?,
+                    ConflictPanelFocus::TheirsPanel => handle_accept_theirs_block(state)?,
+                    _ => {}
+                }
+            }
+            ConflictResolutionMode::Line => {
+                handle_toggle_line(state)?;
+            }
+        }
+    }
     Ok(())
 }
 
