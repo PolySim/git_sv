@@ -106,15 +106,16 @@ impl Theme {
     }
 }
 
-impl Default for Theme {
-    fn default() -> Self {
-        Self::dark()
+/// Détecte automatiquement le thème du terminal au démarrage.
+fn detect_theme() -> Theme {
+    match terminal_light::luma() {
+        Ok(luma) if luma > 0.5 => Theme::light(),
+        _ => Theme::dark(),
     }
 }
 
-/// Thème global de l'application (statique pour l'instant).
-/// Pourrait être chargé depuis un fichier de configuration plus tard.
-pub static THEME: std::sync::LazyLock<Theme> = std::sync::LazyLock::new(Theme::default);
+/// Thème global de l'application (détection automatique).
+pub static THEME: std::sync::LazyLock<Theme> = std::sync::LazyLock::new(detect_theme);
 
 /// Retourne le thème actuel.
 pub fn current_theme() -> &'static Theme {
@@ -124,12 +125,4 @@ pub fn current_theme() -> &'static Theme {
 /// Retourne la couleur pour un index de branche.
 pub fn branch_color(index: usize) -> Color {
     Theme::branch_color(index)
-}
-
-/// Change le thème (nécessite un redémarrage pour l'instant).
-pub fn set_theme(theme: Theme) {
-    // Note: Pour un vrai changement à chaud, il faudrait utiliser une Mutex
-    // ou un autre mécanisme de synchronisation.
-    // Pour l'instant, le thème est fixé au démarrage.
-    let _ = theme;
 }

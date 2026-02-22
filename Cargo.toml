@@ -30,6 +30,7 @@ chrono = "0.4"
 dirs = "5"
 arboard = "3"
 lru = "0.12"
+terminal-light = "1.4"
 
 [dev-dependencies]
 tempfile = "3"
