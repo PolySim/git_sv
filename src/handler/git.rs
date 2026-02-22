@@ -255,8 +255,34 @@ fn handle_stash_prompt(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
-    // Ouvre le sélecteur de branches pour merge
-    // Cette fonction nécessite une logique UI
+    // Charger la liste des branches pour le merge picker
+    match crate::git::branch::list_all_branches(&state.repo.repo) {
+        Ok((local, remote)) => {
+            let current = state.current_branch.clone().unwrap_or_default();
+
+            // Construire la liste des branches (exclure la branche courante)
+            let mut branch_names: Vec<String> = local
+                .iter()
+                .filter(|b| b.name != current)
+                .map(|b| b.name.clone())
+                .collect();
+
+            // Ajouter les branches remote
+            for b in &remote {
+                branch_names.push(b.name.clone());
+            }
+
+            if branch_names.is_empty() {
+                state.set_flash_message("Aucune autre branche disponible pour merge".to_string());
+                return Ok(());
+            }
+
+            state.merge_picker = Some(crate::state::MergePickerState::new(branch_names));
+        }
+        Err(e) => {
+            state.set_flash_message(format!("Erreur chargement branches: {}", e));
+        }
+    }
     Ok(())
 }
 
