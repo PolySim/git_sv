@@ -192,16 +192,16 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
     let visual_index = if show_remote && remote_count > 0 {
         if local_count > 0 {
-            if state.branch_selected < local_count {
-                state.branch_selected + 1
+            if state.branch_selected() < local_count {
+                state.branch_selected() + 1
             } else {
-                state.branch_selected + 3
+                state.branch_selected() + 3
             }
         } else {
-            state.branch_selected + 1
+            state.branch_selected() + 1
         }
     } else {
-        state.branch_selected + 1
+        state.branch_selected() + 1
     };
     list_state.select(Some(visual_index));
     frame.render_stateful_widget(list, area, &mut list_state);
@@ -212,12 +212,12 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
     let local_count = state.local_branches.len();
     let is_remote = state.show_remote
         && !state.remote_branches.is_empty()
-        && state.branch_selected >= local_count;
+        && state.branch_selected() >= local_count;
 
     let content = if is_remote {
         if let Some(branch) = state
             .remote_branches
-            .get(state.branch_selected - local_count)
+            .get(state.branch_selected() - local_count)
         {
             let mut lines = vec![
                 Line::from(vec![
@@ -258,7 +258,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
         } else {
             vec![Line::from("Aucune branche distante sélectionnée")]
         }
-    } else if let Some(branch) = state.local_branches.get(state.branch_selected) {
+    } else if let Some(branch) = state.local_branches.get(state.branch_selected()) {
         let mut lines = vec![
             Line::from(vec![
                 Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
@@ -359,13 +359,13 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
         );
 
     let mut list_state = ListState::default();
-    list_state.select(Some(state.worktree_selected));
+    list_state.select(Some(state.worktree_selected()));
     frame.render_stateful_widget(list, area, &mut list_state);
 }
 
 /// Rend le détail d'un worktree.
 fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let content = if let Some(worktree) = state.worktrees.get(state.worktree_selected) {
+    let content = if let Some(worktree) = state.worktrees.get(state.worktree_selected()) {
         vec![
             Line::from(vec![
                 Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
@@ -432,13 +432,13 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
         );
 
     let mut list_state = ListState::default();
-    list_state.select(Some(state.stash_selected));
+    list_state.select(Some(state.stash_selected()));
     frame.render_stateful_widget(list, area, &mut list_state);
 }
 
 /// Rend le détail d'un stash.
 fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let content = if let Some(stash) = state.stashes.get(state.stash_selected) {
+    let content = if let Some(stash) = state.stashes.get(state.stash_selected()) {
         let mut lines = vec![
             Line::from(vec![
                 Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),

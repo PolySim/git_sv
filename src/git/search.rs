@@ -1,9 +1,10 @@
 use super::graph::{CommitNode, GraphRow};
 
 /// Type de recherche à effectuer.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum SearchType {
     /// Recherche par message de commit.
+    #[default]
     Message,
     /// Recherche par auteur.
     Author,

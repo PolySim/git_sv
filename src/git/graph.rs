@@ -62,6 +62,22 @@ pub struct CommitNode {
     pub color_index: usize,
 }
 
+impl Default for CommitNode {
+    fn default() -> Self {
+        Self {
+            oid: Oid::zero(),
+            message: String::new(),
+            author: String::new(),
+            timestamp: 0,
+            parents: Vec::new(),
+            refs: Vec::new(),
+            branch_name: None,
+            column: 0,
+            color_index: 0,
+        }
+    }
+}
+
 impl CommitNode {
     /// Retourne le hash court du commit (7 premiers caractères).
     pub fn short_hash(&self) -> String {
@@ -70,7 +86,7 @@ impl CommitNode {
 }
 
 /// Rangée du graphe contenant le commit et les segments de connexion.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GraphRow {
     /// Le commit de cette rangée.
     pub node: CommitNode,

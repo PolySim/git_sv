@@ -32,8 +32,8 @@ pub fn render(
     render_file_list(
         frame,
         "Unstaged",
-        &staging_state.unstaged_files,
-        staging_state.unstaged_selected,
+        staging_state.unstaged_files(),
+        staging_state.unstaged_selected(),
         staging_state.focus == StagingFocus::Unstaged,
         layout.unstaged_panel,
     );
@@ -42,8 +42,8 @@ pub fn render(
     render_file_list(
         frame,
         "Staged",
-        &staging_state.staged_files,
-        staging_state.staged_selected,
+        staging_state.staged_files(),
+        staging_state.staged_selected(),
         staging_state.focus == StagingFocus::Staged,
         layout.staged_panel,
     );
@@ -63,7 +63,7 @@ pub fn render(
         &staging_state.commit_message,
         staging_state.cursor_position,
         staging_state.focus == StagingFocus::CommitMessage,
-        !staging_state.staged_files.is_empty(),
+        !staging_state.staged_files().is_empty(),
         layout.commit_message,
     );
 

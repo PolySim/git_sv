@@ -29,8 +29,8 @@ pub fn render(
 
     // Ajouter le contexte du panneau bas.
     match bottom_left_mode {
-        BottomLeftMode::CommitFiles => keys.push(("Tab", "fichiers")),
-        BottomLeftMode::WorkingDir => keys.push(("Tab", "commit")),
+        BottomLeftMode::CommitFiles | BottomLeftMode::Files => keys.push(("Tab", "fichiers")),
+        BottomLeftMode::WorkingDir | BottomLeftMode::Parents => keys.push(("Tab", "commit")),
     }
 
     keys.extend(vec![("r", "rafraîchir"), ("?", "aide"), ("q", "quitter")]);

@@ -145,7 +145,7 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
     });
 
     // Rendu du panneau de fichiers.
-    let is_files_focused = state.focus == FocusPanel::Files;
+    let is_files_focused = matches!(state.focus, FocusPanel::Files | FocusPanel::BottomLeft);
     files_view::render(
         frame,
         &state.commit_files,
@@ -158,10 +158,10 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
     );
 
     // Rendu du panneau bas-droit (contextuel selon le focus).
-    let is_detail_focused = state.focus == FocusPanel::Detail;
+    let is_detail_focused = matches!(state.focus, FocusPanel::Detail | FocusPanel::BottomRight);
 
     match state.focus {
-        FocusPanel::Graph | FocusPanel::Detail => {
+        FocusPanel::Graph | FocusPanel::Detail | FocusPanel::BottomRight => {
             // Afficher les métadonnées du commit.
             detail_view::render(
                 frame,
@@ -171,7 +171,7 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
                 is_detail_focused,
             );
         }
-        FocusPanel::Files => {
+        FocusPanel::Files | FocusPanel::BottomLeft => {
             // Afficher le diff du fichier sélectionné.
             diff_view::render(
                 frame,

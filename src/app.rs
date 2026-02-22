@@ -27,16 +27,20 @@ impl App {
 
         // Rafraîchir l'état de staging.
         let all_entries = state.repo.status().unwrap_or_default();
-        state.staging_state.staged_files = all_entries
-            .iter()
-            .filter(|e| e.is_staged())
-            .cloned()
-            .collect();
-        state.staging_state.unstaged_files = all_entries
-            .iter()
-            .filter(|e| e.is_unstaged())
-            .cloned()
-            .collect();
+        state.staging_state.set_staged_files(
+            all_entries
+                .iter()
+                .filter(|e| e.is_staged())
+                .cloned()
+                .collect()
+        );
+        state.staging_state.set_unstaged_files(
+            all_entries
+                .iter()
+                .filter(|e| e.is_unstaged())
+                .cloned()
+                .collect()
+        );
 
         Ok(Self { state })
     }

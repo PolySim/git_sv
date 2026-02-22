@@ -3,7 +3,7 @@ use git2::Repository;
 use crate::error::Result;
 
 /// Informations sur un worktree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WorktreeInfo {
     /// Nom du worktree.
     pub name: String,

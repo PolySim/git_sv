@@ -38,6 +38,19 @@ pub struct StashEntry {
     pub oid: Oid,
 }
 
+impl Default for StashEntry {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            message: String::new(),
+            branch: None,
+            timestamp: None,
+            files: Vec::new(),
+            oid: Oid::zero(),
+        }
+    }
+}
+
 /// Liste tous les stashes.
 pub fn list_stashes(repo: &mut Repository) -> Result<Vec<StashEntry>> {
     // D'abord, collecter les infos de base des stashes (sans les fichiers)

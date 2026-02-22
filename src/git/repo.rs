@@ -146,6 +146,15 @@ pub struct StatusEntry {
     pub status: git2::Status,
 }
 
+impl Default for StatusEntry {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            status: git2::Status::empty(),
+        }
+    }
+}
+
 impl StatusEntry {
     /// Retourne une description lisible du status.
     pub fn display_status(&self) -> &'static str {

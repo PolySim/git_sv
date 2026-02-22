@@ -185,6 +185,60 @@ impl EventHandler {
             AppAction::StashSelectedFile => self.handle_stash_selected_file()?,
             AppAction::StashUnstagedFiles => self.handle_stash_unstaged_files()?,
             AppAction::CopyPanelContent => self.handle_copy_panel_content()?,
+            // ═══════════════════════════════════════════════════
+            // Nouveaux variants imbriqués (TODO: implémenter les handlers)
+            // ═══════════════════════════════════════════════════
+            AppAction::Navigation(nav) => {
+                // TODO: Implémenter la délégation vers les handlers de navigation
+                match nav {
+                    crate::state::NavigationAction::MoveUp => self.handle_move_up()?,
+                    crate::state::NavigationAction::MoveDown => self.handle_move_down()?,
+                    crate::state::NavigationAction::PageUp => self.handle_page_up()?,
+                    crate::state::NavigationAction::PageDown => self.handle_page_down()?,
+                    crate::state::NavigationAction::GoTop => self.handle_go_top()?,
+                    crate::state::NavigationAction::GoBottom => self.handle_go_bottom()?,
+                    crate::state::NavigationAction::FileUp => self.handle_file_up(),
+                    crate::state::NavigationAction::FileDown => self.handle_file_down(),
+                    crate::state::NavigationAction::ScrollDiffUp => self.handle_diff_scroll_up(),
+                    crate::state::NavigationAction::ScrollDiffDown => self.handle_diff_scroll_down(),
+                    _ => {}
+                }
+            }
+            AppAction::Git(_git) => {
+                // TODO: Implémenter la délégation vers les handlers git
+            }
+            AppAction::Staging(_staging) => {
+                // TODO: Implémenter la délégation vers les handlers staging
+            }
+            AppAction::Branch(_branch) => {
+                // TODO: Implémenter la délégation vers les handlers branch
+            }
+            AppAction::Conflict(_conflict) => {
+                // TODO: Implémenter la délégation vers les handlers conflict
+            }
+            AppAction::Search(_search) => {
+                // TODO: Implémenter la délégation vers les handlers search
+            }
+            AppAction::Edit(_edit) => {
+                // TODO: Implémenter la délégation vers les handlers edit
+            }
+            AppAction::SwitchView(view_mode) => {
+                match view_mode {
+                    crate::state::ViewMode::Graph => self.handle_switch_to_graph()?,
+                    crate::state::ViewMode::Staging => self.handle_switch_to_staging()?,
+                    crate::state::ViewMode::Branches => self.handle_switch_to_branches()?,
+                    crate::state::ViewMode::Conflicts => {
+                        self.handle_switch_to_conflicts();
+                    }
+                    _ => {}
+                }
+            }
+            AppAction::CopyToClipboard => self.handle_copy_panel_content()?,
+            AppAction::Select => {
+                // Pour l'instant, Select ne fait rien de spécial.
+            }
+            AppAction::SwitchBottomMode => self.handle_switch_bottom_mode(),
+            AppAction::None => {}
         }
         Ok(())
     }
@@ -266,7 +320,7 @@ impl EventHandler {
                     self.state.conflicts_state = None;
                     self.state.view_mode = ViewMode::Graph;
                     self.state
-                        .set_flash_message("Merge finalisé avec succès ✓".into());
+                        .set_flash_message("Merge finalisé avec succès ✓");
                     self.state.mark_dirty();
                     self.refresh()?;
                 }
@@ -465,8 +519,8 @@ impl EventHandler {
 
         self.state.focus = match self.state.focus {
             FocusPanel::Graph => FocusPanel::Files,
-            FocusPanel::Files => FocusPanel::Graph,
-            FocusPanel::Detail => FocusPanel::Graph,
+            FocusPanel::Files | FocusPanel::BottomLeft => FocusPanel::Graph,
+            FocusPanel::Detail | FocusPanel::BottomRight => FocusPanel::Graph,
         };
 
         // Auto-sélectionner le premier fichier quand on passe au panneau Files
@@ -537,7 +591,7 @@ impl EventHandler {
                 .state
                 .branches_view_state
                 .local_branches
-                .get(self.state.branches_view_state.branch_selected)
+                .get(self.state.branches_view_state.branch_selected())
                 .cloned()
             {
                 if let Err(e) = self.state.repo.checkout_branch(&branch.name) {
@@ -567,7 +621,7 @@ impl EventHandler {
             && self.state.branches_view_state.section == crate::state::BranchesSection::Stashes
         {
             let state = &mut self.state.branches_view_state;
-            if let Some(stash) = state.stashes.get(state.stash_selected) {
+            if let Some(stash) = state.stashes.get(state.stash_selected()) {
                 if !stash.files.is_empty() && state.stash_file_selected > 0 {
                     state.stash_file_selected -= 1;
                     self.load_stash_file_diff();
@@ -588,7 +642,7 @@ impl EventHandler {
             && self.state.branches_view_state.section == crate::state::BranchesSection::Stashes
         {
             let state = &mut self.state.branches_view_state;
-            if let Some(stash) = state.stashes.get(state.stash_selected) {
+            if let Some(stash) = state.stashes.get(state.stash_selected()) {
                 if !stash.files.is_empty() && state.stash_file_selected + 1 < stash.files.len() {
                     state.stash_file_selected += 1;
                     self.load_stash_file_diff();
@@ -628,8 +682,8 @@ impl EventHandler {
             if let Some(file) = self
                 .state
                 .staging_state
-                .unstaged_files
-                .get(self.state.staging_state.unstaged_selected)
+                .unstaged_files()
+                .get(self.state.staging_state.unstaged_selected())
             {
                 crate::git::commit::stage_file(&self.state.repo.repo, &file.path)?;
                 self.state.mark_dirty(); // Marquer comme modifié
@@ -646,8 +700,8 @@ impl EventHandler {
             if let Some(file) = self
                 .state
                 .staging_state
-                .staged_files
-                .get(self.state.staging_state.staged_selected)
+                .staged_files()
+                .get(self.state.staging_state.staged_selected())
             {
                 crate::git::commit::unstage_file(&self.state.repo.repo, &file.path)?;
                 self.state.mark_dirty(); // Marquer comme modifié
@@ -717,12 +771,12 @@ impl EventHandler {
                     &self.state.staging_state.commit_message,
                 )?;
                 self.state
-                    .set_flash_message("Commit amendé avec succès".into());
+                    .set_flash_message("Commit amendé avec succès");
             } else {
                 // Mode création de commit normal
-                if self.state.staging_state.staged_files.is_empty() {
+                if self.state.staging_state.staged_files().is_empty() {
                     self.state
-                        .set_flash_message("Aucun fichier staged pour le commit".into());
+                        .set_flash_message("Aucun fichier staged pour le commit");
                     return Ok(());
                 }
 
@@ -731,7 +785,7 @@ impl EventHandler {
                     &self.state.staging_state.commit_message,
                 )?;
                 self.state
-                    .set_flash_message("Commit créé avec succès".into());
+                    .set_flash_message("Commit créé avec succès");
             }
 
             self.state.staging_state.commit_message.clear();
@@ -863,14 +917,14 @@ impl EventHandler {
 
                     if branches.is_empty() {
                         self.state
-                            .set_flash_message("Aucune branche sur ce commit".into());
+                            .set_flash_message("Aucune branche sur ce commit");
                     } else if branches.len() == 1 {
                         let name = branches[0].clone();
                         // Vérifier si c'est la branche courante
                         if let Some(current) = &self.state.current_branch {
                             if &name == current {
                                 self.state.set_flash_message(
-                                    "Impossible de supprimer la branche courante (HEAD)".into(),
+                                    "Impossible de supprimer la branche courante (HEAD)",
                                 );
                                 return Ok(());
                             }
@@ -893,14 +947,14 @@ impl EventHandler {
                         .state
                         .branches_view_state
                         .local_branches
-                        .get(self.state.branches_view_state.branch_selected)
+                        .get(self.state.branches_view_state.branch_selected())
                     {
                         let name = branch.name.clone();
                         // Vérifier si c'est la branche courante
                         if let Some(current) = &self.state.current_branch {
                             if &name == current {
                                 self.state.set_flash_message(
-                                    "Impossible de supprimer la branche courante (HEAD)".into(),
+                                    "Impossible de supprimer la branche courante (HEAD)",
                                 );
                                 return Ok(());
                             }
@@ -986,7 +1040,7 @@ impl EventHandler {
                 .state
                 .branches_view_state
                 .worktrees
-                .get(self.state.branches_view_state.worktree_selected)
+                .get(self.state.branches_view_state.worktree_selected())
             {
                 if !worktree.is_main {
                     let name = worktree.name.clone();
@@ -994,7 +1048,7 @@ impl EventHandler {
                     self.state.pending_confirmation = Some(ConfirmAction::WorktreeRemove(name));
                 } else {
                     self.state
-                        .set_flash_message("Impossible de supprimer le worktree principal".into());
+                        .set_flash_message("Impossible de supprimer le worktree principal");
                 }
             }
         }
@@ -1009,7 +1063,7 @@ impl EventHandler {
                 .state
                 .branches_view_state
                 .stashes
-                .get(self.state.branches_view_state.stash_selected)
+                .get(self.state.branches_view_state.stash_selected())
             {
                 let idx = stash.index;
                 if let Err(e) = crate::git::stash::apply_stash(&mut self.state.repo.repo, idx) {
@@ -1033,7 +1087,7 @@ impl EventHandler {
                 .state
                 .branches_view_state
                 .stashes
-                .get(self.state.branches_view_state.stash_selected)
+                .get(self.state.branches_view_state.stash_selected())
             {
                 let idx = stash.index;
                 if let Err(e) = crate::git::stash::pop_stash(&mut self.state.repo.repo, idx) {
@@ -1057,7 +1111,7 @@ impl EventHandler {
                 .state
                 .branches_view_state
                 .stashes
-                .get(self.state.branches_view_state.stash_selected)
+                .get(self.state.branches_view_state.stash_selected())
             {
                 let idx = stash.index;
                 // Déclencher le dialogue de confirmation
@@ -1085,8 +1139,8 @@ impl EventHandler {
             if let Some(file) = self
                 .state
                 .staging_state
-                .unstaged_files
-                .get(self.state.staging_state.unstaged_selected)
+                .unstaged_files()
+                .get(self.state.staging_state.unstaged_selected())
             {
                 let file_path = file.path.clone();
                 match crate::git::stash::stash_file(&self.state.repo_path, &file_path, None) {
@@ -1112,7 +1166,7 @@ impl EventHandler {
             match crate::git::stash::stash_unstaged_files(&self.state.repo_path, None) {
                 Ok(_) => {
                     self.state
-                        .set_flash_message("Fichiers unstaged stashés".into());
+                        .set_flash_message("Fichiers unstaged stashés");
                     self.state.mark_dirty();
                     self.refresh_staging()?;
                 }
@@ -1151,7 +1205,7 @@ impl EventHandler {
                         .state
                         .branches_view_state
                         .local_branches
-                        .get(self.state.branches_view_state.branch_selected)
+                        .get(self.state.branches_view_state.branch_selected())
                     {
                         let old_name = branch.name.clone();
                         let new_name = self.state.branches_view_state.input_text.clone();
@@ -1191,7 +1245,7 @@ impl EventHandler {
                         }
                     } else {
                         self.state
-                            .set_flash_message("Format: nom chemin [branche]".into());
+                            .set_flash_message("Format: nom chemin [branche]");
                     }
                 }
                 Some(InputAction::SaveStash) => {
@@ -1206,7 +1260,7 @@ impl EventHandler {
                     {
                         self.state.set_flash_message(format!("Erreur: {}", e));
                     } else {
-                        self.state.set_flash_message("Stash sauvegardé".into());
+                        self.state.set_flash_message("Stash sauvegardé");
                         self.state.mark_dirty(); // Marquer comme modifié
                         self.refresh_branches_view()?;
                     }
@@ -1265,16 +1319,20 @@ impl EventHandler {
 
         // Rafraîchir les données de staging si nécessaire
         let all_entries = self.state.repo.status()?;
-        self.state.staging_state.staged_files = all_entries
-            .iter()
-            .filter(|e| e.is_staged())
-            .cloned()
-            .collect();
-        self.state.staging_state.unstaged_files = all_entries
-            .iter()
-            .filter(|e| e.is_unstaged())
-            .cloned()
-            .collect();
+        self.state.staging_state.set_staged_files(
+            all_entries
+                .iter()
+                .filter(|e| e.is_staged())
+                .cloned()
+                .collect()
+        );
+        self.state.staging_state.set_unstaged_files(
+            all_entries
+                .iter()
+                .filter(|e| e.is_unstaged())
+                .cloned()
+                .collect()
+        );
 
         // Activer directement le mode commit message
         self.state.staging_state.focus = StagingFocus::CommitMessage;
@@ -1309,17 +1367,17 @@ impl EventHandler {
                 .state
                 .branches_view_state
                 .local_branches
-                .get(self.state.branches_view_state.branch_selected)
+                .get(self.state.branches_view_state.branch_selected())
                 .cloned();
             if let Some(branch) = branch {
                 if branch.is_head {
                     self.state.set_flash_message(
-                        "Impossible de merger la branche courante dans elle-même".into(),
+                        "Impossible de merger la branche courante dans elle-même",
                     );
                 } else {
                     // Demander confirmation
                     let current_branch = self.state.current_branch.clone().ok_or_else(|| {
-                        GitSvError::InvalidState("Aucune branche courante".into())
+                        GitSvError::InvalidState("Aucune branche courante".to_string())
                     })?;
                     self.state.pending_confirmation = Some(ConfirmAction::MergeBranch(
                         branch.name.clone(),
@@ -1383,7 +1441,7 @@ impl EventHandler {
     fn load_stash_file_diff(&mut self) {
         let state = &mut self.state.branches_view_state;
 
-        if let Some(stash) = state.stashes.get(state.stash_selected) {
+        if let Some(stash) = state.stashes.get(state.stash_selected()) {
             if let Some(file) = stash.files.get(state.stash_file_selected) {
                 match self.state.repo.stash_file_diff(stash.oid, &file.path) {
                     Ok(diff_lines) => {
@@ -1408,13 +1466,13 @@ impl EventHandler {
             StagingFocus::Unstaged => self
                 .state
                 .staging_state
-                .unstaged_files
-                .get(self.state.staging_state.unstaged_selected),
+                .unstaged_files()
+                .get(self.state.staging_state.unstaged_selected()),
             StagingFocus::Staged => self
                 .state
                 .staging_state
-                .staged_files
-                .get(self.state.staging_state.staged_selected),
+                .staged_files()
+                .get(self.state.staging_state.staged_selected()),
             _ => None,
         };
 
@@ -1448,26 +1506,26 @@ impl EventHandler {
 
         match self.state.staging_state.focus {
             StagingFocus::Unstaged => {
-                let max = self.state.staging_state.unstaged_files.len();
+                let max = self.state.staging_state.unstaged_files().len();
                 if max > 0 {
                     let new_idx = if direction > 0 {
-                        (self.state.staging_state.unstaged_selected + 1).min(max - 1)
+                        (self.state.staging_state.unstaged_selected() + 1).min(max - 1)
                     } else {
-                        self.state.staging_state.unstaged_selected.saturating_sub(1)
+                        self.state.staging_state.unstaged_selected().saturating_sub(1)
                     };
-                    self.state.staging_state.unstaged_selected = new_idx;
+                    self.state.staging_state.set_unstaged_selected(new_idx);
                     self.load_staging_diff();
                 }
             }
             StagingFocus::Staged => {
-                let max = self.state.staging_state.staged_files.len();
+                let max = self.state.staging_state.staged_files().len();
                 if max > 0 {
                     let new_idx = if direction > 0 {
-                        (self.state.staging_state.staged_selected + 1).min(max - 1)
+                        (self.state.staging_state.staged_selected() + 1).min(max - 1)
                     } else {
-                        self.state.staging_state.staged_selected.saturating_sub(1)
+                        self.state.staging_state.staged_selected().saturating_sub(1)
                     };
-                    self.state.staging_state.staged_selected = new_idx;
+                    self.state.staging_state.set_staged_selected(new_idx);
                     self.load_staging_diff();
                 }
             }
@@ -1499,42 +1557,42 @@ impl EventHandler {
 
                 if max > 0 {
                     let new_idx = if direction > 0 {
-                        (self.state.branches_view_state.branch_selected + 1).min(max - 1)
+                        (self.state.branches_view_state.branch_selected() + 1).min(max - 1)
                     } else {
                         self.state
                             .branches_view_state
-                            .branch_selected
+                            .branch_selected()
                             .saturating_sub(1)
                     };
-                    self.state.branches_view_state.branch_selected = new_idx;
+                    self.state.branches_view_state.set_branch_selected(new_idx);
                 }
             }
             BranchesSection::Worktrees => {
                 let max = self.state.branches_view_state.worktrees.len();
                 if max > 0 {
                     let new_idx = if direction > 0 {
-                        (self.state.branches_view_state.worktree_selected + 1).min(max - 1)
+                        (self.state.branches_view_state.worktree_selected() + 1).min(max - 1)
                     } else {
                         self.state
                             .branches_view_state
-                            .worktree_selected
+                            .worktree_selected()
                             .saturating_sub(1)
                     };
-                    self.state.branches_view_state.worktree_selected = new_idx;
+                    self.state.branches_view_state.set_worktree_selected(new_idx);
                 }
             }
             BranchesSection::Stashes => {
                 let max = self.state.branches_view_state.stashes.len();
                 if max > 0 {
                     let new_idx = if direction > 0 {
-                        (self.state.branches_view_state.stash_selected + 1).min(max - 1)
+                        (self.state.branches_view_state.stash_selected() + 1).min(max - 1)
                     } else {
                         self.state
                             .branches_view_state
-                            .stash_selected
+                            .stash_selected()
                             .saturating_sub(1)
                     };
-                    self.state.branches_view_state.stash_selected = new_idx;
+                    self.state.branches_view_state.set_stash_selected(new_idx);
 
                     // Charger le diff du fichier sélectionné
                     self.load_stash_file_diff();
@@ -1597,36 +1655,32 @@ impl EventHandler {
         &mut self,
         all_entries: &[crate::git::repo::StatusEntry],
     ) -> Result<()> {
-        self.state.staging_state.staged_files = all_entries
-            .iter()
-            .filter(|e| e.is_staged())
-            .cloned()
-            .collect();
+        self.state.staging_state.set_staged_files(
+            all_entries
+                .iter()
+                .filter(|e| e.is_staged())
+                .cloned()
+                .collect()
+        );
 
-        self.state.staging_state.unstaged_files = all_entries
-            .iter()
-            .filter(|e| e.is_unstaged())
-            .cloned()
-            .collect();
+        self.state.staging_state.set_unstaged_files(
+            all_entries
+                .iter()
+                .filter(|e| e.is_unstaged())
+                .cloned()
+                .collect()
+        );
 
         // Réajuster les sélections.
-        if self.state.staging_state.unstaged_selected
-            >= self.state.staging_state.unstaged_files.len()
+        if self.state.staging_state.unstaged_selected()
+            >= self.state.staging_state.unstaged_files().len()
         {
-            self.state.staging_state.unstaged_selected = self
-                .state
-                .staging_state
-                .unstaged_files
-                .len()
-                .saturating_sub(1);
+            let new_idx = self.state.staging_state.unstaged_files().len().saturating_sub(1);
+            self.state.staging_state.set_unstaged_selected(new_idx);
         }
-        if self.state.staging_state.staged_selected >= self.state.staging_state.staged_files.len() {
-            self.state.staging_state.staged_selected = self
-                .state
-                .staging_state
-                .staged_files
-                .len()
-                .saturating_sub(1);
+        if self.state.staging_state.staged_selected() >= self.state.staging_state.staged_files().len() {
+            let new_idx = self.state.staging_state.staged_files().len().saturating_sub(1);
+            self.state.staging_state.set_staged_selected(new_idx);
         }
 
         // Charger le diff du fichier survolé.
@@ -1639,12 +1693,12 @@ impl EventHandler {
         let (local_branches, remote_branches) =
             crate::git::branch::list_all_branches(&self.state.repo.repo)?;
 
-        self.state.branches_view_state.local_branches = local_branches;
-        self.state.branches_view_state.remote_branches = remote_branches;
+        self.state.branches_view_state.local_branches.set_items(local_branches);
+        self.state.branches_view_state.remote_branches.set_items(remote_branches);
 
         // Rafraîchir les worktrees avec gestion d'erreur
         match self.state.repo.worktrees() {
-            Ok(worktrees) => self.state.branches_view_state.worktrees = worktrees,
+            Ok(worktrees) => self.state.branches_view_state.worktrees.set_items(worktrees),
             Err(e) => {
                 self.state.set_flash_message(format_error_message(&e));
                 self.state.branches_view_state.worktrees.clear();
@@ -1653,7 +1707,7 @@ impl EventHandler {
 
         // Rafraîchir les stashes avec gestion d'erreur
         match self.state.repo.stashes() {
-            Ok(stashes) => self.state.branches_view_state.stashes = stashes,
+            Ok(stashes) => self.state.branches_view_state.stashes.set_items(stashes),
             Err(e) => {
                 self.state.set_flash_message(format_error_message(&e));
                 self.state.branches_view_state.stashes.clear();
@@ -1661,35 +1715,38 @@ impl EventHandler {
         }
 
         // Réajuster les sélections.
-        if self.state.branches_view_state.branch_selected
+        if self.state.branches_view_state.branch_selected()
             >= self.state.branches_view_state.local_branches.len()
         {
-            self.state.branches_view_state.branch_selected = self
+            let new_idx = self
                 .state
                 .branches_view_state
                 .local_branches
                 .len()
                 .saturating_sub(1);
+            self.state.branches_view_state.set_branch_selected(new_idx);
         }
-        if self.state.branches_view_state.worktree_selected
+        if self.state.branches_view_state.worktree_selected()
             >= self.state.branches_view_state.worktrees.len()
         {
-            self.state.branches_view_state.worktree_selected = self
+            let new_idx = self
                 .state
                 .branches_view_state
                 .worktrees
                 .len()
                 .saturating_sub(1);
+            self.state.branches_view_state.set_worktree_selected(new_idx);
         }
-        if self.state.branches_view_state.stash_selected
+        if self.state.branches_view_state.stash_selected()
             >= self.state.branches_view_state.stashes.len()
         {
-            self.state.branches_view_state.stash_selected = self
+            let new_idx = self
                 .state
                 .branches_view_state
                 .stashes
                 .len()
                 .saturating_sub(1);
+            self.state.branches_view_state.set_stash_selected(new_idx);
         }
 
         // Charger le diff du fichier de stash sélectionné
@@ -1716,7 +1773,7 @@ impl EventHandler {
             }
             Ok(false) => {
                 self.state
-                    .set_flash_message("Aucun remote configuré".into());
+                    .set_flash_message("Aucun remote configuré");
             }
             Err(e) => {
                 self.state.set_flash_message(format!("Erreur: {}", e));
@@ -1736,16 +1793,16 @@ impl EventHandler {
                 // Lancer le pull
                 match crate::git::remote::pull_current_branch_with_result(&self.state.repo.repo) {
                     Ok(MergeResult::UpToDate) => {
-                        self.state.set_flash_message("Déjà à jour ✓".into());
+                        self.state.set_flash_message("Déjà à jour ✓");
                     }
                     Ok(MergeResult::FastForward) => {
                         self.state
-                            .set_flash_message("Pull (fast-forward) réussi ✓".into());
+                            .set_flash_message("Pull (fast-forward) réussi ✓");
                         self.state.mark_dirty();
                         self.refresh()?;
                     }
                     Ok(MergeResult::Success) => {
-                        self.state.set_flash_message("Pull réussi ✓".into());
+                        self.state.set_flash_message("Pull réussi ✓");
                         self.state.mark_dirty();
                         self.refresh()?;
                     }
@@ -1763,13 +1820,13 @@ impl EventHandler {
                         );
                         self.state.conflicts_state = Some(ConflictsState::new(
                             files,
-                            "Pull depuis origin".into(),
+                            "Pull depuis origin".to_string(),
                             ours_name,
                             theirs_name,
                         ));
                         self.state.view_mode = ViewMode::Conflicts;
                         self.state
-                            .set_flash_message("Conflits détectés lors du pull".into());
+                            .set_flash_message("Conflits détectés lors du pull");
                     }
                     Err(e) => {
                         self.state
@@ -1779,7 +1836,7 @@ impl EventHandler {
             }
             Ok(false) => {
                 self.state
-                    .set_flash_message("Aucun remote configuré".into());
+                    .set_flash_message("Aucun remote configuré");
             }
             Err(e) => {
                 self.state.set_flash_message(format!("Erreur: {}", e));
@@ -1796,7 +1853,7 @@ impl EventHandler {
                 // Lancer le fetch
                 match crate::git::remote::fetch_all(&self.state.repo.repo) {
                     Ok(_) => {
-                        self.state.set_flash_message("Fetch réussi ✓".into());
+                        self.state.set_flash_message("Fetch réussi ✓");
                         self.state.mark_dirty();
                         self.refresh()?;
                     }
@@ -1808,7 +1865,7 @@ impl EventHandler {
             }
             Ok(false) => {
                 self.state
-                    .set_flash_message("Aucun remote configuré".into());
+                    .set_flash_message("Aucun remote configuré");
             }
             Err(e) => {
                 self.state.set_flash_message(format!("Erreur: {}", e));
@@ -1863,7 +1920,7 @@ impl EventHandler {
                 // Invalider les résultats de recherche obsolètes
                 self.state.search_state.results.clear();
                 self.state
-                    .set_flash_message("Résultats de recherche obsolètes".into());
+                    .set_flash_message("Résultats de recherche obsolètes");
             }
         }
     }
@@ -1887,7 +1944,7 @@ impl EventHandler {
                 // Invalider les résultats de recherche obsolètes
                 self.state.search_state.results.clear();
                 self.state
-                    .set_flash_message("Résultats de recherche obsolètes".into());
+                    .set_flash_message("Résultats de recherche obsolètes");
             }
         }
     }
@@ -1924,9 +1981,9 @@ impl EventHandler {
         }
 
         // Récupérer le fichier sélectionné
-        let selected = self.state.staging_state.unstaged_selected;
-        if selected < self.state.staging_state.unstaged_files.len() {
-            let file = &self.state.staging_state.unstaged_files[selected];
+        let selected = self.state.staging_state.unstaged_selected();
+        if selected < self.state.staging_state.unstaged_files().len() {
+            let file = &self.state.staging_state.unstaged_files()[selected];
             let path = file.path.clone();
 
             // Demander confirmation
@@ -1944,9 +2001,9 @@ impl EventHandler {
         }
 
         // Vérifier qu'il y a des fichiers unstaged
-        if self.state.staging_state.unstaged_files.is_empty() {
+        if self.state.staging_state.unstaged_files().is_empty() {
             self.state
-                .set_flash_message("Aucune modification à discard".into());
+                .set_flash_message("Aucune modification à discard");
             return Ok(());
         }
 
@@ -1978,7 +2035,7 @@ impl EventHandler {
         match crate::git::discard::discard_all(&self.state.repo.repo) {
             Ok(_) => {
                 self.state
-                    .set_flash_message("Toutes les modifications ont été restaurées ✓".into());
+                    .set_flash_message("Toutes les modifications ont été restaurées ✓");
                 self.state.mark_dirty();
                 self.refresh()?;
             }
@@ -2031,7 +2088,7 @@ impl EventHandler {
         // Récupérer le fichier sélectionné
         if self.state.commit_files.is_empty() {
             self.state
-                .set_flash_message("Aucun fichier sélectionné".into());
+                .set_flash_message("Aucun fichier sélectionné");
             return Ok(());
         }
 
@@ -2043,7 +2100,7 @@ impl EventHandler {
             row.node.oid
         } else {
             self.state
-                .set_flash_message("Aucun commit sélectionné".into());
+                .set_flash_message("Aucun commit sélectionné");
             return Ok(());
         };
 
@@ -2127,7 +2184,7 @@ impl EventHandler {
             row.node.oid
         } else {
             self.state
-                .set_flash_message("Aucun commit sélectionné".into());
+                .set_flash_message("Aucun commit sélectionné");
             return Ok(());
         };
 
@@ -2169,7 +2226,7 @@ impl EventHandler {
                 ));
                 self.state.view_mode = ViewMode::Conflicts;
                 self.state
-                    .set_flash_message("Conflits détectés lors du cherry-pick".into());
+                    .set_flash_message("Conflits détectés lors du cherry-pick");
             }
             Ok(MergeResult::FastForward) => {
                 // Ne devrait pas arriver avec cherry-pick
@@ -2207,7 +2264,7 @@ impl EventHandler {
         self.state.staging_state.focus = StagingFocus::CommitMessage;
 
         self.state
-            .set_flash_message("Mode amendement activé - éditez le message et validez".into());
+            .set_flash_message("Mode amendement activé - éditez le message et validez");
 
         Ok(())
     }
@@ -2219,7 +2276,7 @@ impl EventHandler {
         // Charger les branches si elles ne le sont pas déjà
         if self.state.branches_view_state.local_branches.is_empty() {
             let (local_branches, _) = crate::git::branch::list_all_branches(&self.state.repo.repo)?;
-            self.state.branches_view_state.local_branches = local_branches;
+            self.state.branches_view_state.local_branches.set_items(local_branches);
         }
 
         // Récupérer la liste des branches locales (hors branche courante)
@@ -2241,15 +2298,11 @@ impl EventHandler {
 
         if branches.is_empty() {
             self.state
-                .set_flash_message("Aucune branche disponible pour le merge".into());
+                .set_flash_message("Aucune branche disponible pour le merge");
             return Ok(());
         }
 
-        self.state.merge_picker = Some(MergePickerState {
-            branches,
-            selected: 0,
-            is_active: true,
-        });
+        self.state.merge_picker = Some(MergePickerState::new(branches));
 
         Ok(())
     }
@@ -2257,8 +2310,8 @@ impl EventHandler {
     /// Navigation vers le haut dans le merge picker.
     fn handle_merge_picker_up(&mut self) {
         if let Some(ref mut picker) = self.state.merge_picker {
-            if picker.selected > 0 {
-                picker.selected -= 1;
+            if picker.selected() > 0 {
+                picker.set_selected(picker.selected() - 1);
             }
         }
     }
@@ -2266,8 +2319,8 @@ impl EventHandler {
     /// Navigation vers le bas dans le merge picker.
     fn handle_merge_picker_down(&mut self) {
         if let Some(ref mut picker) = self.state.merge_picker {
-            if !picker.branches.is_empty() && picker.selected + 1 < picker.branches.len() {
-                picker.selected += 1;
+            if !picker.branches.is_empty() && picker.selected() + 1 < picker.branches.len() {
+                picker.set_selected(picker.selected() + 1);
             }
         }
     }
@@ -2278,7 +2331,7 @@ impl EventHandler {
             .state
             .merge_picker
             .as_ref()
-            .and_then(|picker| picker.branches.get(picker.selected))
+            .and_then(|picker| picker.branches.get(picker.selected()))
             .cloned();
 
         if let Some(branch_name) = branch_to_merge {
@@ -2333,7 +2386,7 @@ impl EventHandler {
                 ));
                 self.state.view_mode = ViewMode::Conflicts;
                 self.state
-                    .set_flash_message("Conflits détectés - Résolution requise".into());
+                    .set_flash_message("Conflits détectés - Résolution requise");
             }
             Err(e) => {
                 self.state.set_flash_message(format!("Erreur: {}", e));
@@ -2729,7 +2782,7 @@ impl EventHandler {
         {
             if !has_conflicts {
                 self.state
-                    .set_flash_message("Ce fichier n'a pas de conflits".into());
+                    .set_flash_message("Ce fichier n'a pas de conflits");
                 return Ok(());
             }
 
@@ -2810,7 +2863,7 @@ impl EventHandler {
             // Conflit classique (BothModified)
             if !conflicts.iter().all(|s| s.resolution.is_some()) {
                 self.state
-                    .set_flash_message("Toutes les sections ne sont pas résolues".into());
+                    .set_flash_message("Toutes les sections ne sont pas résolues");
                 return Ok(());
             }
 
@@ -2863,7 +2916,7 @@ impl EventHandler {
                     self.state.conflicts_state = None;
                     self.state.view_mode = ViewMode::Graph;
                     self.state
-                        .set_flash_message("Merge finalisé avec succès ✓".into());
+                        .set_flash_message("Merge finalisé avec succès ✓");
                     self.state.mark_dirty();
                     self.refresh()?;
                 }
@@ -3331,8 +3384,8 @@ impl EventHandler {
                         text_to_copy = self
                             .state
                             .staging_state
-                            .unstaged_files
-                            .get(self.state.staging_state.unstaged_selected)
+                            .unstaged_files()
+                            .get(self.state.staging_state.unstaged_selected())
                             .map(|f| f.path.clone())
                             .unwrap_or_default();
                     }
@@ -3341,8 +3394,8 @@ impl EventHandler {
                         text_to_copy = self
                             .state
                             .staging_state
-                            .staged_files
-                            .get(self.state.staging_state.staged_selected)
+                            .staged_files()
+                            .get(self.state.staging_state.staged_selected())
                             .map(|f| f.path.clone())
                             .unwrap_or_default();
                     }
@@ -3376,7 +3429,7 @@ impl EventHandler {
                             .state
                             .branches_view_state
                             .local_branches
-                            .get(self.state.branches_view_state.branch_selected)
+                            .get(self.state.branches_view_state.branch_selected())
                             .map(|b| b.name.clone())
                             .unwrap_or_default();
                     }
@@ -3385,7 +3438,7 @@ impl EventHandler {
                             .state
                             .branches_view_state
                             .worktrees
-                            .get(self.state.branches_view_state.worktree_selected)
+                            .get(self.state.branches_view_state.worktree_selected())
                             .map(|w| format!("{} -> {}", w.name, w.path))
                             .unwrap_or_default();
                     }
@@ -3394,7 +3447,7 @@ impl EventHandler {
                             .state
                             .branches_view_state
                             .stashes
-                            .get(self.state.branches_view_state.stash_selected)
+                            .get(self.state.branches_view_state.stash_selected())
                             .map(|s| s.message.clone())
                             .unwrap_or_default();
                     }
@@ -3439,7 +3492,7 @@ impl EventHandler {
             match copy_to_clipboard(&text_to_copy) {
                 Ok(_) => {
                     self.state
-                        .set_flash_message("Copié dans le clipboard ✓".into());
+                        .set_flash_message("Copié dans le clipboard ✓");
                 }
                 Err(e) => {
                     self.state

@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use crate::error::Result;
 
 /// Informations sur une branche.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BranchInfo {
     pub name: String,
     pub is_head: bool,

@@ -55,7 +55,7 @@ pub fn render(
 
     let mut list_state = ListState::default();
     if !state.branches.is_empty() {
-        list_state.select(Some(state.selected));
+        list_state.select(Some(state.selected()));
     }
 
     frame.render_stateful_widget(list, popup_area, &mut list_state);
