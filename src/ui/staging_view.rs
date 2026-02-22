@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::app::{StagingFocus, StagingState};
 use crate::git::repo::StatusEntry;
+use crate::ui::theme::current_theme;
 
 /// Rend la vue complète de staging.
 pub fn render(
@@ -17,6 +18,7 @@ pub fn render(
     repo_path: &str,
     flash_message: Option<&str>,
 ) {
+    let theme = current_theme();
     let layout = super::staging_layout::build_staging_layout(frame.area());
 
     // Status bar.
@@ -26,6 +28,7 @@ pub fn render(
         repo_path,
         flash_message,
         layout.status_bar,
+        theme,
     );
 
     // Panneau unstaged.
@@ -36,6 +39,7 @@ pub fn render(
         staging_state.unstaged_selected(),
         staging_state.focus == StagingFocus::Unstaged,
         layout.unstaged_panel,
+        theme,
     );
 
     // Panneau staged.
@@ -46,6 +50,7 @@ pub fn render(
         staging_state.staged_selected(),
         staging_state.focus == StagingFocus::Staged,
         layout.staged_panel,
+        theme,
     );
 
     // Panneau diff.
@@ -66,10 +71,11 @@ pub fn render(
         staging_state.focus == StagingFocus::CommitMessage,
         !staging_state.staged_files().is_empty(),
         layout.commit_message,
+        theme,
     );
 
     // Help bar.
-    render_staging_help(frame, &staging_state.focus, layout.help_bar);
+    render_staging_help(frame, &staging_state.focus, layout.help_bar, theme);
 }
 
 /// Rend la status bar de la vue staging.
@@ -79,6 +85,7 @@ fn render_staging_status_bar(
     repo_path: &str,
     flash_message: Option<&str>,
     area: Rect,
+    theme: &crate::ui::theme::Theme,
 ) {
     let branch_name = current_branch.as_deref().unwrap_or("???");
 
@@ -94,13 +101,13 @@ fn render_staging_status_bar(
     let line = Line::from(vec![Span::styled(
         content,
         Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
+            .fg(theme.status_bar_fg)
+            .bg(theme.status_bar_bg)
             .add_modifier(Modifier::BOLD),
     )]);
 
     frame.render_widget(
-        Paragraph::new(line).style(Style::default().bg(Color::Cyan)),
+        Paragraph::new(line).style(Style::default().bg(theme.status_bar_bg)),
         area,
     );
 }
@@ -113,6 +120,7 @@ fn render_file_list(
     selected: usize,
     is_focused: bool,
     area: Rect,
+    theme: &crate::ui::theme::Theme,
 ) {
     let items: Vec<ListItem> = files
         .iter()
@@ -126,11 +134,11 @@ fn render_file_list(
             };
 
             let status_color = match entry.display_status() {
-                s if s.contains("staged") => Color::Green,
-                "Modifié" => Color::Yellow,
-                "Supprimé" => Color::Red,
-                "Non suivi" => Color::DarkGray,
-                _ => Color::Reset,
+                s if s.contains("staged") => theme.success,
+                "Modifié" => theme.warning,
+                "Supprimé" => theme.error,
+                "Non suivi" => theme.text_secondary,
+                _ => theme.text_normal,
             };
 
             let line = Line::from(vec![
@@ -138,7 +146,7 @@ fn render_file_list(
                     format!(" {} ", status_icon),
                     Style::default().fg(status_color),
                 ),
-                Span::raw(&entry.path),
+                Span::styled(&entry.path, Style::default().fg(theme.text_normal)),
             ]);
 
             ListItem::new(line)
@@ -146,9 +154,9 @@ fn render_file_list(
         .collect();
 
     let border_style = if is_focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.primary)
     } else {
-        Style::default()
+        Style::default().fg(theme.border_inactive)
     };
 
     let count = files.len();
@@ -161,7 +169,8 @@ fn render_file_list(
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.selection_bg)
+                .fg(theme.selection_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -178,11 +187,12 @@ fn render_commit_input(
     is_focused: bool,
     has_staged_files: bool,
     area: Rect,
+    theme: &crate::ui::theme::Theme,
 ) {
     let border_style = if is_focused {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(theme.warning)
     } else {
-        Style::default()
+        Style::default().fg(theme.border_inactive)
     };
 
     let title = if has_staged_files {
@@ -197,12 +207,20 @@ fn render_commit_input(
         message
     };
 
-    let paragraph = Paragraph::new(display_text).block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(border_style),
-    );
+    let text_style = if message.is_empty() && !is_focused {
+        Style::default().fg(theme.text_secondary)
+    } else {
+        Style::default().fg(theme.text_normal)
+    };
+
+    let paragraph = Paragraph::new(display_text)
+        .style(text_style)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        );
 
     frame.render_widget(paragraph, area);
 
@@ -231,7 +249,7 @@ fn render_commit_input(
 }
 
 /// Rend la barre d'aide de la vue staging.
-fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect) {
+fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect, theme: &crate::ui::theme::Theme) {
     let help_text = match focus {
         StagingFocus::Unstaged => {
             "j/k:nav  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit  P:push  1:graph  q:quit"
@@ -247,8 +265,8 @@ fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect) {
 
     let line = Line::from(vec![Span::styled(
         format!(" {} ", help_text),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.text_secondary),
     )]);
 
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(line).style(Style::default().bg(theme.background)), area);
 }

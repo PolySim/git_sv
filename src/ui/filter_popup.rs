@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::state::{FilterField, FilterPopupState, GraphFilter};
+use crate::ui::theme::current_theme;
 
 /// Rend le popup de filtre si ouvert.
 pub fn render(
@@ -20,6 +21,8 @@ pub fn render(
     if !popup_state.is_open {
         return;
     }
+
+    let theme = current_theme();
 
     // Zone centrale pour le popup
     let popup_area = centered_rect(70, 60, area);
@@ -36,9 +39,9 @@ pub fn render(
     };
 
     let border_style = if is_active {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(theme.warning)
     } else {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.primary)
     };
 
     let block = Block::default()
@@ -66,7 +69,7 @@ pub fn render(
     // Description
     let desc = Paragraph::new("Filtrer les commits affichés dans le graph")
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Gray));
+        .style(Style::default().fg(theme.text_secondary));
     frame.render_widget(desc, chunks[0]);
 
     // Champs de filtre
@@ -76,6 +79,7 @@ pub fn render(
         &popup_state.author_input,
         popup_state.selected_field == FilterField::Author,
         chunks[2],
+        theme,
     );
 
     render_filter_field(
@@ -84,6 +88,7 @@ pub fn render(
         &popup_state.date_from_input,
         popup_state.selected_field == FilterField::DateFrom,
         chunks[3],
+        theme,
     );
 
     render_filter_field(
@@ -92,6 +97,7 @@ pub fn render(
         &popup_state.date_to_input,
         popup_state.selected_field == FilterField::DateTo,
         chunks[4],
+        theme,
     );
 
     render_filter_field(
@@ -100,6 +106,7 @@ pub fn render(
         &popup_state.path_input,
         popup_state.selected_field == FilterField::Path,
         chunks[5],
+        theme,
     );
 
     render_filter_field(
@@ -108,6 +115,7 @@ pub fn render(
         &popup_state.message_input,
         popup_state.selected_field == FilterField::Message,
         chunks[6],
+        theme,
     );
 
     // Aide en bas
@@ -118,7 +126,7 @@ pub fn render(
     };
     let help = Paragraph::new(help_text)
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
+        .style(Style::default().fg(theme.text_secondary));
     frame.render_widget(help, chunks[8]);
 
     // Rendre le bloc par-dessus
@@ -132,6 +140,7 @@ fn render_filter_field(
     value: &str,
     is_selected: bool,
     area: Rect,
+    theme: &crate::ui::theme::Theme,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -140,9 +149,9 @@ fn render_filter_field(
 
     // Label
     let label_style = if is_selected {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Gray)
+        Style::default().fg(theme.text_secondary)
     };
 
     let label_span = Span::styled(format!("{}: ", label), label_style);
@@ -152,9 +161,9 @@ fn render_filter_field(
 
     // Valeur avec fond
     let (bg_color, fg_color) = if is_selected {
-        (Color::DarkGray, Color::White)
+        (theme.selection_bg, theme.selection_fg)
     } else {
-        (Color::Black, Color::Gray)
+        (theme.background, theme.text_secondary)
     };
 
     let display_value = if value.is_empty() {
@@ -164,7 +173,7 @@ fn render_filter_field(
     };
 
     let value_style = if value.is_empty() && is_selected {
-        Style::default().fg(Color::DarkGray).bg(bg_color)
+        Style::default().fg(theme.text_secondary).bg(bg_color)
     } else {
         Style::default().fg(fg_color).bg(bg_color)
     };
@@ -172,9 +181,9 @@ fn render_filter_field(
     let value_block = Block::default()
         .borders(Borders::ALL)
         .border_style(if is_selected {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(theme.warning)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.border_inactive)
         });
 
     let value_para = Paragraph::new(display_value)

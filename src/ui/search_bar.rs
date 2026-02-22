@@ -10,12 +10,15 @@ use ratatui::{
 
 use crate::git::search::SearchType;
 use crate::state::SearchState;
+use crate::ui::theme::current_theme;
 
 /// Rend la barre de recherche quand la recherche est active.
 pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
     if !search_state.is_active {
         return;
     }
+
+    let theme = current_theme();
 
     // Construire le texte de recherche avec curseur
     let query_text = &search_state.query;
@@ -28,7 +31,7 @@ pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
     spans.push(Span::styled(
         "/",
         Style::default()
-            .fg(Color::Cyan)
+            .fg(theme.primary)
             .add_modifier(Modifier::BOLD),
     ));
 
@@ -42,8 +45,8 @@ pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
     spans.push(Span::styled(
         cursor_char.to_string(),
         Style::default()
-            .bg(Color::Cyan)
-            .fg(Color::Black)
+            .bg(theme.primary)
+            .fg(theme.background)
             .add_modifier(Modifier::BOLD),
     ));
 
@@ -61,7 +64,7 @@ pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
     spans.push(Span::raw("  "));
     spans.push(Span::styled(
         format!("[{}]", type_label),
-        Style::default().fg(Color::Yellow),
+        Style::default().fg(theme.warning),
     ));
 
     // Ajouter le compteur de résultats
@@ -69,13 +72,13 @@ pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
             format!("{}/{}", search_state.current_result + 1, search_state.results.len()),
-            Style::default().fg(Color::Green),
+            Style::default().fg(theme.success),
         ));
     } else if !query_text.is_empty() {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
             "0/0",
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme.error),
         ));
     }
 
@@ -85,9 +88,9 @@ pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.primary)),
         )
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.background));
 
     frame.render_widget(paragraph, area);
 }

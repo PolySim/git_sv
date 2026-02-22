@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::git::repo::StatusEntry;
 use crate::state::GraphFilter;
+use crate::ui::theme::current_theme;
 
 /// Rend la status bar en haut de l'écran.
 pub fn render(
@@ -19,6 +20,7 @@ pub fn render(
     filter: &GraphFilter,
     area: Rect,
 ) {
+    let theme = current_theme();
     let branch = current_branch.as_deref().unwrap_or("???");
 
     // Compter les fichiers modifiés/staged/untracked.
@@ -26,7 +28,7 @@ pub fn render(
 
     // Construire le statut.
     let status_text = if modified == 0 && staged == 0 && untracked == 0 {
-        Span::styled("✓ clean", Style::default().fg(Color::Green))
+        Span::styled("✓ clean", Style::default().fg(theme.success))
     } else {
         let mut parts = Vec::new();
         if staged > 0 {
@@ -40,14 +42,14 @@ pub fn render(
         }
         Span::styled(
             format!("✗ {}", parts.join(", ")),
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme.error),
         )
     };
 
     // Construire la ligne.
     let mut spans = vec![
-        Span::styled("git_sv  ", Style::default().fg(Color::Cyan)),
-        Span::styled(format!("{}  ", branch), Style::default().fg(Color::Yellow)),
+        Span::styled("git_sv  ", Style::default().fg(theme.primary)),
+        Span::styled(format!("{}  ", branch), Style::default().fg(theme.commit_hash)),
         status_text,
     ];
 
@@ -57,7 +59,7 @@ pub fn render(
         spans.push(Span::styled(
             "[FILTRÉ]",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(theme.warning)
                 .add_modifier(Modifier::BOLD),
         ));
     }
@@ -68,7 +70,7 @@ pub fn render(
         spans.push(Span::styled(
             msg.to_string(),
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme.secondary)
                 .add_modifier(Modifier::BOLD),
         ));
     }

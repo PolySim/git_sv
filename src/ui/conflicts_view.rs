@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::git::conflict::{ConflictResolution, ConflictResolutionMode, ConflictType};
 use crate::state::{ConflictPanelFocus, ConflictsState};
+use crate::ui::theme::current_theme;
 
 /// Rend la vue de résolution de conflits.
 pub fn render(
@@ -70,6 +71,7 @@ fn build_status_bar<'a>(
     repo_path: &'a str,
     flash_message: Option<&'a str>,
 ) -> Paragraph<'a> {
+    let theme = current_theme();
     let branch_str = current_branch.as_deref().unwrap_or("HEAD détachée");
     let repo_name = std::path::Path::new(repo_path)
         .file_name()
@@ -93,7 +95,7 @@ fn build_status_bar<'a>(
     Paragraph::new(status_text)
         .style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.primary)
                 .add_modifier(Modifier::BOLD),
         )
         .alignment(Alignment::Left)
@@ -101,6 +103,7 @@ fn build_status_bar<'a>(
 
 /// Construit la help bar avec indication du mode actif.
 fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
+    let theme = current_theme();
     let mode_indicator = match state.resolution_mode {
         ConflictResolutionMode::File => "Mode:Fichier",
         ConflictResolutionMode::Block => "Mode:Bloc",
@@ -124,34 +127,37 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
     };
 
     Paragraph::new(help_text)
-        .style(Style::default().fg(Color::Gray))
+        .style(Style::default().fg(theme.text_secondary))
         .alignment(Alignment::Center)
 }
 
 /// Rend le panneau de liste des fichiers.
 fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
+    let theme = current_theme();
     let is_focused = state.panel_focus == ConflictPanelFocus::FileList;
     let title_style = if is_focused {
         Style::default()
-            .fg(Color::Yellow)
+            .fg(theme.warning)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.text_normal)
+            .add_modifier(Modifier::BOLD)
     };
 
     let block = Block::default()
         .title(Span::styled("Fichiers en conflit", title_style))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if is_focused {
-            Color::Yellow
+            theme.warning
         } else {
-            Color::Reset
+            theme.border_inactive
         }));
 
     if state.all_files.is_empty() {
         let empty = Paragraph::new("Aucun fichier en conflit")
             .block(block)
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(theme.text_secondary));
         frame.render_widget(empty, area);
         return;
     }
@@ -187,15 +193,15 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             };
 
             let color = if file.is_resolved {
-                Color::Green
+                theme.success
             } else {
-                Color::Red
+                theme.error
             };
 
             let style = if idx == state.file_selected {
                 Style::default()
                     .fg(color)
-                    .bg(Color::DarkGray)
+                    .bg(theme.selection_bg)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(color)
@@ -217,15 +223,18 @@ fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     use crate::git::conflict::ConflictResolutionMode;
 
+    let theme = current_theme();
     let is_focused = state.panel_focus == ConflictPanelFocus::OursPanel;
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
     let title_style = if is_focused {
         Style::default()
-            .fg(Color::Yellow)
+            .fg(theme.warning)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.text_normal)
+            .add_modifier(Modifier::BOLD)
     };
 
     // En mode Fichier ou Ligne, ajouter une indication dans le titre
@@ -239,14 +248,14 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
     let border_color = if is_focused {
         if is_file_mode {
-            Color::Green
+            theme.success
         } else if is_line_mode {
-            Color::Cyan // Cyan pour le mode Ligne
+            theme.info
         } else {
-            Color::Yellow
+            theme.warning
         }
     } else {
-        Color::Reset
+        theme.border_inactive
     };
 
     let block = Block::default()
@@ -257,7 +266,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
             .block(block)
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(theme.text_secondary));
         frame.render_widget(empty, area);
         return;
     };
@@ -265,7 +274,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     if current_file.conflicts.is_empty() {
         let empty = Paragraph::new("Aucun conflit")
             .block(block)
-            .style(Style::default().fg(Color::Green));
+            .style(Style::default().fg(theme.success));
         frame.render_widget(empty, area);
         return;
     }
@@ -285,7 +294,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         if idx > 0 {
             lines.push(Line::from(vec![Span::styled(
                 "─".repeat(area.width as usize - 2),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             )]));
         }
 
@@ -296,9 +305,9 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 section_title,
                 Style::default()
                     .fg(if is_selected {
-                        Color::Yellow
+                        theme.warning
                     } else {
-                        Color::Gray
+                        theme.text_secondary
                     })
                     .add_modifier(Modifier::BOLD),
             )]));
@@ -308,7 +317,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         for line in &section.context_before {
             lines.push(Line::from(vec![Span::styled(
                 format!("  {}", line),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             )]));
         }
 
@@ -332,16 +341,16 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 let style = if is_current_line {
                     Style::default()
                         .fg(if is_included {
-                            Color::Green
+                            theme.success
                         } else {
-                            Color::DarkGray
+                            theme.text_secondary
                         })
-                        .bg(Color::DarkGray)
+                        .bg(theme.selection_bg)
                         .add_modifier(Modifier::BOLD)
                 } else if is_included {
-                    Style::default().fg(Color::Green)
+                    Style::default().fg(theme.success)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(theme.text_secondary)
                 };
 
                 lines.push(Line::from(vec![Span::styled(
@@ -357,10 +366,10 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                     Some(ConflictResolution::Ours) | Some(ConflictResolution::Both)
                 ) {
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(theme.success)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Green)
+                Style::default().fg(theme.success)
             };
 
             for line in &section.ours {
@@ -375,7 +384,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         for line in &section.context_after {
             lines.push(Line::from(vec![Span::styled(
                 format!("  {}", line),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             )]));
         }
     }
@@ -392,15 +401,18 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     use crate::git::conflict::ConflictResolutionMode;
 
+    let theme = current_theme();
     let is_focused = state.panel_focus == ConflictPanelFocus::TheirsPanel;
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
     let title_style = if is_focused {
         Style::default()
-            .fg(Color::Yellow)
+            .fg(theme.warning)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.text_normal)
+            .add_modifier(Modifier::BOLD)
     };
 
     // En mode Fichier ou Ligne, ajouter une indication dans le titre
@@ -414,14 +426,14 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
     let border_color = if is_focused {
         if is_file_mode {
-            Color::Green
+            theme.success
         } else if is_line_mode {
-            Color::Cyan // Cyan pour le mode Ligne
+            theme.info
         } else {
-            Color::Yellow
+            theme.warning
         }
     } else {
-        Color::Reset
+        theme.border_inactive
     };
 
     let block = Block::default()
@@ -432,7 +444,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
             .block(block)
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(theme.text_secondary));
         frame.render_widget(empty, area);
         return;
     };
@@ -440,7 +452,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     if current_file.conflicts.is_empty() {
         let empty = Paragraph::new("Aucun conflit")
             .block(block)
-            .style(Style::default().fg(Color::Green));
+            .style(Style::default().fg(theme.success));
         frame.render_widget(empty, area);
         return;
     }
@@ -460,7 +472,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         if idx > 0 {
             lines.push(Line::from(vec![Span::styled(
                 "─".repeat(area.width as usize - 2),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             )]));
         }
 
@@ -471,9 +483,9 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 section_title,
                 Style::default()
                     .fg(if is_selected {
-                        Color::Yellow
+                        theme.warning
                     } else {
-                        Color::Gray
+                        theme.text_secondary
                     })
                     .add_modifier(Modifier::BOLD),
             )]));
@@ -483,7 +495,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         for line in &section.context_before {
             lines.push(Line::from(vec![Span::styled(
                 format!("  {}", line),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             )]));
         }
 
@@ -507,16 +519,16 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 let style = if is_current_line {
                     Style::default()
                         .fg(if is_included {
-                            Color::Blue
+                            theme.info
                         } else {
-                            Color::DarkGray
+                            theme.text_secondary
                         })
-                        .bg(Color::DarkGray)
+                        .bg(theme.selection_bg)
                         .add_modifier(Modifier::BOLD)
                 } else if is_included {
-                    Style::default().fg(Color::Blue)
+                    Style::default().fg(theme.info)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(theme.text_secondary)
                 };
 
                 lines.push(Line::from(vec![Span::styled(
@@ -532,10 +544,10 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                     Some(ConflictResolution::Theirs) | Some(ConflictResolution::Both)
                 ) {
                 Style::default()
-                    .fg(Color::Blue)
+                    .fg(theme.info)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Blue)
+                Style::default().fg(theme.info)
             };
 
             for line in &section.theirs {
@@ -550,7 +562,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         for line in &section.context_after {
             lines.push(Line::from(vec![Span::styled(
                 format!("  {}", line),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             )]));
         }
     }
@@ -565,12 +577,13 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
 /// Rend une ligne en mode édition avec le curseur visible.
 fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: &str) -> Line<'a> {
+    let theme = current_theme();
     let mut spans = Vec::new();
 
     // Numéro de ligne
     spans.push(Span::styled(
         line_num.to_string(),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.text_secondary),
     ));
     spans.push(Span::raw(" "));
 
@@ -581,7 +594,7 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
         spans.push(Span::raw(line.to_string()));
         spans.push(Span::styled(
             " ",
-            Style::default().bg(Color::White).fg(Color::Black),
+            Style::default().bg(theme.selection_fg).fg(theme.selection_bg),
         ));
     } else {
         // Texte avant le curseur
@@ -594,7 +607,7 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
         let cursor_char = chars[cursor_col].to_string();
         spans.push(Span::styled(
             cursor_char,
-            Style::default().bg(Color::White).fg(Color::Black),
+            Style::default().bg(theme.selection_fg).fg(theme.selection_bg),
         ));
 
         // Texte après le curseur
@@ -611,6 +624,7 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
 fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     use crate::git::conflict::{generate_resolved_content_with_source, LineSource};
 
+    let theme = current_theme();
     let is_focused = state.panel_focus == ConflictPanelFocus::ResultPanel;
     let title_text = if state.is_editing {
         "Résultat [ÉDITION]"
@@ -619,31 +633,33 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     };
     let title_style = if state.is_editing {
         Style::default()
-            .fg(Color::Magenta)
+            .fg(theme.secondary)
             .add_modifier(Modifier::BOLD)
     } else if is_focused {
         Style::default()
-            .fg(Color::Yellow)
+            .fg(theme.warning)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.text_normal)
+            .add_modifier(Modifier::BOLD)
     };
 
     let block = Block::default()
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if state.is_editing {
-            Color::Magenta
+            theme.secondary
         } else if is_focused {
-            Color::Yellow
+            theme.warning
         } else {
-            Color::Reset
+            theme.border_inactive
         }));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
         let empty = Paragraph::new("Sélectionnez un fichier")
             .block(block)
-            .style(Style::default().fg(Color::Gray));
+            .style(Style::default().fg(theme.text_secondary));
         frame.render_widget(empty, area);
         return;
     };
@@ -664,7 +680,7 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
                 } else {
                     // Ligne normale avec numéro
                     Line::from(vec![
-                        Span::styled(line_num, Style::default().fg(Color::DarkGray)),
+                        Span::styled(line_num, Style::default().fg(theme.text_secondary)),
                         Span::raw(" "),
                         Span::raw(content),
                     ])
@@ -680,11 +696,11 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             .enumerate()
             .map(|(_idx, rline)| {
                 let style = match rline.source {
-                    LineSource::Context => Style::default(),
-                    LineSource::Ours => Style::default().bg(Color::Indexed(22)), // Vert foncé pour compatibilité
-                    LineSource::Theirs => Style::default().bg(Color::Indexed(17)), // Bleu foncé pour compatibilité
+                    LineSource::Context => Style::default().fg(theme.text_normal),
+                    LineSource::Ours => Style::default().bg(Color::Indexed(22)).fg(theme.text_normal), // Vert foncé pour compatibilité
+                    LineSource::Theirs => Style::default().bg(Color::Indexed(17)).fg(theme.text_normal), // Bleu foncé pour compatibilité
                     LineSource::ConflictMarker => Style::default()
-                        .fg(Color::Yellow)
+                        .fg(theme.warning)
                         .add_modifier(Modifier::BOLD),
                 };
                 Line::from(vec![Span::styled(rline.content, style)])
@@ -704,19 +720,20 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 pub fn render_nav_indicator(has_conflicts: bool) -> Line<'static> {
     use ratatui::text::Span;
 
+    let theme = current_theme();
     let mut spans = vec![
-        Span::styled("1:Graph", Style::default().fg(Color::DarkGray)),
-        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
-        Span::styled("2:Staging", Style::default().fg(Color::DarkGray)),
-        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
-        Span::styled("3:Branches", Style::default().fg(Color::DarkGray)),
+        Span::styled("1:Graph", Style::default().fg(theme.text_secondary)),
+        Span::styled(" | ", Style::default().fg(theme.text_secondary)),
+        Span::styled("2:Staging", Style::default().fg(theme.text_secondary)),
+        Span::styled(" | ", Style::default().fg(theme.text_secondary)),
+        Span::styled("3:Branches", Style::default().fg(theme.text_secondary)),
     ];
 
     if has_conflicts {
-        spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(" | ", Style::default().fg(theme.text_secondary)));
         spans.push(Span::styled(
             "4:Conflits",
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.error).add_modifier(Modifier::BOLD),
         ));
     }
 
@@ -725,6 +742,7 @@ pub fn render_nav_indicator(has_conflicts: bool) -> Line<'static> {
 
 /// Rend l'overlay d'aide pour la vue conflits.
 pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
+    let theme = current_theme();
     let popup_area = centered_rect(70, 80, area);
 
     frame.render_widget(Clear, popup_area);
@@ -733,13 +751,13 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(vec![Span::styled(
             "Raccourcis de la vue Conflits",
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.primary)
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Navigation",
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.warning),
         )]),
         Line::from("  ↑/↓ ou j/k  - Naviguer (fichiers / sections / lignes selon le panneau)"),
         Line::from("  Tab         - Panneau suivant (Fichiers → Ours → Theirs → Résultat)"),
@@ -747,7 +765,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![Span::styled(
             "Résolution",
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.warning),
         )]),
         Line::from("  o           - Garder la version 'ours' (HEAD)"),
         Line::from("  t           - Garder la version 'theirs' (branche mergée)"),
@@ -756,7 +774,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![Span::styled(
             "Édition du résultat",
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.warning),
         )]),
         Line::from("  i ou e      - Entrer en mode édition (panneau Résultat)"),
         Line::from("  Esc         - Quitter le mode édition"),
@@ -768,7 +786,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![Span::styled(
             "Actions globales",
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.warning),
         )]),
         Line::from("  F/B/L       - Mode Fichier/Bloc/Ligne (touche directe)"),
         Line::from("  V           - Finaliser le merge (créer le commit)"),
@@ -777,7 +795,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![Span::styled(
             "Appuyez sur ? pour fermer cette aide",
-            Style::default().fg(Color::Gray),
+            Style::default().fg(theme.text_secondary),
         )]),
     ];
 
@@ -787,7 +805,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
                 .title("Aide - Résolution de conflits")
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.primary)),
         )
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });

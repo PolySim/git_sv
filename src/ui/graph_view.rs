@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::git::graph::{EdgeType, GraphRow};
-use crate::ui::theme;
+use crate::ui::theme::{branch_color, current_theme};
 use crate::utils::format_relative_time;
 
 /// Espacement entre les colonnes (en caractères).
@@ -23,6 +23,8 @@ pub fn render(
     state: &mut ListState,
     is_focused: bool,
 ) {
+    let theme = current_theme();
+    
     // Construire les lignes du graphe avec les edges de connexion.
     let items = build_graph_items(graph, selected_index);
 
@@ -30,9 +32,9 @@ pub fn render(
     let title = format!(" Graphe — {} ", branch_name);
 
     let border_style = if is_focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.border_active)
     } else {
-        Style::default()
+        Style::default().fg(theme.border_inactive)
     };
 
     let list = List::new(items)
@@ -44,7 +46,8 @@ pub fn render(
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.selection_bg)
+                .fg(theme.selection_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -52,7 +55,7 @@ pub fn render(
 }
 
 /// Construit les items de la liste avec le graphe enrichi.
-fn build_graph_items(graph: &[GraphRow], selected_index: usize) -> Vec<ListItem> {
+fn build_graph_items(graph: &[GraphRow], selected_index: usize) -> Vec<ListItem<'static>> {
     let mut items = Vec::with_capacity(graph.len() * 2);
 
     for (i, row) in graph.iter().enumerate() {
@@ -74,6 +77,7 @@ fn build_graph_items(graph: &[GraphRow], selected_index: usize) -> Vec<ListItem>
 
 /// Construit la ligne d'un commit avec le graphe.
 fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
+    let theme = current_theme();
     let node = &row.node;
     let commit_color = get_branch_color(node.color_index);
 
@@ -140,7 +144,7 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
     let short_hash = if hash.len() >= 7 { &hash[..7] } else { &hash };
     spans.push(Span::styled(
         format!("{} ", short_hash),
-        Style::default().fg(Color::Yellow),
+        Style::default().fg(theme.commit_hash),
     ));
 
     // Labels de branches si présents.
@@ -160,10 +164,11 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
     // Message du commit.
     let message_style = if is_selected {
         Style::default()
-            .bg(Color::DarkGray)
+            .bg(theme.selection_bg)
+            .fg(theme.selection_fg)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default()
+        Style::default().fg(theme.text_normal)
     };
     spans.push(Span::styled(node.message.clone(), message_style));
 
@@ -171,7 +176,7 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
     let relative_date = format_relative_time(node.timestamp);
     spans.push(Span::styled(
         format!(" — {} ({})", node.author, relative_date),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.text_secondary),
     ));
 
     Line::from(spans)
@@ -271,7 +276,7 @@ fn find_horizontal_color(
 
 /// Retourne la couleur pour un index de branche.
 fn get_branch_color(index: usize) -> Color {
-    theme::branch_color(index)
+    branch_color(index)
 }
 
 #[cfg(test)]
@@ -319,7 +324,8 @@ mod tests {
     #[test]
     fn test_build_graph_items() {
         let graph = create_test_graph();
-        let items = build_graph_items(&graph, 0);
+        let theme = current_theme();
+        let items = build_graph_items(&graph, 0, theme);
 
         // Chaque GraphRow génère au moins 1 item
         assert!(!items.is_empty());
@@ -329,7 +335,8 @@ mod tests {
     #[test]
     fn test_build_commit_line() {
         let row = &create_test_graph()[0];
-        let line = build_commit_line(row, false);
+        let theme = current_theme();
+        let line = build_commit_line(row, false, theme);
 
         // La ligne devrait contenir le message
         let line_text: String = line.spans.iter()
@@ -341,7 +348,8 @@ mod tests {
     #[test]
     fn test_build_commit_line_selected() {
         let row = &create_test_graph()[0];
-        let line = build_commit_line(row, true);
+        let theme = current_theme();
+        let line = build_commit_line(row, true, theme);
 
         // La ligne devrait avoir des spans
         assert!(!line.spans.is_empty());
@@ -359,7 +367,7 @@ mod tests {
         state.select(Some(0));
 
         terminal.draw(|frame| {
-            let area = frame.size();
+            let area = frame.area();
             render(
                 frame,
                 &graph,
@@ -388,7 +396,7 @@ mod tests {
         state.select(Some(2)); // Sélectionner le deuxième commit
 
         terminal.draw(|frame| {
-            let area = frame.size();
+            let area = frame.area();
             render(
                 frame,
                 &graph,

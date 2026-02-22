@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
@@ -8,9 +8,12 @@ use ratatui::{
 
 use crate::git::branch::BranchInfo;
 use crate::ui::common::centered_rect;
+use crate::ui::theme::current_theme;
 
 /// Rend le panneau de branches en overlay.
 pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize, area: Rect) {
+    let theme = current_theme();
+    
     // Créer une zone centrale pour le popup (60% largeur, 50% hauteur).
     let popup_area = centered_rect(60, 50, area);
 
@@ -33,11 +36,12 @@ pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize
                 .title(title)
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.border_active)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.selection_bg)
+                .fg(theme.selection_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -52,20 +56,23 @@ pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize
 }
 
 /// Construit une ligne pour une branche.
-fn build_branch_line(branch: &BranchInfo, is_selected: bool) -> ListItem {
+fn build_branch_line(branch: &BranchInfo, is_selected: bool) -> ListItem<'static> {
+    let theme = current_theme();
     let prefix = if branch.is_head { "* " } else { "  " };
     let name = &branch.name;
 
     let style = if branch.is_head {
         Style::default()
-            .fg(Color::Green)
+            .fg(theme.success)
             .add_modifier(Modifier::BOLD)
     } else if is_selected {
         Style::default()
-            .bg(Color::DarkGray)
+            .bg(theme.selection_bg)
+            .fg(theme.selection_fg)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default()
+            .fg(theme.text_normal)
     };
 
     let line = Line::from(vec![
@@ -78,6 +85,7 @@ fn build_branch_line(branch: &BranchInfo, is_selected: bool) -> ListItem {
 
 /// Rend la barre d'aide en bas du panneau.
 fn render_help_bar(frame: &mut Frame, area: Rect) {
+    let theme = current_theme();
     // Créer une zone pour la barre d'aide (dernière ligne du popup).
     let help_area = Rect {
         x: area.x + 1,
@@ -87,7 +95,7 @@ fn render_help_bar(frame: &mut Frame, area: Rect) {
     };
 
     let help_text = "Enter:checkout  n:new  d:delete  Esc/b:close";
-    let paragraph = Paragraph::new(help_text).style(Style::default().fg(Color::DarkGray));
+    let paragraph = Paragraph::new(help_text).style(Style::default().fg(theme.text_secondary));
 
     frame.render_widget(paragraph, help_area);
 }

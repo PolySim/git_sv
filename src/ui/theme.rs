@@ -57,7 +57,7 @@ impl Theme {
             info: Color::Blue,
             commit_hash: Color::Yellow,
             text_normal: Color::White,
-            text_secondary: Color::DarkGray,
+            text_secondary: Color::Gray,
             background: Color::Black,
         }
     }
