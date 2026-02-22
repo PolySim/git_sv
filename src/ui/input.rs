@@ -526,12 +526,29 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('B') => Some(AppAction::ConflictSetModeBlock),
         KeyCode::Char('L') => Some(AppAction::ConflictSetModeLine),
 
+        // Espace: toggle la sélection en mode Block ou Ligne
+        KeyCode::Char(' ') => match panel_focus {
+            Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
+                match resolution_mode {
+                    ConflictResolutionMode::Block => Some(AppAction::ConflictEnterResolve),
+                    ConflictResolutionMode::Line => Some(AppAction::ConflictToggleLine),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+
         // Enter: validation contextuelle selon le panneau et le mode
         KeyCode::Enter => match panel_focus {
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
-                // En mode Ligne, Enter toggle la ligne courante
-                // En mode Fichier/Bloc, Enter résout selon le panneau actif
-                Some(AppAction::ConflictEnterResolve)
+                match resolution_mode {
+                    // En mode Fichier, Enter résout selon le panneau actif
+                    ConflictResolutionMode::File => Some(AppAction::ConflictEnterResolve),
+                    // En mode Block/Ligne, Enter valide le fichier (écrit sur disque)
+                    ConflictResolutionMode::Block | ConflictResolutionMode::Line => {
+                        Some(AppAction::ConflictResolveFile)
+                    }
+                }
             }
             _ => None,
         },

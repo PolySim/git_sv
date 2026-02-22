@@ -116,13 +116,25 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
         "Esc:Annuler  Ctrl+S:Sauvegarder  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr".to_string()
     } else if state.panel_focus == ConflictPanelFocus::FileList {
         format!(
-            "o/←:Ours  t/→:Theirs  Tab:Panneau  ↑↓:Nav  V:Finaliser  q:Quitter  A:Avorter | {}",
+            "o/←:Ours  t/→:Theirs  Tab:Panneau  ↑↓:Nav  r:Résoudre  V:Finaliser  q:Quitter  A:Avorter | {}",
             mode_indicator
         )
     } else {
+        // Aide contextuelle selon le mode de résolution
+        let action_help = match state.resolution_mode {
+            ConflictResolutionMode::File => {
+                "Enter:Choisir  o:Ours  t:Theirs  Tab:Panneau  ↑↓:Nav"
+            }
+            ConflictResolutionMode::Block => {
+                "Espace:Choisir  Enter:Valider  b:Les deux  Tab:Panneau  ↑↓:Nav"
+            }
+            ConflictResolutionMode::Line => {
+                "Espace:Choisir ligne  Enter:Valider  Tab:Panneau  ↑↓:Nav"
+            }
+        };
         format!(
-            "Enter:Valider  Tab:Panneau  ↑↓:Nav  F/B/L:Mode  b:Les deux  i:Éditer  V:Finaliser  q:Quitter  A:Avorter | {}",
-            mode_indicator
+            "{}  F/B/L:Mode  i:Éditer  V:Finaliser  q:Quitter  A:Avorter | {}",
+            action_help, mode_indicator
         )
     };
 
@@ -769,8 +781,10 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         )]),
         Line::from("  o           - Garder la version 'ours' (HEAD)"),
         Line::from("  t           - Garder la version 'theirs' (branche mergée)"),
-        Line::from("  b           - Garder les deux versions"),
-        Line::from("  Enter       - Valider la résolution du fichier courant"),
+        Line::from("  b           - Garder les deux versions (mode Bloc uniquement)"),
+        Line::from("  Espace      - Choisir/déchoisir un bloc ou une ligne"),
+        Line::from("  Enter       - Valider et sauvegarder le fichier courant"),
+        Line::from("  r           - Marquer comme résolu (depuis la liste de fichiers)"),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Édition du résultat",
