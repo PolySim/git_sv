@@ -272,6 +272,7 @@ impl ActionDispatcher {
             AppAction::ConflictResultScrollDown => self.conflict.handle(&mut ctx, ConflictAction::ResultScrollDown),
             AppAction::ConflictStartEditing => self.conflict.handle(&mut ctx, ConflictAction::StartEditing),
             AppAction::ConflictStopEditing => self.conflict.handle(&mut ctx, ConflictAction::StopEditing),
+            AppAction::ConflictConfirmEdit => self.conflict.handle(&mut ctx, ConflictAction::ConfirmEdit),
             AppAction::ConflictEditInsertChar(c) => self.conflict.handle(&mut ctx, ConflictAction::EditInsertChar(c)),
             AppAction::ConflictEditBackspace => self.conflict.handle(&mut ctx, ConflictAction::EditBackspace),
             AppAction::ConflictEditDelete => self.conflict.handle(&mut ctx, ConflictAction::EditDelete),

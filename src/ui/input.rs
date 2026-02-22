@@ -432,6 +432,13 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     if is_editing {
         return match key.code {
             KeyCode::Esc => Some(AppAction::ConflictStopEditing),
+            // Sauvegarder et quitter l'édition
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(AppAction::ConflictConfirmEdit)
+            }
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(AppAction::ConflictConfirmEdit)
+            }
             KeyCode::Char(c) => Some(AppAction::ConflictEditInsertChar(c)),
             KeyCode::Backspace => Some(AppAction::ConflictEditBackspace),
             KeyCode::Delete => Some(AppAction::ConflictEditDelete),

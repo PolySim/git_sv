@@ -272,6 +272,8 @@ pub enum AppAction {
     ConflictStartEditing,
     /// Conflit: Stop editing (legacy - utiliser Conflict(CancelEdit))
     ConflictStopEditing,
+    /// Conflit: Confirm edit (legacy - utiliser Conflict(ConfirmEdit))
+    ConflictConfirmEdit,
     /// Conflit: Edit insert char (legacy - utiliser Conflict(EditInsertChar(c)))
     ConflictEditInsertChar(char),
     /// Conflit: Edit backspace (legacy - utiliser Conflict(EditBackspace))

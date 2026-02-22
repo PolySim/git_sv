@@ -113,7 +113,7 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
     // Aide contextuelle selon le panneau actif et le mode
     let help_text = if state.is_editing {
         // Mode édition : raccourcis d'édition
-        "Esc:Quitter l'édition  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr".to_string()
+        "Esc:Annuler  Ctrl+S:Sauvegarder  ↑↓←→:Curseur  Enter:Nouvelle ligne  Backspace:Suppr".to_string()
     } else if state.panel_focus == ConflictPanelFocus::FileList {
         format!(
             "o/←:Ours  t/→:Theirs  Tab:Panneau  ↑↓:Nav  V:Finaliser  q:Quitter  A:Avorter | {}",
