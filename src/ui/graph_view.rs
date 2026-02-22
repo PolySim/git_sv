@@ -324,8 +324,7 @@ mod tests {
     #[test]
     fn test_build_graph_items() {
         let graph = create_test_graph();
-        let theme = current_theme();
-        let items = build_graph_items(&graph, 0, theme);
+        let items = build_graph_items(&graph, 0);
 
         // Chaque GraphRow génère au moins 1 item
         assert!(!items.is_empty());
@@ -335,8 +334,7 @@ mod tests {
     #[test]
     fn test_build_commit_line() {
         let row = &create_test_graph()[0];
-        let theme = current_theme();
-        let line = build_commit_line(row, false, theme);
+        let line = build_commit_line(row, false);
 
         // La ligne devrait contenir le message
         let line_text: String = line.spans.iter()
@@ -348,8 +346,7 @@ mod tests {
     #[test]
     fn test_build_commit_line_selected() {
         let row = &create_test_graph()[0];
-        let theme = current_theme();
-        let line = build_commit_line(row, true, theme);
+        let line = build_commit_line(row, true);
 
         // La ligne devrait avoir des spans
         assert!(!line.spans.is_empty());

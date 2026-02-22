@@ -550,6 +550,11 @@ fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
         return None;
     }
 
+    // Ignorer les événements de souris si le popup de filtre est ouvert
+    if state.filter_popup.is_open {
+        return None;
+    }
+
     match mouse.kind {
         MouseEventKind::Down(_) => {
             // Pour l'instant, le clic sélectionne simplement (sera amélioré avec hit-testing)

@@ -70,6 +70,12 @@ fn handle_apply(state: &mut AppState) -> Result<()> {
     // Fermer le popup
     state.filter_popup.close();
 
+    // Réinitialiser l'état de recherche (les résultats sont périmés après filtrage)
+    state.search_state.results.clear();
+    state.search_state.current_result = 0;
+    state.search_state.is_active = false;
+    state.search_state.query.clear();
+
     // Rafraîchir le graph avec les nouveaux filtres
     state.dirty = true;
 
@@ -109,6 +115,12 @@ fn handle_clear(state: &mut AppState) -> Result<()> {
 
     // Fermer le popup
     state.filter_popup.close();
+
+    // Réinitialiser l'état de recherche (les résultats sont périmés)
+    state.search_state.results.clear();
+    state.search_state.current_result = 0;
+    state.search_state.is_active = false;
+    state.search_state.query.clear();
 
     // Rafraîchir le graph sans filtres
     state.dirty = true;

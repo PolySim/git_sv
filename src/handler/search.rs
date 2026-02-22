@@ -115,8 +115,14 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
     state.search_state.current_result = 0;
 
     if !state.search_state.results.is_empty() {
-        // Naviguer vers le premier résultat
-        handle_next_result(state)?;
+        // Naviguer directement vers le premier résultat
+        if let Some(&index) = state.search_state.results.get(0) {
+            if index < state.graph.len() {
+                state.selected_index = index;
+                state.graph_state.select(Some(index * 2));
+                state.sync_legacy_selection();
+            }
+        }
         state.set_flash_message(format!("{} résultats trouvés", state.search_state.results.len()));
     } else {
         state.set_flash_message("Aucun résultat".to_string());

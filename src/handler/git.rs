@@ -178,7 +178,13 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    let selected_file = &state.commit_files[state.file_selected_index];
+    let selected_file = match state.commit_files.get(state.file_selected_index) {
+        Some(f) => f,
+        None => {
+            state.set_flash_message("Index de fichier invalide".to_string());
+            return Ok(());
+        }
+    };
     let file_path = selected_file.path.clone();
 
     let commit_oid = if let Some(row) = state.graph.get(state.selected_index) {

@@ -111,6 +111,15 @@ impl EventHandler {
         // Synchroniser graph_view avec la nouvelle sélection
         self.state.graph_view.rows.select(self.state.selected_index);
 
+        // Synchroniser graph_state (ListState de ratatui) avec la sélection
+        // Le graphe contient 2 items par commit (ligne + connexion)
+        self.state.graph_state.select(Some(self.state.selected_index * 2));
+
+        // Clamper file_selected_index pour éviter les index hors limites
+        if self.state.file_selected_index >= self.state.commit_files.len() {
+            self.state.file_selected_index = self.state.commit_files.len().saturating_sub(1);
+        }
+
         // Mise à jour des fichiers du commit sélectionné
         if let Some(row) = self.state.graph.get(self.state.selected_index) {
             self.state.commit_files = self.state.repo.commit_diff(row.node.oid).unwrap_or_default();

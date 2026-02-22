@@ -266,7 +266,8 @@ impl AppState {
     /// Met à jour la sélection du graph à partir de graph_view.
     pub fn sync_graph_selection(&mut self) {
         self.selected_index = self.graph_view.rows.selected_index();
-        self.graph_state.select(Some(self.selected_index));
+        // Le graphe contient 2 items par commit (ligne + connexion)
+        self.graph_state.select(Some(self.selected_index * 2));
     }
 
     /// Met à jour graph_view à partir de la sélection legacy.
