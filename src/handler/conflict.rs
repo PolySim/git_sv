@@ -117,16 +117,38 @@ fn handle_switch_panel(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, resolve_file_with_strategy};
+    use crate::git::conflict::{ConflictResolution, ConflictType, resolve_file_with_strategy, resolve_special_file};
 
-    let file_path = state.conflicts_state.as_ref()
+    let (file_path, is_special) = state.conflicts_state.as_ref()
         .and_then(|c| c.all_files.get(c.file_selected))
-        .map(|f| f.path.clone());
+        .map(|f| (f.path.clone(), matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem))))
+        .unzip();
 
-    if let (Some(path), Some(file_index)) = (file_path, state.conflicts_state.as_ref().map(|c| c.file_selected)) {
-        if let Err(e) = resolve_file_with_strategy(&state.repo.repo, &path, ConflictResolution::Ours) {
-            state.set_flash_message(format!("Erreur: {}", e));
+    let file_path = match file_path {
+        Some(p) => p,
+        None => return Ok(()),
+    };
+    let is_special = is_special.unwrap_or(false);
+    let file_index = state.conflicts_state.as_ref().map(|c| c.file_selected).unwrap_or(0);
+
+    let result = if is_special {
+        // Pour les conflits de suppression, utiliser resolve_special_file
+        if let Some(ref conflicts) = state.conflicts_state {
+            if let Some(file) = conflicts.all_files.get(file_index) {
+                resolve_special_file(&state.repo.repo, file, ConflictResolution::Ours)
+            } else {
+                Ok(false)
+            }
         } else {
+            Ok(false)
+        }
+    } else {
+        // Pour les conflits classiques, utiliser resolve_file_with_strategy
+        resolve_file_with_strategy(&state.repo.repo, &file_path, ConflictResolution::Ours).map(|_| false)
+    };
+
+    match result {
+        Ok(_) => {
             // Mettre à jour l'état en mémoire
             if let Some(ref mut conflicts) = state.conflicts_state {
                 if let Some(file) = conflicts.all_files.get_mut(file_index) {
@@ -139,23 +161,49 @@ fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
                 advance_to_next_unresolved(conflicts);
             }
             state.mark_dirty();
-            state.set_flash_message(format!("Accepté 'ours' pour {}", path));
+            state.set_flash_message(format!("Accepté 'ours' pour {}", file_path));
+        }
+        Err(e) => {
+            state.set_flash_message(format!("Erreur: {}", e));
         }
     }
+
     Ok(())
 }
 
 fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{ConflictResolution, resolve_file_with_strategy};
+    use crate::git::conflict::{ConflictResolution, ConflictType, resolve_file_with_strategy, resolve_special_file};
 
-    let file_path = state.conflicts_state.as_ref()
+    let (file_path, is_special) = state.conflicts_state.as_ref()
         .and_then(|c| c.all_files.get(c.file_selected))
-        .map(|f| f.path.clone());
+        .map(|f| (f.path.clone(), matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem))))
+        .unzip();
 
-    if let (Some(path), Some(file_index)) = (file_path, state.conflicts_state.as_ref().map(|c| c.file_selected)) {
-        if let Err(e) = resolve_file_with_strategy(&state.repo.repo, &path, ConflictResolution::Theirs) {
-            state.set_flash_message(format!("Erreur: {}", e));
+    let file_path = match file_path {
+        Some(p) => p,
+        None => return Ok(()),
+    };
+    let is_special = is_special.unwrap_or(false);
+    let file_index = state.conflicts_state.as_ref().map(|c| c.file_selected).unwrap_or(0);
+
+    let result = if is_special {
+        // Pour les conflits de suppression, utiliser resolve_special_file
+        if let Some(ref conflicts) = state.conflicts_state {
+            if let Some(file) = conflicts.all_files.get(file_index) {
+                resolve_special_file(&state.repo.repo, file, ConflictResolution::Theirs)
+            } else {
+                Ok(false)
+            }
         } else {
+            Ok(false)
+        }
+    } else {
+        // Pour les conflits classiques, utiliser resolve_file_with_strategy
+        resolve_file_with_strategy(&state.repo.repo, &file_path, ConflictResolution::Theirs).map(|_| false)
+    };
+
+    match result {
+        Ok(_) => {
             // Mettre à jour l'état en mémoire
             if let Some(ref mut conflicts) = state.conflicts_state {
                 if let Some(file) = conflicts.all_files.get_mut(file_index) {
@@ -168,9 +216,13 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
                 advance_to_next_unresolved(conflicts);
             }
             state.mark_dirty();
-            state.set_flash_message(format!("Accepté 'theirs' pour {}", path));
+            state.set_flash_message(format!("Accepté 'theirs' pour {}", file_path));
+        }
+        Err(e) => {
+            state.set_flash_message(format!("Erreur: {}", e));
         }
     }
+
     Ok(())
 }
 
@@ -485,7 +537,20 @@ fn handle_set_mode_file(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_set_mode_block(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictType;
+
     if let Some(ref mut conflicts) = state.conflicts_state {
+        // Vérifier si le fichier courant est un conflit de suppression
+        let is_deletion_conflict = conflicts.all_files
+            .get(conflicts.file_selected)
+            .map(|f| matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)))
+            .unwrap_or(false);
+
+        if is_deletion_conflict {
+            state.set_flash_message("Mode bloc non disponible pour les conflits de suppression".to_string());
+            return Ok(());
+        }
+
         conflicts.resolution_mode = ConflictResolutionMode::Block;
         conflicts.line_selected = 0;
         conflicts.result_scroll = 0;
@@ -494,7 +559,20 @@ fn handle_set_mode_block(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
+    use crate::git::conflict::ConflictType;
+
     if let Some(ref mut conflicts) = state.conflicts_state {
+        // Vérifier si le fichier courant est un conflit de suppression
+        let is_deletion_conflict = conflicts.all_files
+            .get(conflicts.file_selected)
+            .map(|f| matches!(f.conflict_type, Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)))
+            .unwrap_or(false);
+
+        if is_deletion_conflict {
+            state.set_flash_message("Mode ligne non disponible pour les conflits de suppression".to_string());
+            return Ok(());
+        }
+
         conflicts.resolution_mode = ConflictResolutionMode::Line;
         conflicts.line_selected = 0;
         conflicts.result_scroll = 0;
