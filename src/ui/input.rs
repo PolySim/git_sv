@@ -61,10 +61,10 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return match key.code {
             KeyCode::Esc => Some(AppAction::Search(SearchAction::Close)),
             KeyCode::Enter => Some(AppAction::Search(SearchAction::Execute)),
-            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Down | KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(AppAction::Search(SearchAction::NextResult))
             }
-            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Up | KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(AppAction::Search(SearchAction::PreviousResult))
             }
             KeyCode::Tab => Some(AppAction::Search(SearchAction::ChangeType)),

@@ -35,8 +35,7 @@ fn handle_open(state: &mut AppState) -> Result<()> {
 
 fn handle_close(state: &mut AppState) -> Result<()> {
     state.search_state.is_active = false;
-    state.search_state.query.clear();
-    state.search_state.results.clear();
+    // Ne PAS effacer query et results pour permettre la navigation n/N après fermeture
     Ok(())
 }
 
