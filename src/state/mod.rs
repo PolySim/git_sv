@@ -8,7 +8,7 @@ pub mod cache;
 pub use action::AppAction;
 pub use view::*;
 pub use selection::ListSelection;
-pub use cache::DiffCache;
+pub use cache::{DiffCache, DiffCacheKey, LazyDiff, LazyBlame};
 
 use crate::git::branch::BranchInfo;
 use crate::git::diff::DiffFile;

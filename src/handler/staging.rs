@@ -3,6 +3,7 @@
 use crate::error::Result;
 use crate::state::{AppState, ViewMode, StagingFocus};
 use crate::state::action::StagingAction;
+use crate::state::cache::DiffCacheKey;
 use super::traits::{ActionHandler, HandlerContext};
 
 /// Handler pour les opérations de staging.
@@ -205,8 +206,8 @@ pub fn load_staging_diff(state: &mut AppState) {
     };
 
     if let Some(file) = selected_file {
-        // Pour le working directory, on utilise Oid::zero() comme clé spéciale
-        let cache_key = (git2::Oid::zero(), file.path.clone());
+        // Pour le working directory, on utilise DiffCacheKey::working_dir()
+        let cache_key = DiffCacheKey::working_dir(&file.path);
 
         // Essayer de récupérer du cache
         if let Some(cached_diff) = state.diff_cache.get(&cache_key) {
@@ -215,7 +216,7 @@ pub fn load_staging_diff(state: &mut AppState) {
             // Calculer et mettre en cache
             match crate::git::diff::working_dir_file_diff(&state.repo.repo, &file.path) {
                 Ok(diff) => {
-                    state.diff_cache.insert(cache_key, diff.clone());
+                    state.diff_cache.put(cache_key, diff.clone());
                     state.staging_state.current_diff = Some(diff);
                 }
                 Err(_) => {

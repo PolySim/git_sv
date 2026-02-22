@@ -519,6 +519,7 @@ dependencies = [
  "crossterm",
  "dirs",
  "git2",
+ "lru",
  "ratatui",
  "tempfile",
  "thiserror 2.0.18",

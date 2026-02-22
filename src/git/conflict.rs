@@ -1,4 +1,5 @@
 use git2::Repository;
+use std::collections::VecDeque;
 use std::io::Write;
 
 use crate::error::{GitSvError, Result};
@@ -144,7 +145,7 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
 
     let mut sections = Vec::new();
     let mut lines = content.lines().peekable();
-    let mut context_before: Vec<String> = Vec::new();
+    let mut context_before: VecDeque<String> = VecDeque::new();
 
     while let Some(line) = lines.next() {
         if line.starts_with("<<<<<<<") {
@@ -165,7 +166,7 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
                     let line_resolution = LineLevelResolution::new(ours.len(), theirs.len());
 
                     sections.push(ConflictSection {
-                        context_before: context_before.clone(),
+                        context_before: context_before.iter().cloned().collect(),
                         ours,
                         theirs,
                         context_after,
@@ -174,7 +175,7 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
                         line_level_resolution: Some(line_resolution),
                     });
 
-                    context_before = Vec::new();
+                    context_before.clear();
                     break;
                 } else if in_ours {
                     ours.push(line.to_string());
@@ -184,9 +185,9 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
             }
         } else {
             // Garder les lignes de contexte (max 3 avant le prochain conflit)
-            context_before.push(line.to_string());
+            context_before.push_back(line.to_string());
             if context_before.len() > 3 {
-                context_before.remove(0);
+                context_before.pop_front();
             }
         }
     }
