@@ -5,6 +5,7 @@ mod git;
 mod handler;
 mod state;
 mod terminal;
+mod test_utils;
 mod ui;
 mod utils;
 

@@ -290,3 +290,177 @@ fn handle_blame_navigation(state: &mut AppState, delta: i32) {
         blame_state.selected_line = new_idx;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::repo::GitRepo;
+    use crate::state::selection::ListSelection;
+    use crate::git::graph::{GraphRow, CommitNode};
+    use git2::Oid;
+
+    /// Helper pour créer un état de test avec un graph de taille donnée.
+    fn create_test_state_with_graph(size: usize) -> AppState {
+        // Créer un repo temporaire
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(temp_dir.path(), &opts).unwrap();
+
+        // Configurer git
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        // Créer un commit initial
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+
+        let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
+        let mut state = AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
+
+        // Créer un graph de test
+        let graph: Vec<GraphRow> = (0..size)
+            .map(|i| GraphRow {
+                node: CommitNode {
+                    oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::zero()),
+                    message: format!("Commit {} message", i),
+                    author: "Test Author".to_string(),
+                    timestamp: i as i64 * 1000,
+                    parents: vec![],
+                    refs: vec![],
+                    branch_name: None,
+                    column: 0,
+                    color_index: 0,
+                },
+                cells: vec![None],
+                connection: None,
+            })
+            .collect();
+
+        state.graph = graph;
+        state.graph_view.rows = ListSelection::with_items(state.graph.clone());
+        state.graph_view.rows.select(0);
+        state.selected_index = 0;
+        state.graph_state.select(Some(0));
+
+        state
+    }
+
+    #[test]
+    fn test_move_up_in_graph_view() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.rows.select(3); // Position initiale
+        state.selected_index = 3;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::MoveUp).unwrap();
+
+        assert_eq!(state.selected_index, 2);
+    }
+
+    #[test]
+    fn test_move_up_at_top_stays_at_top() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.rows.select(0);
+        state.selected_index = 0;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::MoveUp).unwrap();
+
+        assert_eq!(state.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_down_in_graph_view() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.rows.select(2);
+        state.selected_index = 2;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
+
+        assert_eq!(state.selected_index, 3);
+    }
+
+    #[test]
+    fn test_move_down_at_bottom_stays_at_bottom() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.rows.select(4); // Dernier élément
+        state.selected_index = 4;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
+
+        assert_eq!(state.selected_index, 4);
+    }
+
+    #[test]
+    fn test_page_up() {
+        let mut state = create_test_state_with_graph(20);
+        state.graph_view.rows.set_visible_height(5);
+        state.graph_view.rows.select(15);
+        state.selected_index = 15;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::PageUp).unwrap();
+
+        assert_eq!(state.selected_index, 5); // 15 - 10 = 5
+    }
+
+    #[test]
+    fn test_page_down() {
+        let mut state = create_test_state_with_graph(20);
+        state.graph_view.rows.set_visible_height(5);
+        state.graph_view.rows.select(5);
+        state.selected_index = 5;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::PageDown).unwrap();
+
+        assert_eq!(state.selected_index, 15); // 5 + 10 = 15
+    }
+
+    #[test]
+    fn test_go_top() {
+        let mut state = create_test_state_with_graph(20);
+        state.graph_view.rows.select(15);
+        state.selected_index = 15;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::GoTop).unwrap();
+
+        assert_eq!(state.selected_index, 0);
+    }
+
+    #[test]
+    fn test_go_bottom() {
+        let mut state = create_test_state_with_graph(20);
+        state.graph_view.rows.select(5);
+        state.selected_index = 5;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, NavigationAction::GoBottom).unwrap();
+
+        assert_eq!(state.selected_index, 19);
+    }
+}

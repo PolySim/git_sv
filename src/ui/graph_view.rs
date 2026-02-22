@@ -273,3 +273,145 @@ fn find_horizontal_color(
 fn get_branch_color(index: usize) -> Color {
     theme::branch_color(index)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::graph::{GraphRow, CommitNode, GraphCell, EdgeType};
+    use git2::Oid;
+    use ratatui::widgets::ListState;
+
+    fn create_test_graph() -> Vec<GraphRow> {
+        vec![
+            GraphRow {
+                node: CommitNode {
+                    oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
+                    message: "First commit".to_string(),
+                    author: "Alice".to_string(),
+                    timestamp: 1609459200, // 2021-01-01
+                    parents: vec![],
+                    refs: vec![],
+                    branch_name: None,
+                    column: 0,
+                    color_index: 0,
+                },
+                cells: vec![Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 0 })],
+                connection: None,
+            },
+            GraphRow {
+                node: CommitNode {
+                    oid: Oid::from_bytes(&[2; 20]).unwrap_or(Oid::zero()),
+                    message: "Second commit".to_string(),
+                    author: "Bob".to_string(),
+                    timestamp: 1609545600, // 2021-01-02
+                    parents: vec![Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero())],
+                    refs: vec![],
+                    branch_name: None,
+                    column: 0,
+                    color_index: 0,
+                },
+                cells: vec![Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 0 })],
+                connection: None,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_build_graph_items() {
+        let graph = create_test_graph();
+        let items = build_graph_items(&graph, 0);
+
+        // Chaque GraphRow génère au moins 1 item
+        assert!(!items.is_empty());
+        assert!(items.len() >= graph.len());
+    }
+
+    #[test]
+    fn test_build_commit_line() {
+        let row = &create_test_graph()[0];
+        let line = build_commit_line(row, false);
+
+        // La ligne devrait contenir le message
+        let line_text: String = line.spans.iter()
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert!(line_text.contains("First commit"));
+    }
+
+    #[test]
+    fn test_build_commit_line_selected() {
+        let row = &create_test_graph()[0];
+        let line = build_commit_line(row, true);
+
+        // La ligne devrait avoir des spans
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn test_graph_view_render_basic() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let graph = create_test_graph();
+        let backend = TestBackend::new(80, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = ListState::default();
+        state.select(Some(0));
+
+        terminal.draw(|frame| {
+            let area = frame.size();
+            render(
+                frame,
+                &graph,
+                &Some("main".to_string()),
+                0,
+                area,
+                &mut state,
+                true,
+            );
+        }).unwrap();
+
+        // Vérifier que quelque chose a été rendu
+        let buffer = terminal.backend().buffer();
+        assert!(buffer.content.len() > 0);
+    }
+
+    #[test]
+    fn test_graph_view_with_selection() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let graph = create_test_graph();
+        let backend = TestBackend::new(80, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = ListState::default();
+        state.select(Some(2)); // Sélectionner le deuxième commit
+
+        terminal.draw(|frame| {
+            let area = frame.size();
+            render(
+                frame,
+                &graph,
+                &Some("feature".to_string()),
+                1, // selected_index = 1
+                area,
+                &mut state,
+                false,
+            );
+        }).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert!(buffer.content.len() > 0);
+    }
+
+    #[test]
+    fn test_get_branch_color() {
+        let color0 = get_branch_color(0);
+        let color1 = get_branch_color(1);
+        let color2 = get_branch_color(2);
+
+        // Les couleurs devraient être différentes
+        assert_ne!(color0, color1);
+        assert_ne!(color1, color2);
+    }
+}

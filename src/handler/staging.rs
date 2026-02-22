@@ -228,3 +228,277 @@ pub fn load_staging_diff(state: &mut AppState) {
         state.staging_state.current_diff = None;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::repo::GitRepo;
+    use crate::git::repo::StatusEntry;
+    use tempfile::TempDir;
+
+    /// Setup un repo temporaire pour les tests.
+    fn setup_test_repo() -> (TempDir, GitRepo) {
+        let dir = TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(dir.path(), &opts).unwrap();
+
+        // Configurer git
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        // Commit initial
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+
+        let git_repo = GitRepo::open(dir.path().to_str().unwrap()).unwrap();
+        (dir, git_repo)
+    }
+
+    /// Crée un fichier dans le repo.
+    fn create_test_file(dir: &TempDir, path: &str, content: &str) {
+        let full_path = dir.path().join(path);
+        std::fs::write(&full_path, content).unwrap();
+    }
+
+    #[test]
+    fn test_switch_focus_in_staging() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::Unstaged;
+
+        let mut handler = StagingHandler;
+        
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, StagingAction::SwitchFocus).unwrap();
+        }
+        assert_eq!(state.staging_state.focus, StagingFocus::Staged);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, StagingAction::SwitchFocus).unwrap();
+        }
+        assert_eq!(state.staging_state.focus, StagingFocus::Diff);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, StagingAction::SwitchFocus).unwrap();
+        }
+        assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
+    }
+
+    #[test]
+    fn test_start_commit_message() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::StartCommitMessage).unwrap();
+
+        drop(ctx);
+        assert!(state.staging_state.is_committing);
+        assert_eq!(state.staging_state.focus, StagingFocus::CommitMessage);
+    }
+
+    #[test]
+    fn test_cancel_commit() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.is_committing = true;
+        state.staging_state.commit_message = "Test message".to_string();
+        state.staging_state.focus = StagingFocus::CommitMessage;
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::CancelCommit).unwrap();
+
+        drop(ctx);
+        assert!(!state.staging_state.is_committing);
+        assert!(state.staging_state.commit_message.is_empty());
+        assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
+    }
+
+    #[test]
+    fn test_confirm_commit_with_empty_message_does_nothing() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.is_committing = true;
+        state.staging_state.commit_message = "".to_string();
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::ConfirmCommit).unwrap();
+
+        drop(ctx);
+        // L'état ne devrait pas changer car le message est vide
+        assert!(state.staging_state.is_committing);
+    }
+
+    #[test]
+    fn test_stage_all_moves_files_to_staged() {
+        let (dir, repo) = setup_test_repo();
+
+        // Créer des fichiers non stagés
+        create_test_file(&dir, "file1.txt", "content1");
+        create_test_file(&dir, "file2.txt", "content2");
+
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+
+        // Rafraîchir pour voir les fichiers non stagés
+        refresh_staging(&mut state).unwrap();
+        let unstaged_count = state.staging_state.unstaged_files().len();
+        assert!(unstaged_count >= 2, "Devrait avoir des fichiers non stagés");
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::StageAll).unwrap();
+
+        refresh_staging(&mut state).unwrap();
+
+        // Tous les fichiers devraient être stagés
+        assert_eq!(state.staging_state.unstaged_files().len(), 0);
+        assert!(state.staging_state.staged_files().len() >= 2);
+    }
+
+    #[test]
+    fn test_unstage_all_moves_files_to_unstaged() {
+        let (dir, repo) = setup_test_repo();
+
+        // Créer et stager des fichiers
+        create_test_file(&dir, "file1.txt", "content1");
+        let repo_ref = &repo.repo;
+        let mut index = repo_ref.index().unwrap();
+        index.add_path(std::path::Path::new("file1.txt")).unwrap();
+        index.write().unwrap();
+
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+
+        refresh_staging(&mut state).unwrap();
+        assert!(!state.staging_state.staged_files().is_empty(), "Devrait avoir des fichiers stagés");
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::UnstageAll).unwrap();
+
+        refresh_staging(&mut state).unwrap();
+
+        // Les fichiers devraient être non stagés
+        assert_eq!(state.staging_state.staged_files().len(), 0);
+        assert!(!state.staging_state.unstaged_files().is_empty());
+    }
+
+    #[test]
+    fn test_stage_file_moves_single_file() {
+        let (dir, repo) = setup_test_repo();
+
+        // Créer des fichiers non stagés
+        create_test_file(&dir, "file1.txt", "content1");
+        create_test_file(&dir, "file2.txt", "content2");
+
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+
+        refresh_staging(&mut state).unwrap();
+        let initial_unstaged = state.staging_state.unstaged_files().len();
+        assert!(initial_unstaged >= 2);
+
+        // Sélectionner le premier fichier
+        state.staging_state.set_unstaged_selected(0);
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::StageFile).unwrap();
+
+        refresh_staging(&mut state).unwrap();
+
+        // Un fichier de moins en unstaged
+        assert_eq!(state.staging_state.unstaged_files().len(), initial_unstaged - 1);
+        assert_eq!(state.staging_state.staged_files().len(), 1);
+    }
+
+    #[test]
+    fn test_unstage_file_moves_single_file() {
+        let (dir, repo) = setup_test_repo();
+
+        // Créer et stager un fichier
+        create_test_file(&dir, "file1.txt", "content1");
+        let repo_ref = &repo.repo;
+        let mut index = repo_ref.index().unwrap();
+        index.add_path(std::path::Path::new("file1.txt")).unwrap();
+        index.write().unwrap();
+
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+
+        refresh_staging(&mut state).unwrap();
+        assert_eq!(state.staging_state.staged_files().len(), 1);
+
+        // Sélectionner le premier fichier stagé
+        state.staging_state.set_staged_selected(0);
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::UnstageFile).unwrap();
+
+        refresh_staging(&mut state).unwrap();
+
+        // Le fichier devrait être non stagé
+        assert_eq!(state.staging_state.staged_files().len(), 0);
+        assert_eq!(state.staging_state.unstaged_files().len(), 1);
+    }
+
+    #[test]
+    fn test_confirm_commit_creates_commit() {
+        let (dir, repo) = setup_test_repo();
+
+        // Créer et stager un fichier
+        create_test_file(&dir, "new_file.txt", "new content");
+        let repo_ref = &repo.repo;
+        let mut index = repo_ref.index().unwrap();
+        index.add_path(std::path::Path::new("new_file.txt")).unwrap();
+        index.write().unwrap();
+
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.is_committing = true;
+        state.staging_state.commit_message = "Test commit".to_string();
+
+        // Rafraîchir pour voir les fichiers stagés
+        refresh_staging(&mut state).unwrap();
+        assert!(!state.staging_state.staged_files().is_empty());
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler.handle(&mut ctx, StagingAction::ConfirmCommit).unwrap();
+
+        // Vérifier que le commit a été créé
+        let repo_ref = &state.repo.repo;
+        let head = repo_ref.head().unwrap();
+        let commit = head.peel_to_commit().unwrap();
+        assert!(commit.message().unwrap().contains("Test commit"));
+
+        // L'état devrait être réinitialisé
+        assert!(!state.staging_state.is_committing);
+        assert!(state.staging_state.commit_message.is_empty());
+    }
+}

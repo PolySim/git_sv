@@ -22,6 +22,9 @@ pub mod staging_view;
 pub mod status_bar;
 pub mod theme;
 
+#[cfg(test)]
+mod tests;
+
 use crate::state::{AppState, FocusPanel, ViewMode};
 use ratatui::Frame;
 
