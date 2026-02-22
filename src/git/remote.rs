@@ -271,7 +271,7 @@ fn resolve_remote_url(url: &str) -> String {
 
 /// Push la branche courante vers le remote.
 /// Retourne un message décrivant l'action effectuée.
-/// Utilise le remote configuré directement pour supporter les alias SSH.
+/// Utilise le remote configuré avec résolution SSH des alias.
 pub fn push_current_branch(repo: &Repository) -> Result<String> {
     // Récupérer la branche courante
     let head = repo.head()?;
@@ -287,12 +287,14 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     // Récupérer le nom du remote (fallback vers "origin")
     let remote_name = resolve_remote_name(repo, branch_name);
 
-    // Récupérer le remote configuré directement (sans URL résolue)
-    let mut remote = repo.find_remote(&remote_name)?;
-    let remote_url = remote.url().unwrap_or("");
+    // Récupérer le remote et résoudre l'URL
+    let remote = repo.find_remote(&remote_name)?;
+    let raw_url = remote.url().unwrap_or("");
+    let resolved_url = resolve_remote_url(raw_url);
+    
     eprintln!(
-        "[DEBUG] Using remote '{}' with URL: {}",
-        remote_name, remote_url
+        "[DEBUG] Push - URL brute: {}, URL résolue: {}",
+        raw_url, resolved_url
     );
 
     // Options de push avec callbacks SSH
@@ -301,7 +303,16 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
 
     // Pousser la branche courante
     let push_refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
-    let result = remote.push(&[&push_refspec], Some(&mut push_options));
+    
+    let result = if resolved_url != raw_url {
+        // L'URL a été réécrite, utiliser un remote anonyme
+        let mut push_remote = repo.remote_anonymous(&resolved_url)?;
+        push_remote.push(&[&push_refspec], Some(&mut push_options))
+    } else {
+        // Utiliser le remote configuré
+        let mut push_remote = repo.find_remote(&remote_name)?;
+        push_remote.push(&[&push_refspec], Some(&mut push_options))
+    };
 
     // Si le push échoue, essayer avec git CLI en fallback
     if let Err(e) = result {
@@ -467,8 +478,32 @@ pub fn pull_current_branch_with_result(
     }
 }
 
+/// Fetch toutes les refs depuis le remote en utilisant git CLI (fallback).
+pub fn fetch_all_cli(repo: &Repository) -> Result<()> {
+    use std::process::Command;
+
+    // Récupérer le chemin du repository
+    let repo_path = repo
+        .workdir()
+        .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
+
+    // Exécuter git fetch
+    let output = Command::new("git")
+        .args(["fetch", "--all"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git fetch: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(git2::Error::from_str(&format!("Erreur git fetch: {}", stderr)).into());
+    }
+
+    Ok(())
+}
+
 /// Fetch toutes les refs depuis le remote.
-/// Utilise le remote configuré directement pour supporter les alias SSH.
+/// Utilise le remote configuré avec résolution SSH des alias et fallback CLI.
 pub fn fetch_all(repo: &Repository) -> Result<()> {
     // Récupérer le remote configuré pour la branche courante (fallback vers "origin")
     let remote_name = if let Ok(head) = repo.head() {
@@ -481,21 +516,38 @@ pub fn fetch_all(repo: &Repository) -> Result<()> {
         "origin".to_string()
     };
 
-    let mut remote = repo.find_remote(&remote_name)?;
-    let remote_url = remote.url().unwrap_or("");
+    let remote = repo.find_remote(&remote_name)?;
+    let raw_url = remote.url().unwrap_or("");
+    let resolved_url = resolve_remote_url(raw_url);
+
     eprintln!(
-        "[DEBUG] Fetch - Using remote '{}' with URL: {}",
-        remote_name, remote_url
+        "[DEBUG] Fetch - URL brute: {}, URL résolue: {}",
+        raw_url, resolved_url
     );
 
     // Options de fetch avec callbacks SSH
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(build_remote_callbacks());
 
-    // Fetch toutes les branches (utilise les refspecs configurés par défaut)
-    remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)?;
+    // Fetch toutes les branches
+    let result = if resolved_url != raw_url {
+        // L'URL a été réécrite, utiliser un remote anonyme
+        let mut fetch_remote = repo.remote_anonymous(&resolved_url)?;
+        fetch_remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)
+    } else {
+        // Utiliser le remote configuré
+        let mut fetch_remote = repo.find_remote(&remote_name)?;
+        fetch_remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)
+    };
 
-    Ok(())
+    // Si le fetch échoue, fallback sur CLI
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("[DEBUG] Fetch libgit2 échoué: {}, tentative CLI...", e);
+            fetch_all_cli(repo)
+        }
+    }
 }
 
 /// Vérifie si le repository a un remote configuré.
