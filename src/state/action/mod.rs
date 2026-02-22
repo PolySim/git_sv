@@ -305,6 +305,9 @@ pub enum AppAction {
     /// Filter: Supprimer caractère (legacy - utiliser Filter(DeleteChar))
     FilterDeleteChar,
 
+    /// Diff: Basculer entre mode unifié et side-by-side.
+    ToggleDiffViewMode,
+
     /// Aucune action (événement ignoré)
     None,
 }

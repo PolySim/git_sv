@@ -285,6 +285,14 @@ impl ActionDispatcher {
             AppAction::FilterInsertChar(c) => self.filter.handle(&mut ctx, FilterAction::InsertChar(c)),
             AppAction::FilterDeleteChar => self.filter.handle(&mut ctx, FilterAction::DeleteChar),
 
+            // Toggle diff view mode
+            AppAction::ToggleDiffViewMode => {
+                ctx.state.diff_view_mode.toggle();
+                // Aussi toggle le mode dans la vue staging si on y est.
+                ctx.state.staging_state.diff_view_mode.toggle();
+                Ok(())
+            }
+
             // Aucune action
             AppAction::None => Ok(()),
         }

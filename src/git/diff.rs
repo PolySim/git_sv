@@ -2,6 +2,26 @@ use git2::{Oid, Repository};
 
 use crate::error::Result;
 
+/// Mode d'affichage du diff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiffViewMode {
+    /// Mode unifié (lignes de contexte + ajouts + suppressions).
+    #[default]
+    Unified,
+    /// Mode côte à côte (ancien vs nouveau).
+    SideBySide,
+}
+
+impl DiffViewMode {
+    /// Bascule entre les modes.
+    pub fn toggle(&mut self) {
+        *self = match self {
+            DiffViewMode::Unified => DiffViewMode::SideBySide,
+            DiffViewMode::SideBySide => DiffViewMode::Unified,
+        };
+    }
+}
+
 /// Statut d'une modification de fichier.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiffStatus {

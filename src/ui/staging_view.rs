@@ -55,6 +55,7 @@ pub fn render(
         staging_state.diff_scroll,
         layout.diff_panel,
         staging_state.focus == StagingFocus::Diff,
+        staging_state.diff_view_mode,
     );
 
     // Zone de message commit.
@@ -239,7 +240,7 @@ fn render_staging_help(frame: &mut Frame, focus: &StagingFocus, area: Rect) {
             "j/k:nav  u/Enter:unstage  U:unstage all  Tab:→Diff  c:commit  P:push  1:graph  q:quit"
         }
         StagingFocus::Diff => {
-            "j/k:scroll  Tab:→Unstaged  Esc:Unstaged  c:commit  P:push  1:graph  q:quit"
+            "j/k:scroll  v:vue  Tab:→Unstaged  Esc:Unstaged  c:commit  P:push  1:graph  q:quit"
         }
         StagingFocus::CommitMessage => "Enter:confirmer  Esc:annuler  ←→:curseur",
     };

@@ -184,6 +184,7 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
                 state.diff_scroll_offset,
                 layout.bottom_right,
                 false,
+                state.diff_view_mode,
             );
         }
     }

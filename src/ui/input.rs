@@ -198,6 +198,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             match key.code {
                 KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::DiffScrollDown),
                 KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::DiffScrollUp),
+                KeyCode::Char('v') => return Some(AppAction::ToggleDiffViewMode),
                 _ => {}
             }
         }
@@ -375,6 +376,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::DiffScrollUp),
             KeyCode::Tab | KeyCode::Esc => Some(AppAction::SwitchStagingFocus),
             KeyCode::Char('c') => Some(AppAction::StartCommitMessage),
+            KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
             _ => None,
         },
         // StagingFocus::CommitMessage est géré en priorité au début de la fonction

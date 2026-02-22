@@ -1,6 +1,6 @@
 //! État de la vue staging.
 
-use crate::git::diff::FileDiff;
+use crate::git::diff::{DiffViewMode, FileDiff};
 use crate::git::repo::StatusEntry;
 use crate::state::selection::ListSelection;
 
@@ -35,6 +35,8 @@ pub struct StagingState {
     pub current_diff: Option<FileDiff>,
     /// Offset de scroll du diff.
     pub diff_scroll: usize,
+    /// Mode d'affichage du diff (unifié ou côte à côte).
+    pub diff_view_mode: DiffViewMode,
 }
 
 impl StagingState {

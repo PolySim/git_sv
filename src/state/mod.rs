@@ -13,7 +13,7 @@ pub use cache::{DiffCache, DiffCacheKey, LazyDiff, LazyBlame};
 pub use filter::{GraphFilter, FilterPopupState, FilterField};
 
 use crate::git::branch::BranchInfo;
-use crate::git::diff::DiffFile;
+use crate::git::diff::{DiffFile, DiffViewMode};
 use crate::git::graph::GraphRow;
 use crate::git::repo::{GitRepo, StatusEntry};
 use ratatui::widgets::ListState;
@@ -84,7 +84,10 @@ pub struct AppState {
     
     /// Offset de scroll dans le diff (compatibilité - migrer vers graph_view.diff_scroll_offset).
     pub diff_scroll_offset: usize,
-    
+
+    /// Mode d'affichage du diff (unifié ou côte à côte).
+    pub diff_view_mode: DiffViewMode,
+
     /// Entrées de status (pour la vue staging, compatibilité).
     pub status_entries: Vec<StatusEntry>,
     
@@ -177,6 +180,7 @@ impl AppState {
             file_selected_index: 0,
             selected_file_diff: None,
             diff_scroll_offset: 0,
+            diff_view_mode: DiffViewMode::default(),
             status_entries: Vec::new(),
             branches: Vec::new(),
             staging_state: StagingState::new(),
