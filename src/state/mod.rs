@@ -43,7 +43,10 @@ pub struct AppState {
     
     /// Mode de vue actuel.
     pub view_mode: ViewMode,
-    
+
+    /// Mode de vue précédent (pour retour depuis Help).
+    pub previous_view_mode: Option<ViewMode>,
+
     /// État indiquant si un refresh est nécessaire.
     pub dirty: bool,
     
@@ -169,6 +172,7 @@ impl AppState {
             repo_path,
             current_branch,
             view_mode: ViewMode::Graph,
+            previous_view_mode: None,
             dirty: true,
             graph: Vec::new(),
             graph_view: GraphViewState::new(),

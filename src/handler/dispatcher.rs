@@ -71,7 +71,14 @@ impl ActionDispatcher {
             }
 
             AppAction::ToggleHelp => {
-                // Toggle help est géré au niveau de l'UI, pas ici
+                if ctx.state.view_mode == ViewMode::Help {
+                    // Retour à la vue précédente
+                    ctx.state.view_mode = ctx.state.previous_view_mode.take().unwrap_or(ViewMode::Graph);
+                } else {
+                    // Sauvegarder la vue courante et passer en mode Help
+                    ctx.state.previous_view_mode = Some(ctx.state.view_mode);
+                    ctx.state.view_mode = ViewMode::Help;
+                }
                 Ok(())
             }
 

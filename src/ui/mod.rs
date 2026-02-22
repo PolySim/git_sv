@@ -46,22 +46,44 @@ pub fn render(frame: &mut Frame, state: &AppState) {
             );
         }
         ViewMode::Help => {
-            // Si des conflits sont en cours, afficher l'aide de résolution de conflits
-            if state.conflicts_state.is_some() {
-                if let Some(ref conflicts_state) = state.conflicts_state {
-                    conflicts_view::render(
+            // Rendre la vue sous-jacente d'abord
+            match state.previous_view_mode {
+                Some(ViewMode::Staging) => {
+                    staging_view::render(
                         frame,
-                        conflicts_state,
+                        &state.staging_state,
                         &state.current_branch,
                         &state.repo_path,
                         state.current_flash_message(),
                     );
                 }
-                conflicts_view::render_help_overlay(frame, frame.area());
-            } else {
-                render_graph_view(frame, state);
-                help_overlay::render(frame, frame.area());
+                Some(ViewMode::Branches) => {
+                    branches_view::render(
+                        frame,
+                        &state.branches_view_state,
+                        &state.current_branch,
+                        &state.repo_path,
+                        state.current_flash_message(),
+                    );
+                }
+                Some(ViewMode::Conflicts) | _ if state.conflicts_state.is_some() => {
+                    if let Some(ref conflicts_state) = state.conflicts_state {
+                        conflicts_view::render(
+                            frame,
+                            conflicts_state,
+                            &state.current_branch,
+                            &state.repo_path,
+                            state.current_flash_message(),
+                        );
+                    }
+                    conflicts_view::render_help_overlay(frame, frame.area());
+                    return; // L'overlay de conflits est spécifique
+                }
+                _ => {
+                    render_graph_view(frame, state);
+                }
             }
+            help_overlay::render(frame, frame.area());
         }
         ViewMode::Branches => {
             branches_view::render(
