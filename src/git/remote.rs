@@ -3,6 +3,20 @@ use git2::{Cred, CredentialType, FetchOptions, PushOptions, RemoteCallbacks, Rep
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Résout le nom du remote à partir du nom de branche.
+/// Extrait le nom du remote depuis une référence upstream comme "refs/remotes/origin/main" -> "origin".
+fn resolve_remote_name(repo: &Repository, branch_name: &str) -> String {
+    repo.branch_upstream_name(&format!("refs/heads/{}", branch_name))
+        .ok()
+        .and_then(|name| name.as_str().map(|s| s.to_string()))
+        .and_then(|name| {
+            name.strip_prefix("refs/remotes/")
+                .and_then(|rest| rest.split('/').next())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "origin".to_string())
+}
+
 /// Configuration SSH extraite d'un Host dans ~/.ssh/config
 #[derive(Debug, Clone, Default)]
 struct SshHostConfig {
@@ -271,18 +285,7 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
         .is_ok();
 
     // Récupérer le nom du remote (fallback vers "origin")
-    let remote_name = repo
-        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
-        .ok()
-        .and_then(|name| name.as_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| "origin".to_string());
-
-    // Extraire juste le nom du remote (avant le premier '/')
-    let remote_name = remote_name
-        .split('/')
-        .next()
-        .unwrap_or("origin")
-        .to_string();
+    let remote_name = resolve_remote_name(repo, branch_name);
 
     // Récupérer le remote configuré directement (sans URL résolue)
     let mut remote = repo.find_remote(&remote_name)?;
@@ -467,22 +470,16 @@ pub fn pull_current_branch_with_result(
 /// Fetch toutes les refs depuis le remote.
 /// Utilise le remote configuré directement pour supporter les alias SSH.
 pub fn fetch_all(repo: &Repository) -> Result<()> {
-    // Récupérer le remote par défaut (généralement "origin")
-    let mut remote_name = "origin".to_string();
-
-    // Essayer de trouver le remote configuré pour la branche courante
-    if let Ok(head) = repo.head() {
+    // Récupérer le remote configuré pour la branche courante (fallback vers "origin")
+    let remote_name = if let Ok(head) = repo.head() {
         if let Some(branch_name) = head.shorthand() {
-            if let Ok(upstream) = repo.branch_upstream_name(&format!("refs/heads/{}", branch_name))
-            {
-                if let Some(name) = upstream.as_str() {
-                    if let Some(first_part) = name.split('/').next() {
-                        remote_name = first_part.to_string();
-                    }
-                }
-            }
+            resolve_remote_name(repo, branch_name)
+        } else {
+            "origin".to_string()
         }
-    }
+    } else {
+        "origin".to_string()
+    };
 
     let mut remote = repo.find_remote(&remote_name)?;
     let remote_url = remote.url().unwrap_or("");
@@ -495,12 +492,8 @@ pub fn fetch_all(repo: &Repository) -> Result<()> {
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(build_remote_callbacks());
 
-    // Fetch toutes les branches
-    remote.fetch(
-        &["refs/heads/*:refs/remotes/origin/*"],
-        Some(&mut fetch_options),
-        None,
-    )?;
+    // Fetch toutes les branches (utilise les refspecs configurés par défaut)
+    remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)?;
 
     Ok(())
 }
@@ -518,19 +511,8 @@ pub fn get_default_remote(repo: &Repository) -> Result<String> {
         .shorthand()
         .ok_or_else(|| git2::Error::from_str("HEAD détachée"))?;
 
-    // Essayer de récupérer le remote configuré pour la branche
-    let remote_name = repo
-        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
-        .ok()
-        .and_then(|name| name.as_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| "origin".to_string());
-
-    // Extraire juste le nom du remote
-    let remote_name = remote_name
-        .split('/')
-        .next()
-        .unwrap_or("origin")
-        .to_string();
+    // Récupérer le remote configuré pour la branche (fallback vers "origin")
+    let remote_name = resolve_remote_name(repo, branch_name);
 
     Ok(remote_name)
 }
@@ -577,16 +559,7 @@ pub fn push_current_branch_cli(repo: &Repository) -> Result<String> {
     }
 
     let _stdout = String::from_utf8_lossy(&output.stdout);
-    let remote_name = repo
-        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
-        .ok()
-        .and_then(|n| n.as_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| "origin".to_string());
-    let remote_name = remote_name
-        .split('/')
-        .next()
-        .unwrap_or("origin")
-        .to_string();
+    let remote_name = resolve_remote_name(repo, branch_name);
 
     if has_upstream {
         Ok(format!("Push de '{}' vers {}", branch_name, remote_name))
