@@ -1,3 +1,5 @@
+//! Fonctions utilitaires git (helpers internes).
+
 #![allow(dead_code)]
 
 use crate::error::{GitSvError, Result};

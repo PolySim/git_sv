@@ -1,6 +1,6 @@
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+//! Disposition des panneaux de la vue staging.
 
-/// Structure représentant les zones de la vue staging.
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 pub struct StagingLayout {
     pub status_bar: Rect,
     pub unstaged_panel: Rect,

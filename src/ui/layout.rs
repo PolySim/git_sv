@@ -1,3 +1,5 @@
+//! Disposition des panneaux de la vue principale (Layout ratatui).
+
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Structure contenant toutes les zones de layout.

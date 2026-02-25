@@ -1,3 +1,28 @@
+//! Mapping clavier et souris vers les actions de l'application.
+//!
+//! Ce module est le point central de gestion des entrées utilisateur.
+//! Il traduit les événements crossterm en [`AppAction`] selon le mode
+//! de vue actif et l'état courant.
+//!
+//! # Architecture
+//!
+//! La fonction principale `map_key()` applique les règles dans l'ordre de priorité :
+//!
+//! 1. **Ctrl+C** — quitter (toujours prioritaire)
+//! 2. **Merge picker actif** — keybindings dédiés au picker
+//! 3. **Confirmation en attente** — y/n/Esc uniquement
+//! 4. **Recherche active** — saisie dans la barre de recherche
+//! 5. **Popup de filtre ouvert** — saisie dans le filtre
+//! 6. **Mode Staging / focus CommitMessage** — saisie du message de commit
+//! 7. **Mode Branches / focus Input** — saisie du nom de branche
+//! 8. **Changements de vue globaux** — touches `1`, `2`, `3`, `4`
+//! 9. **Mode Conflicts** → `map_conflicts_key()`
+//! 10. **Mode Staging** → `map_staging_key()`
+//! 11. **Mode Branches** → `map_branches_key()`
+//! 12. **Mode Blame** → `map_blame_key()`
+//! 13. **Raccourcis globaux** (Ctrl+D/U, Esc, Tab, etc.)
+//! 14. **Keybindings de la vue Graph** (défaut)
+
 #![allow(dead_code)]
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
@@ -226,8 +251,11 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         _ => {}
     }
 
+    // ───────────────────────────────────────────────
+    // Vue Graph (keybindings par défaut)
+    // ───────────────────────────────────────────────
     match key.code {
-        // Navigation
+        // Navigation dans le graphe
         KeyCode::Char('q') => Some(AppAction::Quit),
         KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
         KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
@@ -282,6 +310,11 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 }
 
 /// Mappe les touches pour la vue branches.
+///
+/// # Priorités
+/// 1. Focus Input (saisie de nom) — capture toutes les touches
+/// 2. Raccourcis globaux (1/2/3, q, y, ?, P)
+/// 3. Actions spécifiques à la section active (Branches/Worktrees/Stashes)
 fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Si on est en mode Input.
     if state.branches_view_state.focus == BranchesFocus::Input {
@@ -344,6 +377,11 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 }
 
 /// Mappe les touches pour la vue staging.
+///
+/// # Priorités
+/// 1. Focus CommitMessage — capture toutes les touches pour la saisie
+/// 2. Raccourcis globaux (q, r, y, ?, P)
+/// 3. Actions par focus (Unstaged/Staged/Diff)
 fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Vérifier d'abord si on est en mode saisie de commit
     if state.staging_state.focus == StagingFocus::CommitMessage {

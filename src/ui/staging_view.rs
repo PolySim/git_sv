@@ -1,3 +1,5 @@
+//! Rendu de la vue staging (fichiers stagés/non stagés, diff, commit).
+
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

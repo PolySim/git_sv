@@ -1,3 +1,5 @@
+//! Opérations sur les branches : listage, création, checkout, suppression, renommage.
+
 use git2::{Branch, BranchType, Repository};
 use std::time::SystemTime;
 

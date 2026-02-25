@@ -1,3 +1,9 @@
+//! Initialisation et restauration du terminal crossterm.
+//!
+//! Ce module gère le cycle de vie du terminal TUI :
+//! activation du mode raw, passage en alternate screen,
+//! capture de la souris, et restauration à la sortie.
+
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,

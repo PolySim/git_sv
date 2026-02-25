@@ -1,3 +1,5 @@
+//! Rendu des diffs de fichiers (mode unifié et side-by-side).
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},

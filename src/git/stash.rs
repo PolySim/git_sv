@@ -1,7 +1,9 @@
+//! Opérations stash : listage, sauvegarde, application, suppression.
+
 #![allow(dead_code)]
+use std::process::Command;
 
 use git2::{Oid, Repository};
-use std::process::Command;
 
 use crate::error::Result;
 use crate::git::diff::DiffStatus;

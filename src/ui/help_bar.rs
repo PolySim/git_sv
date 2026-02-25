@@ -1,3 +1,5 @@
+//! Barre d'aide contextuelle en bas de l'écran (raccourcis clavier).
+
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

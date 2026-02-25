@@ -1,3 +1,5 @@
+//! Rendu du graphe git (colonnes, connexions, couleurs, sélection).
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

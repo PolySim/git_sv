@@ -1,3 +1,5 @@
+//! Point d'entrée du rendu UI : dispatche vers les vues selon le `ViewMode`.
+
 pub mod blame_view;
 pub mod branch_panel;
 pub mod branches_layout;

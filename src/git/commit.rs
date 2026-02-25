@@ -1,3 +1,5 @@
+//! Opérations sur les commits : création, amendement, log.
+
 #![allow(dead_code)]
 
 use git2::{Oid, Repository, Signature};

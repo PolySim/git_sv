@@ -1,3 +1,5 @@
+//! Overlay d'aide complète (touche `?`), affiche tous les raccourcis clavier.
+
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},

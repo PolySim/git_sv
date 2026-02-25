@@ -6,7 +6,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Crée un rectangle centré dans la zone donnée.
 ///
-/// # Arguments
+/// # Paramètres
 /// * `percent_x` - Pourcentage de largeur (0-100)
 /// * `percent_y` - Pourcentage de hauteur (0-100)
 /// * `area` - Zone parente

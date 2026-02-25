@@ -1,3 +1,5 @@
+//! Vue blame : affiche les annotations de commit ligne par ligne.
+
 use crate::git::blame::FileBlame;
 use crate::state::BlameState;
 use crate::utils::time::format_relative_time;

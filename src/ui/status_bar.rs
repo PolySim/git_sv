@@ -1,3 +1,5 @@
+//! Barre de statut en haut de l'écran (branche, chemin repo, message flash).
+
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

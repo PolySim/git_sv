@@ -1,3 +1,7 @@
+//! Parsing et représentation des diffs de fichiers.
+//!
+//! Supporte le mode unifié et le mode side-by-side.
+
 #![allow(dead_code)]
 
 use git2::{Oid, Repository};

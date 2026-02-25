@@ -1,9 +1,11 @@
-#![allow(dead_code)]
+//! Opérations remote : push, pull, fetch.
 
-use crate::error::Result;
+#![allow(dead_code)]
 use git2::{Cred, CredentialType, FetchOptions, PushOptions, RemoteCallbacks, Repository};
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+use crate::error::Result;
 
 /// Résout le nom du remote à partir du nom de branche.
 /// Extrait le nom du remote depuis une référence upstream comme "refs/remotes/origin/main" -> "origin".

@@ -1,3 +1,5 @@
+//! Panneau flottant de branches (overlay legacy sur la vue graph).
+
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},

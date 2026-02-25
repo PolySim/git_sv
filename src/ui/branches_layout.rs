@@ -1,6 +1,6 @@
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+//! Disposition des panneaux de la vue branches.
 
-/// Structure représentant les zones de la vue branches.
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 pub struct BranchesLayout {
     pub status_bar: Rect,
     pub tabs: Rect,

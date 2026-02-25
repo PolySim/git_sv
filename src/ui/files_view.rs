@@ -1,3 +1,5 @@
+//! Liste des fichiers modifiés par un commit (panneau bas-gauche).
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

@@ -1,3 +1,9 @@
+//! Types d'erreurs de l'application.
+//!
+//! Définit `GitSvError` avec `thiserror` et l'alias `Result<T>`.
+//! Fournit également le trait `IoErrorContext` pour ajouter du contexte
+//! aux erreurs I/O.
+
 use std::path::PathBuf;
 use thiserror::Error;
 

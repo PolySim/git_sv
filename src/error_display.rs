@@ -1,3 +1,8 @@
+//! Utilitaires d'affichage des erreurs pour l'interface utilisateur.
+//!
+//! Fournit des fonctions pour formater les `GitSvError` en messages
+//! lisibles, avec aide contextuelle selon le type d'erreur.
+
 #![allow(dead_code)]
 
 use crate::error::GitSvError;

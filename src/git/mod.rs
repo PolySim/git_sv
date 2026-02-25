@@ -1,3 +1,8 @@
+//! Couche d'accès au repository git (libgit2).
+//!
+//! Ce module expose tous les sous-modules git et les types
+//! principaux nécessaires aux autres modules de l'application.
+
 pub mod blame;
 pub mod branch;
 pub mod commit;

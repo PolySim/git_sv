@@ -1,3 +1,5 @@
+//! Suppression des modifications non committées (discard).
+
 use git2::Repository;
 
 use crate::error::Result;

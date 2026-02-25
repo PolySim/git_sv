@@ -1,5 +1,8 @@
-use crate::error::Result;
+//! Blame git : annotations de commit par ligne de fichier.
+
 use git2::{BlameOptions, Oid, Repository};
+
+use crate::error::Result;
 use std::time::SystemTime;
 
 /// Information sur une ligne d'un fichier avec son auteur et commit.

@@ -1,3 +1,8 @@
+//! Wrapper `GitRepo` autour de `git2::Repository`.
+//!
+//! Fournit les opérations de haut niveau : log, statut, diffs,
+//! construction du graphe, et accès aux données du repository.
+
 #![allow(dead_code)]
 
 use git2::{Repository, StatusOptions};

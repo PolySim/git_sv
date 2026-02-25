@@ -1,3 +1,5 @@
+//! Recherche dans les commits du graphe (message, auteur, hash).
+
 use super::graph::{CommitNode, GraphRow};
 
 /// Type de recherche à effectuer.

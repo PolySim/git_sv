@@ -1,3 +1,5 @@
+//! Rendu de la vue branches (branches locales/remote, worktrees, stashes).
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

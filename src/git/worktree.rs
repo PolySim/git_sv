@@ -1,3 +1,5 @@
+//! Gestion des worktrees git.
+
 use git2::Repository;
 
 use crate::error::Result;

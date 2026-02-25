@@ -1,9 +1,11 @@
-#![allow(dead_code)]
+//! Résolution de conflits de merge : détection, modes (fichier/bloc/ligne), finalisation.
 
-use git2::Repository;
+#![allow(dead_code)]
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::Path;
+
+use git2::Repository;
 
 use crate::error::{GitSvError, Result};
 

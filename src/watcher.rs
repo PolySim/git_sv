@@ -43,11 +43,11 @@ pub struct GitWatcher {
 impl GitWatcher {
     /// Crée un nouveau surveillant pour le repository à la racine donnée.
     ///
-    /// # Arguments
+    /// # Paramètres
     ///
     /// * `repo_path` - Chemin vers le repository git (peut être un sous-répertoire).
     ///
-    /// # Returns
+    /// # Erreurs
     ///
     /// Retourne une erreur si le répertoire `.git/` n'est pas trouvé.
     pub fn new(repo_path: impl AsRef<Path>) -> Result<Self> {
@@ -91,7 +91,7 @@ impl GitWatcher {
     /// - Un changement est détecté
     /// - Le délai de debounce est écoulé depuis la dernière détection
     ///
-    /// # Returns
+    /// # Valeur de retour
     ///
     /// `true` si un rafraîchissement est nécessaire, `false` sinon.
     pub fn check_changed(&mut self) -> Result<bool> {

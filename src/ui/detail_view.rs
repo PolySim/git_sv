@@ -1,3 +1,5 @@
+//! Panneau de détail d'un commit sélectionné (hash, auteur, date, message, parents).
+
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

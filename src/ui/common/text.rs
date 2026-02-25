@@ -4,7 +4,7 @@
 
 /// Tronque une chaîne de manière safe pour Unicode.
 ///
-/// # Arguments
+/// # Paramètres
 /// * `s` - Chaîne à tronquer
 /// * `max_len` - Longueur maximale en caractères
 /// * `ellipsis` - Ajouter "…" si tronqué

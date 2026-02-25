@@ -1,3 +1,9 @@
+//! Point d'entrée de l'application : initialisation et lancement.
+//!
+//! Ce module crée l'`App`, charge les données git initiales
+//! (graphe, statut, staging), configure le terminal et délègue
+//! la boucle événementielle à l'`EventHandler`.
+
 use crate::error::Result;
 use crate::git::repo::GitRepo;
 use crate::terminal::{restore_terminal, setup_terminal};

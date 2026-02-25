@@ -1,7 +1,13 @@
+//! Construction du graphe de commits (colonnes, connexions, couleurs).
+//!
+//! Transforme le log git linéaire en une représentation visuelle
+//! avec colonnes pour les branches parallèles, caractères Unicode
+//! pour les connexions, et attribution de couleurs par branche.
+
 #![allow(dead_code)]
+use std::collections::HashMap;
 
 use git2::{Oid, Repository};
-use std::collections::HashMap;
 
 use super::commit::CommitInfo;
 use crate::error::Result;

@@ -1,3 +1,9 @@
+//! `git_sv` — Visualisateur de graphe git en TUI.
+//!
+//! Point d'entrée CLI : parse les arguments avec clap,
+//! ouvre le repository git, et lance l'interface interactive
+//! ou le mode non-interactif selon les options.
+
 mod app;
 mod error;
 mod error_display;
