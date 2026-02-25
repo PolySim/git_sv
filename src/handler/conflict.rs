@@ -645,10 +645,9 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_toggle_line(state: &mut AppState) -> Result<()> {
-    use crate::git::conflict::{all_sections_resolved, apply_resolved_content};
     use crate::state::ConflictPanelFocus;
 
-    let should_resolve = if let Some(conflicts) = &mut state.conflicts_state {
+    if let Some(conflicts) = &mut state.conflicts_state {
         let section_idx = conflicts.section_selected;
         let line_idx = conflicts.line_selected;
         let file_selected = conflicts.file_selected;
@@ -687,36 +686,7 @@ fn handle_toggle_line(state: &mut AppState) -> Result<()> {
                     _ => {}
                 }
             }
-
-            // Vérifier si toutes les sections sont résolues (toutes touchées en mode ligne)
-            all_sections_resolved(file)
-        } else {
-            false
         }
-    } else {
-        false
-    };
-
-    if should_resolve {
-        let (path, mode) = if let Some(conflicts) = &state.conflicts_state {
-            let file = &conflicts.all_files[conflicts.file_selected];
-            (file.path.clone(), conflicts.resolution_mode)
-        } else {
-            return Ok(());
-        };
-
-        if let Some(conflicts) = &mut state.conflicts_state {
-            if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
-                if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                    state.set_flash_message(format!("Erreur: {}", e));
-                    return Ok(());
-                }
-                file.is_resolved = true;
-            }
-            advance_to_next_unresolved(conflicts);
-        }
-        state.set_flash_message(format!("{} résolu (ligne par ligne)", path));
-        state.mark_dirty();
     }
     Ok(())
 }
@@ -1015,7 +985,8 @@ fn handle_enter_resolve(state: &mut AppState) -> Result<()> {
                 }
             }
             ConflictResolutionMode::Line => {
-                handle_toggle_line(state)?;
+                // En mode Line, Enter est déjà mappé à ConflictResolveFile
+                // Ce handler ne fait rien car la validation est gérée par handle_mark_resolved
             }
         }
     }
