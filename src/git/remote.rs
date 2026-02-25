@@ -163,23 +163,12 @@ fn resolve_ssh_credentials(
 
     // Étape 2: Extraire le hostname de l'URL
     if let Some(host) = extract_host_from_url(url) {
-        eprintln!("[DEBUG] Looking for SSH config for host: {}", host);
-
         // Chercher D'ABORD la config par HostName (priorité aux alias)
         // Ex: URL = github.com, config = Host github-pro HostName github.com
-        eprintln!("[DEBUG] Searching by HostName for: {}", host);
         for (alias, config) in &ssh_configs {
             if let Some(hostname) = &config.hostname {
                 if hostname == &host {
-                    eprintln!(
-                        "[DEBUG] Found match: alias '{}' has HostName '{}'",
-                        alias, hostname
-                    );
                     if let Some(identity_path) = &config.identity_file {
-                        eprintln!(
-                            "[DEBUG] Using IdentityFile from alias '{}': {:?}",
-                            alias, identity_path
-                        );
                         let pubkey_path = identity_path.with_extension("pub");
                         return Cred::ssh_key(
                             config.user.as_deref().unwrap_or(username),
@@ -194,9 +183,7 @@ fn resolve_ssh_credentials(
 
         // Ensuite chercher la config directe pour ce host (fallback)
         if let Some(config) = ssh_configs.get(&host) {
-            eprintln!("[DEBUG] Found direct config for host: {}", host);
             if let Some(identity_path) = &config.identity_file {
-                eprintln!("[DEBUG] Using IdentityFile: {:?}", identity_path);
                 let pubkey_path = identity_path.with_extension("pub");
                 return Cred::ssh_key(
                     config.user.as_deref().unwrap_or(username),
@@ -209,20 +196,17 @@ fn resolve_ssh_credentials(
     }
 
     // Étape 3: Fallback vers l'agent SSH
-    eprintln!("[DEBUG] Falling back to SSH agent");
     if let Ok(cred) = Cred::ssh_key_from_agent(username) {
         return Ok(cred);
     }
 
     // Étape 4: Fallback vers les clés par défaut
-    eprintln!("[DEBUG] Falling back to default keys");
     let default_keys = ["id_ed25519", "id_rsa", "id_ecdsa", "id_dsa"];
     for key_name in &default_keys {
         let key_path = expand_tilde(&format!("~/.ssh/{}", key_name));
         let pubkey_path = key_path.with_extension("pub");
 
         if key_path.exists() {
-            eprintln!("[DEBUG] Using default key: {:?}", key_path);
             return Cred::ssh_key(username, Some(&pubkey_path), &key_path, None);
         }
     }
@@ -238,13 +222,7 @@ fn resolve_ssh_credentials(
 fn build_remote_callbacks() -> RemoteCallbacks<'static> {
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|url, username_from_url, allowed_types| {
-        eprintln!(
-            "[DEBUG] SSH credentials callback - URL: {}, username: {:?}, allowed_types: {:?}",
-            url, username_from_url, allowed_types
-        );
-        let result = resolve_ssh_credentials(url, username_from_url, allowed_types);
-        eprintln!("[DEBUG] SSH credentials result: {:?}", result.is_ok());
-        result
+        resolve_ssh_credentials(url, username_from_url, allowed_types)
     });
     callbacks
 }
@@ -292,11 +270,6 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     let raw_url = remote.url().unwrap_or("");
     let resolved_url = resolve_remote_url(raw_url);
 
-    eprintln!(
-        "[DEBUG] Push - URL brute: {}, URL résolue: {}",
-        raw_url, resolved_url
-    );
-
     // Options de push avec callbacks SSH
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(build_remote_callbacks());
@@ -315,11 +288,7 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     };
 
     // Si le push échoue, essayer avec git CLI en fallback
-    if let Err(e) = result {
-        eprintln!(
-            "[DEBUG] Push via libgit2 failed: {}, trying CLI fallback",
-            e
-        );
+    if let Err(_) = result {
         return push_current_branch_cli(repo);
     }
 
@@ -520,11 +489,6 @@ pub fn fetch_all(repo: &Repository) -> Result<()> {
     let raw_url = remote.url().unwrap_or("");
     let resolved_url = resolve_remote_url(raw_url);
 
-    eprintln!(
-        "[DEBUG] Fetch - URL brute: {}, URL résolue: {}",
-        raw_url, resolved_url
-    );
-
     // Options de fetch avec callbacks SSH
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(build_remote_callbacks());
@@ -543,10 +507,7 @@ pub fn fetch_all(repo: &Repository) -> Result<()> {
     // Si le fetch échoue, fallback sur CLI
     match result {
         Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("[DEBUG] Fetch libgit2 échoué: {}, tentative CLI...", e);
-            fetch_all_cli(repo)
-        }
+        Err(_) => fetch_all_cli(repo),
     }
 }
 
