@@ -166,7 +166,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    if !matches!(state.focus, FocusPanel::Files) {
+    if state.focus != FocusPanel::BottomLeft {
         return Ok(());
     }
 

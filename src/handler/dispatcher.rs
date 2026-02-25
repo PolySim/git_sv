@@ -90,14 +90,7 @@ impl ActionDispatcher {
             }
 
             AppAction::SwitchBottomMode => {
-                ctx.state.bottom_left_mode = match ctx.state.bottom_left_mode {
-                    crate::state::BottomLeftMode::Files => crate::state::BottomLeftMode::Parents,
-                    crate::state::BottomLeftMode::Parents => crate::state::BottomLeftMode::Files,
-                    crate::state::BottomLeftMode::CommitFiles => {
-                        crate::state::BottomLeftMode::Parents
-                    }
-                    crate::state::BottomLeftMode::WorkingDir => crate::state::BottomLeftMode::Files,
-                };
+                ctx.state.bottom_left_mode.toggle();
                 Ok(())
             }
 
@@ -476,9 +469,9 @@ impl ActionDispatcher {
                     return Ok(());
                 }
 
-                // Ajouter le contenu du panneau Detail si focus est sur Files ou Detail
+                // Ajouter le contenu du panneau BottomRight si focus est sur BottomLeft ou BottomRight
                 match ctx.state.focus {
-                    FocusPanel::Files => {
+                    FocusPanel::BottomLeft => {
                         if let Some(file) =
                             ctx.state.commit_files.get(ctx.state.file_selected_index)
                         {
@@ -494,7 +487,7 @@ impl ActionDispatcher {
                             }
                         }
                     }
-                    FocusPanel::Detail => {
+                    FocusPanel::BottomRight => {
                         if let Some(ref diff) = ctx.state.selected_file_diff {
                             text_to_copy = diff
                                 .lines

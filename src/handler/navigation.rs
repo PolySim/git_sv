@@ -157,9 +157,6 @@ fn handle_switch_panel(state: &mut AppState) {
                 FocusPanel::Graph => FocusPanel::BottomLeft,
                 FocusPanel::BottomLeft => FocusPanel::BottomRight,
                 FocusPanel::BottomRight => FocusPanel::Graph,
-                // Legacy variants
-                FocusPanel::Files => FocusPanel::BottomRight,
-                FocusPanel::Detail => FocusPanel::Graph,
             };
             // Quand on passe au panneau BottomLeft, charger le diff du fichier sélectionné
             if state.focus == FocusPanel::BottomLeft {

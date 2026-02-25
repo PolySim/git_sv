@@ -34,29 +34,25 @@ pub enum BottomLeftMode {
     #[default]
     Files,
     Parents,
-    /// Legacy: équivalent à Files
-    CommitFiles,
-    /// Legacy: équivalent à Parents  
-    WorkingDir,
 }
 
 impl BottomLeftMode {
     /// Bascule entre les modes.
     pub fn toggle(&mut self) {
         *self = match self {
-            BottomLeftMode::Files | BottomLeftMode::CommitFiles => BottomLeftMode::Parents,
-            BottomLeftMode::Parents | BottomLeftMode::WorkingDir => BottomLeftMode::Files,
+            BottomLeftMode::Files => BottomLeftMode::Parents,
+            BottomLeftMode::Parents => BottomLeftMode::Files,
         };
     }
 
     /// Retourne true si le mode affiche les fichiers du commit.
     pub fn is_commit_files(&self) -> bool {
-        matches!(self, BottomLeftMode::Files | BottomLeftMode::CommitFiles)
+        matches!(self, BottomLeftMode::Files)
     }
 
     /// Retourne true si le mode affiche le working directory.
     pub fn is_working_dir(&self) -> bool {
-        matches!(self, BottomLeftMode::Parents | BottomLeftMode::WorkingDir)
+        matches!(self, BottomLeftMode::Parents)
     }
 }
 
@@ -67,8 +63,4 @@ pub enum FocusPanel {
     Graph,
     BottomLeft,
     BottomRight,
-    /// Legacy: équivalent à BottomLeft
-    Files,
-    /// Legacy: équivalent à BottomRight
-    Detail,
 }

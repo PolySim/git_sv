@@ -144,13 +144,13 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('d') => {
-                if state.focus == FocusPanel::Detail {
+                if state.focus == FocusPanel::BottomRight {
                     return Some(AppAction::DiffScrollDown);
                 }
                 return Some(AppAction::PageDown);
             }
             KeyCode::Char('u') => {
-                if state.focus == FocusPanel::Detail {
+                if state.focus == FocusPanel::BottomRight {
                     return Some(AppAction::DiffScrollUp);
                 }
                 return Some(AppAction::PageUp);
@@ -169,13 +169,13 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return Some(AppAction::ToggleHelp);
     }
 
-    // Escape pour revenir au panneau précédent quand on est dans Files, Detail ou BottomLeft.
+    // Escape pour revenir au panneau précédent quand on est dans BottomLeft ou BottomRight.
     if key.code == KeyCode::Esc {
         match state.focus {
-            FocusPanel::Detail => {
+            FocusPanel::BottomRight => {
                 return Some(AppAction::SwitchBottomMode);
             }
-            FocusPanel::Files | FocusPanel::BottomLeft => {
+            FocusPanel::BottomLeft => {
                 // Retourner au focus Graph depuis le panneau fichiers
                 return Some(AppAction::Navigation(
                     crate::state::action::NavigationAction::BackToGraph,
@@ -200,8 +200,8 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 
     // Navigation contextuelle selon le focus.
     match state.focus {
-        FocusPanel::Files => {
-            // Quand focus sur Files, j/k naviguent dans la liste des fichiers.
+        FocusPanel::BottomLeft => {
+            // Quand focus sur BottomLeft, j/k naviguent dans la liste des fichiers.
             match key.code {
                 KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::FileDown),
                 KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::FileUp),
@@ -209,8 +209,8 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                 _ => {}
             }
         }
-        FocusPanel::Detail => {
-            // Quand focus sur Detail, j/k scrollent le diff.
+        FocusPanel::BottomRight => {
+            // Quand focus sur BottomRight, j/k scrollent le diff.
             match key.code {
                 KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::DiffScrollDown),
                 KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::DiffScrollUp),
@@ -610,9 +610,9 @@ fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
             // Scroll up dans le panneau actif
             match state.view_mode {
                 ViewMode::Graph => {
-                    if state.focus == FocusPanel::Files {
+                    if state.focus == FocusPanel::BottomLeft {
                         Some(AppAction::FileUp)
-                    } else if state.focus == FocusPanel::Detail {
+                    } else if state.focus == FocusPanel::BottomRight {
                         Some(AppAction::DiffScrollUp)
                     } else {
                         Some(AppAction::MoveUp)
@@ -628,9 +628,9 @@ fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
             // Scroll down dans le panneau actif
             match state.view_mode {
                 ViewMode::Graph => {
-                    if state.focus == FocusPanel::Files {
+                    if state.focus == FocusPanel::BottomLeft {
                         Some(AppAction::FileDown)
-                    } else if state.focus == FocusPanel::Detail {
+                    } else if state.focus == FocusPanel::BottomRight {
                         Some(AppAction::DiffScrollDown)
                     } else {
                         Some(AppAction::MoveDown)

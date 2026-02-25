@@ -33,8 +33,8 @@ pub fn render(
 
     // Ajouter le contexte du panneau bas.
     match bottom_left_mode {
-        BottomLeftMode::CommitFiles | BottomLeftMode::Files => keys.push(("Tab", "fichiers")),
-        BottomLeftMode::WorkingDir | BottomLeftMode::Parents => keys.push(("Tab", "commit")),
+        BottomLeftMode::Files => keys.push(("Tab", "fichiers")),
+        BottomLeftMode::Parents => keys.push(("Tab", "commit")),
     }
 
     // Ajouter le raccourci pour effacer les filtres s'ils sont actifs

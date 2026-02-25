@@ -25,13 +25,13 @@ pub fn render(
     file_selected_index: usize,
 ) {
     let (items, title) = match mode {
-        BottomLeftMode::CommitFiles | BottomLeftMode::Files => {
+        BottomLeftMode::Files => {
             let items = build_commit_file_items(commit_files);
             let hash = selected_commit_hash.unwrap_or_else(|| "???".to_string());
             let title = format!(" Fichiers — {} ", hash);
             (items, title)
         }
-        BottomLeftMode::WorkingDir | BottomLeftMode::Parents => {
+        BottomLeftMode::Parents => {
             let items = build_status_items(status_entries);
             let title = format!(" Status ({} fichiers) ", status_entries.len());
             (items, title)
