@@ -452,3 +452,185 @@ impl Default for ActionDispatcher {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::repo::GitRepo;
+    use crate::state::action::{GitAction, NavigationAction, SearchAction};
+    use tempfile::TempDir;
+
+    /// Setup un repo temporaire pour les tests.
+    fn setup_test_repo() -> (TempDir, GitRepo) {
+        let dir = TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(dir.path(), &opts).unwrap();
+
+        // Configurer git
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        // Commit initial
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        let git_repo = GitRepo::open(dir.path().to_str().unwrap()).unwrap();
+        (dir, git_repo)
+    }
+
+    #[test]
+    fn test_dispatch_quit_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::Quit).unwrap();
+
+        assert!(state.should_quit);
+    }
+
+    #[test]
+    fn test_dispatch_refresh_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.dirty = false;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::Refresh).unwrap();
+
+        assert!(state.dirty);
+    }
+
+    #[test]
+    fn test_dispatch_toggle_help() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Graph;
+        let mut dispatcher = ActionDispatcher::new();
+
+        // Activer l'aide
+        dispatcher.dispatch(&mut state, AppAction::ToggleHelp).unwrap();
+        assert_eq!(state.view_mode, ViewMode::Help);
+        assert_eq!(state.previous_view_mode, Some(ViewMode::Graph));
+
+        // Désactiver l'aide
+        dispatcher.dispatch(&mut state, AppAction::ToggleHelp).unwrap();
+        assert_eq!(state.view_mode, ViewMode::Graph);
+        assert_eq!(state.previous_view_mode, None);
+    }
+
+    #[test]
+    fn test_dispatch_switch_view() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Graph;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher
+            .dispatch(&mut state, AppAction::SwitchView(ViewMode::Staging))
+            .unwrap();
+
+        assert_eq!(state.view_mode, ViewMode::Staging);
+        assert!(state.dirty);
+    }
+
+    #[test]
+    fn test_dispatch_navigation_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.selected_index = 5;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher
+            .dispatch(&mut state, AppAction::Navigation(NavigationAction::GoTop))
+            .unwrap();
+
+        assert_eq!(state.selected_index, 0);
+    }
+
+    #[test]
+    fn test_dispatch_search_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let mut dispatcher = ActionDispatcher::new();
+
+        assert!(!state.search_state.is_active);
+
+        dispatcher
+            .dispatch(&mut state, AppAction::Search(SearchAction::Open))
+            .unwrap();
+
+        assert!(state.search_state.is_active);
+    }
+
+    #[test]
+    fn test_dispatch_confirm_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        use crate::ui::confirm_dialog::ConfirmAction;
+        state.pending_confirmation = Some(ConfirmAction::DiscardAll);
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::ConfirmAction).unwrap();
+
+        // La confirmation devrait être consommée
+        assert!(state.pending_confirmation.is_none());
+    }
+
+    #[test]
+    fn test_dispatch_cancel_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        use crate::ui::confirm_dialog::ConfirmAction;
+        state.pending_confirmation = Some(ConfirmAction::DiscardAll);
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::CancelAction).unwrap();
+
+        assert!(state.pending_confirmation.is_none());
+    }
+
+    #[test]
+    fn test_dispatch_none_action() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let initial_state = state.selected_index;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::None).unwrap();
+
+        // Aucun changement d'état
+        assert_eq!(state.selected_index, initial_state);
+    }
+
+    #[test]
+    fn test_dispatch_close_branch_panel() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.show_branch_panel = true;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::CloseBranchPanel).unwrap();
+
+        assert!(!state.show_branch_panel);
+    }
+
+    #[test]
+    fn test_dispatch_switch_bottom_mode() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        use crate::state::BottomLeftMode;
+        state.bottom_left_mode = BottomLeftMode::Files;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::SwitchBottomMode).unwrap();
+
+        assert_eq!(state.bottom_left_mode, BottomLeftMode::Parents);
+    }
+}

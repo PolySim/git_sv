@@ -344,3 +344,182 @@ fn handle_cancel_input(state: &mut AppState) -> Result<()> {
     state.branches_view_state.input_cursor = 0;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::repo::GitRepo;
+    use crate::state::{BranchesFocus, BranchesSection, InputAction};
+    use tempfile::TempDir;
+
+    /// Setup un repo temporaire pour les tests.
+    fn setup_test_repo() -> (TempDir, GitRepo) {
+        let dir = TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(dir.path(), &opts).unwrap();
+
+        // Configurer git
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        // Commit initial
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        let git_repo = GitRepo::open(dir.path().to_str().unwrap()).unwrap();
+        (dir, git_repo)
+    }
+
+    #[test]
+    fn test_handle_next_section() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let mut handler = BranchHandler;
+
+        // Test cycle forward
+        state.branches_view_state.section = BranchesSection::Branches;
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::NextSection).unwrap();
+        }
+        assert_eq!(state.branches_view_state.section, BranchesSection::Worktrees);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::NextSection).unwrap();
+        }
+        assert_eq!(state.branches_view_state.section, BranchesSection::Stashes);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::NextSection).unwrap();
+        }
+        assert_eq!(state.branches_view_state.section, BranchesSection::Branches);
+    }
+
+    #[test]
+    fn test_handle_prev_section() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let mut handler = BranchHandler;
+
+        // Test cycle backward
+        state.branches_view_state.section = BranchesSection::Branches;
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::PrevSection).unwrap();
+        }
+        assert_eq!(state.branches_view_state.section, BranchesSection::Stashes);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::PrevSection).unwrap();
+        }
+        assert_eq!(state.branches_view_state.section, BranchesSection::Worktrees);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::PrevSection).unwrap();
+        }
+        assert_eq!(state.branches_view_state.section, BranchesSection::Branches);
+    }
+
+    #[test]
+    fn test_handle_toggle_remote() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let mut handler = BranchHandler;
+
+        assert!(!state.branches_view_state.show_remote);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::ToggleRemote).unwrap();
+        }
+        assert!(state.branches_view_state.show_remote);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::ToggleRemote).unwrap();
+        }
+        assert!(!state.branches_view_state.show_remote);
+    }
+
+    #[test]
+    fn test_handle_create_branch() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Branches;
+        let mut handler = BranchHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::Create).unwrap();
+        }
+
+        assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
+        assert_eq!(state.branches_view_state.input_action, Some(InputAction::CreateBranch));
+        assert!(state.branches_view_state.input_text.is_empty());
+        assert_eq!(state.branches_view_state.input_cursor, 0);
+    }
+
+    #[test]
+    fn test_handle_cancel_input() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.branches_view_state.focus = BranchesFocus::Input;
+        state.branches_view_state.input_action = Some(InputAction::CreateBranch);
+        state.branches_view_state.input_text = "test-branch".to_string();
+        state.branches_view_state.input_cursor = 5;
+        let mut handler = BranchHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::CancelInput).unwrap();
+        }
+
+        assert_eq!(state.branches_view_state.focus, BranchesFocus::List);
+        assert!(state.branches_view_state.input_action.is_none());
+        assert!(state.branches_view_state.input_text.is_empty());
+        assert_eq!(state.branches_view_state.input_cursor, 0);
+    }
+
+    #[test]
+    fn test_handle_list_in_graph_view() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Graph;
+        state.show_branch_panel = false;
+        let mut handler = BranchHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::List).unwrap();
+        }
+
+        assert!(state.show_branch_panel);
+    }
+
+    #[test]
+    fn test_handle_stash_save() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Branches;
+        let mut handler = BranchHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::StashSave).unwrap();
+        }
+
+        assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
+        assert_eq!(state.branches_view_state.input_action, Some(InputAction::SaveStash));
+        assert!(state.branches_view_state.input_text.is_empty());
+    }
+}

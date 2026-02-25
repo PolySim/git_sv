@@ -245,3 +245,77 @@ fn test_stash_save_and_apply() {
         );
     }
 }
+
+#[test]
+fn test_workflow_with_multiple_commits() {
+    let test_repo = TestRepo::new();
+
+    // Créer plusieurs fichiers avec plusieurs commits
+    test_repo.create_file("file1.txt", "content1");
+    test_repo.stage_file("file1.txt");
+    test_repo.commit("First commit by Alice");
+
+    test_repo.create_file("file2.txt", "content2");
+    test_repo.stage_file("file2.txt");
+    test_repo.commit("Second commit by Bob");
+
+    test_repo.create_file("file3.txt", "content3");
+    test_repo.stage_file("file3.txt");
+    test_repo.commit("Third commit by Alice - important feature");
+
+    // Vérifier qu'on a bien 4 commits (initial + 3)
+    let mut revwalk = test_repo.repo.revwalk().unwrap();
+    revwalk.push_head().unwrap();
+    let commit_count: usize = revwalk.count();
+    assert_eq!(commit_count, 4, "Devrait avoir 4 commits");
+
+    // Vérifier les messages
+    let last_msg = test_repo.last_commit_message().unwrap();
+    assert!(last_msg.contains("important feature"));
+}
+
+#[test]
+fn test_branch_merge_workflow() {
+    let test_repo = TestRepo::new();
+
+    // Créer une branche feature
+    test_repo.create_branch("feature");
+    test_repo.checkout_branch("feature");
+
+    // Ajouter des commits sur feature
+    test_repo.create_file("feature.txt", "new feature");
+    test_repo.stage_file("feature.txt");
+    test_repo.commit("Add feature");
+
+    // Retourner sur main
+    test_repo.checkout_branch("main");
+
+    // Vérifier qu'on est bien sur main
+    assert_eq!(test_repo.current_branch(), "main");
+
+    // Liste des branches
+    let branches = test_repo.list_branches();
+    assert!(branches.contains(&"feature".to_string()));
+    assert!(branches.contains(&"main".to_string()));
+
+    // Vérifier qu'on a bien 2 commits sur feature (initial + feature)
+    // en vérifiant que feature pointe vers un commit différent de main
+    let main_commit = test_repo
+        .repo
+        .head()
+        .unwrap()
+        .peel_to_commit()
+        .unwrap()
+        .id();
+
+    let feature_branch = test_repo
+        .repo
+        .find_branch("feature", git2::BranchType::Local)
+        .unwrap();
+    let feature_commit = feature_branch.get().peel_to_commit().unwrap().id();
+
+    assert_ne!(
+        main_commit, feature_commit,
+        "Main et feature devraient pointer vers des commits différents"
+    );
+}
