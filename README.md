@@ -1,20 +1,48 @@
-# git_sv - Interface Terminal Git
+# git_sv — Interface Git en Terminal
 
-Un visualiseur git en terminal avec graphe de commits style GitKraken, staging interactif, et gestion des branches/worktrees/stashes.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Un client git interactif en terminal (TUI) avec graphe de commits style GitKraken, staging interactif, gestion des branches/worktrees/stashes, résolution de conflits, et bien plus.
+
+![Rust](https://img.shields.io/badge/Rust-2021-orange) ![ratatui](https://img.shields.io/badge/TUI-ratatui-green)
+
+## Fonctionnalités
+
+- **Graphe de commits** — Visualisation style GitKraken avec lignes continues, couleurs stables par branche, et nœuds différenciés (commit, merge, sélection)
+- **Staging interactif** — Stage/unstage fichier par fichier, visualisation des diffs, écriture du message de commit
+- **Gestion des branches** — Créer, checkout, supprimer, renommer des branches locales et distantes
+- **Résolution de conflits** — Vue 3 panneaux (ours/theirs/résultat) avec résolution bloc par bloc ou ligne par ligne
+- **Git blame** — Annotation ligne par ligne d'un fichier
+- **Worktrees** — Créer, lister, supprimer des worktrees
+- **Stashes** — Sauvegarder, appliquer, pop, supprimer des stashes
+- **Opérations distantes** — Push, pull, fetch avec support SSH
+- **Recherche** — Rechercher des commits par message, auteur ou hash
+- **Filtres** — Filtrer le graphe par auteur, date, chemin de fichier, message
+- **Thème adaptatif** — Détection automatique du thème clair/sombre du terminal
+- **File watcher** — Rafraîchissement automatique quand le repository change
+
+---
 
 ## Installation
 
-### Via Homebrew (recommandé)
+### Via Homebrew (macOS)
 
 ```bash
 brew tap PolySim/tap
 brew install git_sv
 ```
 
-Pour mettre à jour vers la dernière version :
+Mise à jour :
 
 ```bash
 brew upgrade git_sv
+```
+
+### Via Scoop (Windows)
+
+```bash
+scoop bucket add git_sv https://github.com/PolySim/scoop-git_sv
+scoop install git_sv
 ```
 
 ### Via cargo
@@ -32,24 +60,56 @@ cargo build --release
 ./target/release/git_sv
 ```
 
-## Navigation entre les vues
+> **Note** : Sur certains systèmes Linux, si la compilation échoue à cause d'OpenSSL, utilisez :
+>
+> ```bash
+> cargo build --release --features vendored-ssl
+> ```
+
+---
+
+## Utilisation
+
+### Mode interactif (TUI)
+
+```bash
+# Dans un repository git
+git_sv
+
+# Spécifier un chemin
+git_sv --path /chemin/vers/repo
+git_sv -p /chemin/vers/repo
+```
+
+### Mode non-interactif (log)
+
+```bash
+# Afficher les 20 derniers commits
+git_sv log
+
+# Afficher les N derniers commits
+git_sv log -n 50
+git_sv log --max-count 50
+```
+
+---
+
+## Raccourcis clavier
+
+### Navigation entre les vues
 
 | Touche   | Action                                      |
 | -------- | ------------------------------------------- |
 | `1`      | Vue Graph (historique des commits)          |
 | `2`      | Vue Staging (staging et commits)            |
 | `3`      | Vue Branches (branches, worktrees, stashes) |
-| `?`      | Afficher/masquer l'aide                     |
+| `?`      | Afficher/masquer l'aide complète            |
 | `q`      | Quitter                                     |
 | `Ctrl+c` | Quitter (force)                             |
 
----
+### Vue Graph
 
-## Vue Graph (1)
-
-Visualisation du graphe de commits avec affichage style GitKraken.
-
-### Navigation
+**Navigation :**
 
 | Touche       | Action           |
 | ------------ | ---------------- |
@@ -60,52 +120,29 @@ Visualisation du graphe de commits avec affichage style GitKraken.
 | `Ctrl+d`     | Page suivante    |
 | `Ctrl+u`     | Page précédente  |
 
-### Focus et panneaux
+**Panneaux :**
 
-| Touche  | Action                                                 |
-| ------- | ------------------------------------------------------ |
-| `Tab`   | Changer de panneau (Graph → Fichiers → Détail → Graph) |
-| `Enter` | Sélectionner / entrer dans un panneau                  |
-| `Esc`   | Retour au panneau précédent                            |
+| Touche  | Action                                          |
+| ------- | ----------------------------------------------- |
+| `Tab`   | Cycle de focus : Graph → Fichiers → Détail/Diff |
+| `Enter` | Sélectionner / entrer dans un panneau           |
+| `Esc`   | Retour au panneau précédent                     |
 
-### Quand le focus est sur "Fichiers"
+**Actions :**
 
-| Touche    | Action                              |
-| --------- | ----------------------------------- |
-| `j` / `k` | Naviguer dans la liste des fichiers |
-| `Enter`   | Voir le diff du fichier             |
+| Touche | Action                                  |
+| ------ | --------------------------------------- |
+| `b`    | Overlay liste des branches              |
+| `r`    | Rafraîchir                              |
+| `p`    | Push                                    |
+| `P`    | Pull                                    |
+| `f`    | Fetch                                   |
+| `y`    | Copier le hash du commit                |
+| `/`    | Ouvrir la recherche                     |
+| `F`    | Ouvrir les filtres                      |
+| `v`    | Toggle mode diff (unified/side-by-side) |
 
-### Quand le focus est sur "Détail" (diff)
-
-| Touche              | Action                    |
-| ------------------- | ------------------------- |
-| `j` / `k`           | Scroller le diff          |
-| `Ctrl+d` / `Ctrl+u` | Page down/up dans le diff |
-
-### Actions Git
-
-| Touche | Action                       |
-| ------ | ---------------------------- |
-| `b`    | Liste des branches (overlay) |
-| `r`    | Rafraîchir                   |
-
-### Dans l'overlay Branches
-
-| Touche      | Action              |
-| ----------- | ------------------- |
-| `j` / `k`   | Naviguer            |
-| `Enter`     | Checkout la branche |
-| `n`         | Nouvelle branche    |
-| `d`         | Supprimer branche   |
-| `Esc` / `b` | Fermer              |
-
----
-
-## Vue Staging (2)
-
-Interface de staging et création de commits.
-
-### Layout
+### Vue Staging
 
 ```
 ┌──────────────┬──────────────┐
@@ -117,211 +154,196 @@ Interface de staging et création de commits.
 └─────────────────────────────┘
 ```
 
-### Navigation entre panneaux
+| Contexte | Touche        | Action                         |
+| -------- | ------------- | ------------------------------ |
+| Unstaged | `s` / `Enter` | Stage le fichier sélectionné   |
+| Unstaged | `a`           | Stage tous les fichiers        |
+| Unstaged | `x`           | Discard le fichier             |
+| Staged   | `u` / `Enter` | Unstage le fichier sélectionné |
+| Staged   | `U`           | Unstage tout                   |
+| Global   | `c`           | Activer le champ de message    |
+| Message  | `Enter`       | Valider le commit              |
+| Message  | `Esc`         | Annuler la saisie              |
 
-| Touche    | Action                                     |
-| --------- | ------------------------------------------ |
-| `Tab`     | Cycle: Unstaged → Staged → Diff → Unstaged |
-| `1` / `3` | Aller à une autre vue                      |
+### Vue Branches
 
-### Dans "Unstaged" (fichiers non stagés)
+3 onglets : **Branches** | **Worktrees** | **Stashes**
 
-| Touche        | Action                       |
-| ------------- | ---------------------------- |
-| `j` / `k`     | Naviguer dans les fichiers   |
-| `s` / `Enter` | Stage le fichier sélectionné |
-| `a`           | Stage tous les fichiers      |
-
-### Dans "Staged" (fichiers stagés)
-
-| Touche        | Action                         |
-| ------------- | ------------------------------ |
-| `j` / `k`     | Naviguer dans les fichiers     |
-| `u` / `Enter` | Unstage le fichier sélectionné |
-| `U`           | Unstage tous les fichiers      |
-
-### Dans "Diff" (visualisation des changements)
-
-| Touche        | Action            |
-| ------------- | ----------------- |
-| `j` / `k`     | Scroller le diff  |
-| `Tab` / `Esc` | Retour à Unstaged |
-
-### Créer un commit
-
-| Touche      | Action                                                     |
-| ----------- | ---------------------------------------------------------- |
-| `c`         | Activer le champ de message                                |
-| `Entrée`    | Valider le commit (si message non vide et fichiers stagés) |
-| `Esc`       | Annuler la saisie                                          |
-| `←` / `→`   | Déplacer le curseur                                        |
-| `Backspace` | Supprimer un caractère                                     |
-
----
-
-## Vue Branches (3)
-
-Gestion des branches, worktrees et stashes avec 3 onglets.
-
-### Navigation générale
-
-| Touche      | Action                                            |
-| ----------- | ------------------------------------------------- |
-| `Tab`       | Section suivante (Branches → Worktrees → Stashes) |
-| `Shift+Tab` | Section précédente                                |
-| `1` / `2`   | Aller à une autre vue                             |
-
-### Onglet Branches
-
-#### Navigation
-
-| Touche    | Action                           |
-| --------- | -------------------------------- |
-| `j` / `k` | Naviguer dans les branches       |
-| `R`       | Toggle affichage branches remote |
-
-#### Actions
-
-| Touche  | Action                                       |
-| ------- | -------------------------------------------- |
-| `Enter` | Checkout la branche sélectionnée             |
-| `n`     | Créer une nouvelle branche (ouvre un prompt) |
-| `d`     | Supprimer la branche sélectionnée            |
-| `r`     | Renommer la branche (ouvre un prompt)        |
-
-**Note** : Impossible de supprimer la branche courante (HEAD).
-
-### Onglet Worktrees
-
-#### Navigation
-
-| Touche    | Action                      |
-| --------- | --------------------------- |
-| `j` / `k` | Naviguer dans les worktrees |
-
-#### Actions
-
-| Touche | Action                                             |
-| ------ | -------------------------------------------------- |
-| `n`    | Créer un worktree (format: `nom chemin [branche]`) |
-| `d`    | Supprimer le worktree sélectionné                  |
-
-**Note** : Impossible de supprimer le worktree principal.
-
-### Onglet Stashes
-
-#### Navigation
-
-| Touche    | Action                    |
-| --------- | ------------------------- |
-| `j` / `k` | Naviguer dans les stashes |
-
-#### Actions
-
-| Touche | Action                                                 |
-| ------ | ------------------------------------------------------ |
-| `a`    | Appliquer le stash (sans supprimer)                    |
-| `p`    | Pop le stash (appliquer + supprimer)                   |
-| `d`    | Supprimer le stash                                     |
-| `s`    | Sauvegarder un stash (ouvre un prompt pour le message) |
-
-### Dans un prompt d'input
-
-| Touche      | Action                 |
-| ----------- | ---------------------- |
-| `Entrée`    | Confirmer              |
-| `Esc`       | Annuler                |
-| `←` / `→`   | Déplacer le curseur    |
-| `Backspace` | Supprimer un caractère |
+| Contexte  | Touche      | Action                      |
+| --------- | ----------- | --------------------------- |
+| Global    | `Tab`       | Section suivante            |
+| Global    | `Shift+Tab` | Section précédente          |
+| Branches  | `Enter`     | Checkout la branche         |
+| Branches  | `n`         | Créer une branche           |
+| Branches  | `d`         | Supprimer la branche        |
+| Branches  | `r`         | Renommer la branche         |
+| Branches  | `R`         | Toggle branches remote      |
+| Branches  | `m`         | Merge dans la branche       |
+| Worktrees | `n`         | Créer un worktree           |
+| Worktrees | `d`         | Supprimer le worktree       |
+| Stashes   | `s`         | Sauvegarder un stash        |
+| Stashes   | `a`         | Appliquer (sans supprimer)  |
+| Stashes   | `p`         | Pop (appliquer + supprimer) |
+| Stashes   | `d`         | Supprimer le stash          |
 
 ---
 
 ## Caractéristiques du graphe
 
-- **Lignes continues** : Les branches s'affichent avec des lignes fluides (style GitKraken)
-- **Couleurs stables** : Chaque branche garde sa couleur du début à la fin
-- **Merges visibles** : Les merges et forks sont représentés avec des courbes
-- **Nœuds** :
-  - `●` Commit normal
-  - `○` Merge commit
-  - `◉` Commit sélectionné
+- **Lignes continues** — Les branches s'affichent avec des courbes fluides Unicode
+- **Couleurs stables** — Chaque branche conserve sa couleur sur toute sa durée
+- **Merges visibles** — Forks et merges représentés avec des courbes
+- **Nœuds** : `●` commit normal, `○` merge commit, `◉` commit sélectionné
+- **Infos** : hash (7 chars), branches/tags colorés, message, auteur, date relative
 
-## Infos affichées
+---
 
-Pour chaque commit :
+## Architecture du projet
 
-- Hash (7 caractères)
-- Branches et tags (labels colorés)
-- Message de commit
-- Auteur
-- Date
+```
+src/
+├── main.rs              # Point d'entrée, parsing CLI (clap)
+├── app.rs               # Orchestration de l'application
+├── error.rs             # Types d'erreurs custom (thiserror)
+├── error_display.rs     # Formatage des messages d'erreur
+├── terminal.rs          # Setup/teardown du terminal (raw mode)
+├── watcher.rs           # Surveillance des changements git
+│
+├── git/                 # Couche d'abstraction git (git2)
+│   ├── repo.rs          #   Wrapper GitRepo
+│   ├── graph.rs         #   Algorithme de construction du graphe
+│   ├── commit.rs        #   Opérations de commit
+│   ├── branch.rs        #   Gestion des branches
+│   ├── stash.rs         #   Opérations stash
+│   ├── merge.rs         #   Opérations merge
+│   ├── diff.rs          #   Génération de diffs
+│   ├── blame.rs         #   Git blame
+│   ├── conflict.rs      #   Détection et résolution de conflits
+│   ├── remote.rs        #   Push, pull, fetch (SSH)
+│   ├── search.rs        #   Recherche de commits
+│   ├── worktree.rs      #   Gestion des worktrees
+│   └── discard.rs       #   Discard des changements
+│
+├── handler/             # Gestionnaires d'événements
+│   ├── mod.rs           #   Boucle événementielle (EventHandler)
+│   ├── dispatcher.rs    #   Routage des actions
+│   ├── navigation.rs    #   Navigation (scroll, sélection, focus)
+│   ├── staging.rs       #   Stage, unstage, commit, discard
+│   ├── branch.rs        #   Checkout, create, delete, rename
+│   ├── conflict.rs      #   Résolution de conflits
+│   ├── git.rs           #   Push, pull, fetch, cherry-pick
+│   ├── search.rs        #   Recherche
+│   ├── edit.rs          #   Édition de texte (prompts)
+│   └── filter.rs        #   Filtres sur le graphe
+│
+├── state/               # État de l'application
+│   ├── mod.rs           #   AppState (état central)
+│   ├── action/          #   Enums d'actions (AppAction et sous-enums)
+│   ├── view/            #   États spécifiques à chaque vue
+│   ├── selection.rs     #   Sélection générique dans une liste
+│   ├── cache.rs         #   Cache LRU pour les diffs
+│   └── filter.rs        #   État des filtres
+│
+├── ui/                  # Rendu de l'interface
+│   ├── mod.rs           #   Dispatcher de rendu par vue
+│   ├── graph_view.rs    #   Rendu du graphe git
+│   ├── detail_view.rs   #   Panneau détail d'un commit
+│   ├── diff_view.rs     #   Rendu des diffs (unified/side-by-side)
+│   ├── staging_view.rs  #   Vue staging
+│   ├── branches_view.rs #   Vue branches/worktrees/stashes
+│   ├── conflicts_view.rs#   Vue résolution de conflits
+│   ├── blame_view.rs    #   Vue blame
+│   ├── input.rs         #   Mapping des touches → actions
+│   ├── theme.rs         #   Système de thème (dark/light)
+│   ├── common/          #   Composants UI réutilisables
+│   └── ...              #   Autres composants (popups, barres, etc.)
+│
+├── utils/               # Utilitaires
+│   └── time.rs          #   Formatage de dates relatives
+│
+└── test_utils/          # Utilitaires de test
+    ├── mock_repo.rs     #   Mock repository pour les tests
+    ├── test_state.rs    #   Builder d'état de test
+    └── assertions.rs    #   Macros d'assertions custom
+```
 
-Pour chaque fichier modifié :
+Pour plus de détails, voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- Statut (Added, Modified, Deleted, Renamed)
-- Nombre de lignes ajoutées/supprimées
-
-## Configuration
-
-Le programme détecte automatiquement le repository git dans le répertoire courant ou les répertoires parents.
+---
 
 ## Développement
 
+### Prérequis
+
+- **Rust** 2021 edition (1.56+)
+- **libgit2** (fourni par la crate `git2`, ou utiliser `--features vendored-ssl`)
+- **OpenSSL** (requis pour les opérations remote, sauf si `vendored-ssl`)
+
 ### Stack technique
 
-- **Langage** : Rust
-- **TUI Framework** : ratatui
-- **Terminal Backend** : crossterm
-- **Git** : git2
-- **CLI** : clap (derive)
-- **Gestion d'erreurs** : anyhow, thiserror
-- **Dates** : chrono
+| Crate            | Rôle                            |
+| ---------------- | ------------------------------- |
+| `ratatui` 0.29   | Framework TUI                   |
+| `crossterm` 0.28 | Backend terminal cross-platform |
+| `git2` 0.19      | Bindings libgit2                |
+| `clap` 4         | Parsing CLI (derive)            |
+| `anyhow`         | Gestion d'erreurs applicatives  |
+| `thiserror`      | Types d'erreurs custom          |
+| `chrono`         | Formatage des dates             |
+| `arboard`        | Accès au presse-papiers         |
+| `lru`            | Cache LRU pour les diffs        |
+| `terminal-light` | Détection du thème terminal     |
 
-### Commandes utiles
+### Commandes
 
 ```bash
 # Build
 cargo build
-
-# Build release (optimisé)
 cargo build --release
 
 # Exécuter
 cargo run
+cargo run -- --path /chemin/vers/repo
 cargo run -- log -n 10
 
-# Tests (35 tests)
+# Tests (127 tests)
 cargo test
-cargo test module_name::
-cargo test -- --nocapture
+cargo test nom_du_test
+cargo test module::          # Tests d'un module
+cargo test -- --nocapture    # Avec la sortie visible
+
+# Couverture (nécessite cargo-tarpaulin)
+cargo tarpaulin --out Html --output-dir coverage
 
 # Formatage
 cargo fmt
 cargo fmt -- --check
 
-# Lint et vérifications
+# Lint
 cargo clippy
 cargo clippy --all-features -- -D warnings
+
+# Vérification rapide
 cargo check
 ```
 
-### Convention de code
+### Conventions de code
 
-- **Imports** : std → crates externes → modules internes
-- **Noms** : Types (PascalCase), fonctions (snake_case), constantes (UPPER_SNAKE_CASE)
-- **Commentaires** : Français pour les commentaires inline
-- **Documentation** : Anglais pour les doc comments (`///`)
-- **Gestion d'erreurs** : Utiliser `anyhow::Result` ou `crate::error::Result`
-- **Pattern matching** : Exhaustif avec `_` plutôt que `if/else`
+- **Imports** : `std` → crates externes → modules internes (`use crate::`)
+- **Nommage** : `PascalCase` (types), `snake_case` (fonctions), `UPPER_SNAKE_CASE` (constantes)
+- **Commentaires** : en français
+- **Erreurs** : `crate::error::Result` dans les modules, `anyhow::Result` dans `main.rs`
+- **Pattern matching** : exhaustif avec `_`, pas de chaînes `if/else`
 
-### Checklist avant de commiter
+### Checklist avant commit
 
-1. ✅ `cargo build` réussit
-2. ✅ `cargo test` passe (tous les 35 tests)
-3. ✅ `cargo fmt` appliqué
-4. ✅ `cargo clippy` sans warnings
-5. ✅ Code suit les conventions de nommage
+1. `cargo build` réussit
+2. `cargo test` passe (127 tests)
+3. `cargo fmt` appliqué
+4. `cargo clippy` sans warnings
+
+---
 
 ## Licence
 
-MIT
+MIT — voir [LICENSE](LICENSE)
