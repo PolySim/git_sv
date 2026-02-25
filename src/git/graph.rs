@@ -389,22 +389,21 @@ fn build_connection_row(
 
             // Lignes horizontales entre from_col et to_col
             for col in (from_col + 1)..to_col {
-                if cells[col]
-                    .as_ref()
-                    .map_or(false, |c| c.edge_type == EdgeType::Vertical)
-                {
-                    // Croisement avec une ligne verticale existante.
-                    let existing_color = cells[col].as_ref().unwrap().color_index;
-                    cells[col] = Some(GraphCell {
-                        edge_type: EdgeType::Cross,
-                        color_index: existing_color,
-                    });
-                } else {
-                    cells[col] = Some(GraphCell {
-                        edge_type: EdgeType::Horizontal,
-                        color_index: color,
-                    });
+                if let Some(cell) = cells[col].as_ref() {
+                    if cell.edge_type == EdgeType::Vertical {
+                        // Croisement avec une ligne verticale existante.
+                        let existing_color = cell.color_index;
+                        cells[col] = Some(GraphCell {
+                            edge_type: EdgeType::Cross,
+                            color_index: existing_color,
+                        });
+                        continue;
+                    }
                 }
+                cells[col] = Some(GraphCell {
+                    edge_type: EdgeType::Horizontal,
+                    color_index: color,
+                });
             }
 
             // Courbe d'entrée à to_col
@@ -421,22 +420,21 @@ fn build_connection_row(
 
             // Lignes horizontales entre to_col et from_col
             for col in (to_col + 1)..from_col {
-                if cells[col]
-                    .as_ref()
-                    .map_or(false, |c| c.edge_type == EdgeType::Vertical)
-                {
-                    // Croisement avec une ligne verticale existante.
-                    let existing_color = cells[col].as_ref().unwrap().color_index;
-                    cells[col] = Some(GraphCell {
-                        edge_type: EdgeType::Cross,
-                        color_index: existing_color,
-                    });
-                } else {
-                    cells[col] = Some(GraphCell {
-                        edge_type: EdgeType::Horizontal,
-                        color_index: color,
-                    });
+                if let Some(cell) = cells[col].as_ref() {
+                    if cell.edge_type == EdgeType::Vertical {
+                        // Croisement avec une ligne verticale existante.
+                        let existing_color = cell.color_index;
+                        cells[col] = Some(GraphCell {
+                            edge_type: EdgeType::Cross,
+                            color_index: existing_color,
+                        });
+                        continue;
+                    }
                 }
+                cells[col] = Some(GraphCell {
+                    edge_type: EdgeType::Horizontal,
+                    color_index: color,
+                });
             }
 
             // Courbe d'entrée à to_col
@@ -493,6 +491,7 @@ fn determine_branch_name(
     if let Some(first_ref) = refs.first() {
         let name = &first_ref.name;
         if name.starts_with("refs/heads/") {
+            // SAFETY: On vient de vérifier que la chaîne commence par ce préfixe
             return Some(name.strip_prefix("refs/heads/").unwrap().to_string());
         }
         if !name.contains('/') {

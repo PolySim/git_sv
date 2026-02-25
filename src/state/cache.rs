@@ -201,7 +201,9 @@ pub struct DiffCache {
 impl DiffCache {
     /// Crée un nouveau cache avec la capacité donnée.
     pub fn new(capacity: usize) -> Self {
-        let cap = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::new(1).unwrap());
+        // SAFETY: 1 est toujours non-zero, donc new_unchecked est sûr
+        const DEFAULT_CAPACITY: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(1) };
+        let cap = NonZeroUsize::new(capacity).unwrap_or(DEFAULT_CAPACITY);
         Self {
             cache: LruCache::new(cap),
         }

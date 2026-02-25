@@ -247,7 +247,8 @@ fn parse_date(date_str: &str) -> Option<i64> {
     use chrono::NaiveDate;
     NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
         .ok()
-        .map(|date| date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp())
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
+        .map(|dt| dt.and_utc().timestamp())
 }
 
 #[cfg(test)]

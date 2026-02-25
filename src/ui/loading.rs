@@ -4,7 +4,7 @@
 
 use crate::ui::common::centered_rect;
 use ratatui::{
-    layout::{Constraint, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -105,7 +105,7 @@ pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rec
 }
 
 /// Rend un spinner inline (pour les status bar).
-pub fn render_inline(spinner: &mut LoadingSpinner) -> Line {
+pub fn render_inline(spinner: &mut LoadingSpinner) -> Line<'_> {
     let spinner_char = spinner.current_char();
     Line::from(vec![
         Span::styled(

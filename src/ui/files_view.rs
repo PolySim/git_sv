@@ -64,7 +64,7 @@ pub fn render(
 }
 
 /// Construit les items pour les fichiers d'un commit.
-fn build_commit_file_items(files: &[DiffFile]) -> Vec<ListItem> {
+fn build_commit_file_items(files: &[DiffFile]) -> Vec<ListItem<'_>> {
     files
         .iter()
         .map(|file| {
@@ -93,7 +93,7 @@ fn build_commit_file_items(files: &[DiffFile]) -> Vec<ListItem> {
 }
 
 /// Construit les items pour le status du working directory.
-fn build_status_items(entries: &[StatusEntry]) -> Vec<ListItem> {
+fn build_status_items(entries: &[StatusEntry]) -> Vec<ListItem<'_>> {
     entries
         .iter()
         .map(|entry| {

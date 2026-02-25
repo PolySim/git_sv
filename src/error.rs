@@ -9,6 +9,30 @@ pub enum GitSvError {
     #[error("Erreur git : {0}")]
     Git(#[from] git2::Error),
 
+    /// Erreur réseau (push/pull/fetch)
+    #[error("Erreur réseau : {message}")]
+    NetworkError { message: String },
+
+    /// Aucun remote configuré
+    #[error("Aucun remote configuré. Ajoutez un remote avec : git remote add origin <url>")]
+    NoRemoteConfigured,
+
+    /// Erreur d'authentification SSH
+    #[error("Erreur d'authentification SSH. Vérifiez vos clés SSH : {details}")]
+    SshAuthentication { details: String },
+
+    /// Erreur de permission (push refusé)
+    #[error("Push refusé : {message}. Vérifiez vos permissions ou faites un pull d'abord.")]
+    PushRejected { message: String },
+
+    /// Repository verrouillé (index.lock présent)
+    #[error("Repository verrouillé. Une autre opération git est en cours. Attendez ou supprimez .git/index.lock")]
+    RepositoryLocked,
+
+    /// HEAD corrompu ou invalide
+    #[error("HEAD corrompu ou invalide dans {path}")]
+    CorruptedHead { path: PathBuf },
+
     /// Erreur d'entrée/sortie fichier avec contexte
     #[error("Erreur I/O ({context}): {source}")]
     Io {

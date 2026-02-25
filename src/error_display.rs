@@ -19,6 +19,12 @@ pub fn format_error_message(err: &GitSvError) -> String {
             format!("❌ Index {index} hors limites (max: {max})")
         }
         GitSvError::Other(msg) => format!("❌ {msg}"),
+        GitSvError::NetworkError { message } => format!("❌ Réseau: {message}"),
+        GitSvError::NoRemoteConfigured => "❌ Aucun remote configuré".to_string(),
+        GitSvError::SshAuthentication { details } => format!("❌ Authentification SSH: {details}"),
+        GitSvError::PushRejected { message } => format!("❌ Push refusé: {message}"),
+        GitSvError::RepositoryLocked => "❌ Repository verrouillé".to_string(),
+        GitSvError::CorruptedHead { path } => format!("❌ HEAD corrompu: {}", path.display()),
     }
 }
 
