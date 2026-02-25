@@ -37,6 +37,7 @@ fn handle_move_up(state: &mut AppState) {
             if state.show_branch_panel {
                 if state.branch_selected > 0 {
                     state.branch_selected -= 1;
+                    state.dirty = true;
                 }
             } else if state.selected_index > 0 {
                 let new_index = state.selected_index - 1;
@@ -64,6 +65,7 @@ fn handle_move_down(state: &mut AppState) {
             if state.show_branch_panel {
                 if state.branch_selected + 1 < state.branches.len() {
                     state.branch_selected += 1;
+                    state.dirty = true;
                 }
             } else if state.selected_index + 1 < state.graph.len() {
                 let new_index = state.selected_index + 1;
@@ -89,6 +91,7 @@ fn handle_page_up(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, -10);
+            state.dirty = true;
         }
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {
@@ -106,6 +109,7 @@ fn handle_page_down(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, 10);
+            state.dirty = true;
         }
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {
@@ -123,6 +127,7 @@ fn handle_go_top(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, -10000);
+            state.dirty = true;
         }
         _ => {
             if !state.show_branch_panel {
@@ -138,6 +143,7 @@ fn handle_go_bottom(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, 10000);
+            state.dirty = true;
         }
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {

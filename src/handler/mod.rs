@@ -58,7 +58,7 @@ impl EventHandler {
         loop {
             // Rendu
             terminal.draw(|frame| {
-                ui::render(frame, &self.state);
+                ui::render(frame, &mut self.state);
             })?;
 
             // Vérifier les changements dans le repository git (auto-refresh)
@@ -111,6 +111,9 @@ impl EventHandler {
         };
 
         self.state.status_entries = self.state.repo.status().unwrap_or_default();
+
+        // Synchroniser graph_view.rows avec le graphe reconstruit
+        self.state.graph_view.rows.set_items(self.state.graph.clone());
 
         // Synchronisation de la sélection - ne pas dépasser les bornes
         if self.state.selected_index >= self.state.graph.len() && !self.state.graph.is_empty() {

@@ -20,6 +20,9 @@ impl App {
             .unwrap_or_default();
         state.status_entries = state.repo.status().unwrap_or_default();
 
+        // Synchroniser graph_view.rows avec le graphe initial
+        state.graph_view.rows.set_items(state.graph.clone());
+
         // Charger les données initiales.
         if let Some(row) = state.graph.get(state.selected_index) {
             state.commit_files = state.repo.commit_diff(row.node.oid).unwrap_or_default();

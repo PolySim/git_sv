@@ -31,7 +31,7 @@ use crate::state::{AppState, FocusPanel, ViewMode};
 use ratatui::Frame;
 
 /// Point d'entrée du rendu : dessine tous les panneaux.
-pub fn render(frame: &mut Frame, state: &AppState) {
+pub fn render(frame: &mut Frame, state: &mut AppState) {
     // Dispatcher le rendu selon le mode de vue
     match state.view_mode {
         ViewMode::Graph => {
@@ -127,7 +127,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 }
 
 /// Rend la vue Graph (vue principale).
-fn render_graph_view(frame: &mut Frame, state: &AppState) {
+fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
     let layout = layout::build_layout(frame.area(), state.search_state.is_active);
 
     // Rendu de la status bar en haut.
@@ -165,7 +165,7 @@ fn render_graph_view(frame: &mut Frame, state: &AppState) {
         state.selected_index,
         total_commits,
         layout.graph,
-        &mut state.graph_state.clone(),
+        &mut state.graph_state,
         is_graph_focused,
     );
 
