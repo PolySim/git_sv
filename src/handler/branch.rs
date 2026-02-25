@@ -104,9 +104,23 @@ fn handle_create(state: &mut AppState) -> Result<()> {
 fn handle_delete(state: &mut AppState) -> Result<()> {
     use crate::ui::confirm_dialog::ConfirmAction;
 
-    if let Some(branch_info) = state.branches.get(state.branch_selected) {
-        let branch_name = branch_info.name.clone();
-        state.pending_confirmation = Some(ConfirmAction::BranchDelete(branch_name));
+    let selected_branch = if state.view_mode == ViewMode::Branches {
+        // Lire depuis le nouvel état BranchesViewState
+        state.branches_view_state.selected_branch()
+    } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
+        // Legacy: panel overlay
+        state.branches.get(state.branch_selected)
+    } else {
+        None
+    };
+
+    if let Some(branch) = selected_branch {
+        // Empêcher la suppression de la branche courante
+        if branch.is_head {
+            state.set_flash_message("Impossible de supprimer la branche courante".to_string());
+            return Ok(());
+        }
+        state.pending_confirmation = Some(ConfirmAction::BranchDelete(branch.name.clone()));
     }
     Ok(())
 }
