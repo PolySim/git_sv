@@ -158,13 +158,19 @@ fn handle_switch_focus(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
+// NOTE: Ces fonctions sont des stubs car la fonctionnalité de stash individuel
+// n'est pas nativement supportée par git2. Pour l'implémenter, il faudrait:
+// 1. Créer un stash à partir du fichier sélectionné uniquement
+// 2. Stash tous les fichiers unstaged sans affecter les fichiers staged
+// Cela nécessite une manipulation complexe de l'index qui n'est pas prioritaire
+// pour le MVP. La fonctionnalité existe via `git stash push <path>` en CLI.
+#[allow(dead_code)]
 fn handle_stash_selected_file(_state: &mut AppState) -> Result<()> {
-    // Action placeholder - sera implémentée
     Ok(())
 }
 
+#[allow(dead_code)]
 fn handle_stash_unstaged_files(_state: &mut AppState) -> Result<()> {
-    // Action placeholder - sera implémentée
     Ok(())
 }
 

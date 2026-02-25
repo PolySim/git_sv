@@ -9,9 +9,12 @@ use crate::state::{
     StagingFocus, ViewMode,
 };
 
+/// Timeout par défaut pour le polling des événements (ms).
+const DEFAULT_INPUT_TIMEOUT_MS: u64 = 100;
+
 /// Poll un événement clavier et retourne l'action correspondante.
 pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
-    handle_input_with_timeout(state, 100)
+    handle_input_with_timeout(state, DEFAULT_INPUT_TIMEOUT_MS)
 }
 
 /// Poll un événement avec un timeout configurable (clavier + souris).

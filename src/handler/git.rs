@@ -309,8 +309,12 @@ fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
+// NOTE: Cette fonction est un stub car l'affichage de la liste des branches
+// est géré directement par la vue Branches (mode '3') via l'état local.
+// Le raccourci 'b' dans le graph view ouvre un overlay simple qui utilise
+// déjà la logique de branches_view.rs. Une implémentation complète nécessiterait
+// un widget popup dédié qui n'est pas prioritaire pour le MVP.
+#[allow(dead_code)]
 fn handle_branch_list(_state: &mut AppState) -> Result<()> {
-    // Charge et affiche la liste des branches
-    // Cette fonction nécessite une logique UI
     Ok(())
 }

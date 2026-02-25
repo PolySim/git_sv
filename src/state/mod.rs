@@ -24,6 +24,8 @@ use std::time::{Duration, Instant};
 
 /// Nombre maximum de commits à charger.
 pub const MAX_COMMITS: usize = 200;
+/// Capacité du cache LRU pour les diffs (nombre d'entrées).
+const DIFF_CACHE_CAPACITY: usize = 50;
 
 /// État principal de l'application.
 pub struct AppState {
@@ -194,7 +196,7 @@ impl AppState {
             show_branch_panel: false,
             branch_selected: 0,
             should_quit: false,
-            diff_cache: DiffCache::new(50),
+            diff_cache: DiffCache::new(DIFF_CACHE_CAPACITY),
             graph_filter: GraphFilter::new(),
             filter_popup: FilterPopupState::new(),
         };
