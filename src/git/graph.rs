@@ -175,7 +175,14 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
         let parent_assignments =
             assign_parent_columns(&mut active_columns, column, ci, color_index);
 
+        // Compacter : supprimer les colonnes terminales vides (celles sans expected_oid).
+        // On ne supprime que par la droite pour maintenir l'alignement des colonnes internes.
+        while active_columns.last().map_or(false, |s| s.expected_oid.is_none()) {
+            active_columns.pop();
+        }
+
         // Générer la ligne de connexion vers le commit suivant (s'il existe).
+        // La connexion est générée APRÈS compaction pour refléter l'état compacté.
         let connection = if commit_idx + 1 < commits.len() {
             Some(build_connection_row(
                 &active_columns,
@@ -639,5 +646,67 @@ mod tests {
         } else {
             panic!("Commit non trouvé dans refs_map");
         }
+    }
+
+    #[test]
+    fn test_column_compaction() {
+        // Test que les colonnes terminales vides sont compactées
+        use git2::Oid;
+
+        // Simuler un scénario avec 3 colonnes, où la colonne 2 devient vide
+        let mut active_columns: Vec<ColumnState> = vec![
+            ColumnState {
+                expected_oid: Some(Oid::from_bytes(&[1; 20]).unwrap()),
+                color_index: 0,
+                branch_name: None,
+            },
+            ColumnState {
+                expected_oid: Some(Oid::from_bytes(&[2; 20]).unwrap()),
+                color_index: 1,
+                branch_name: None,
+            },
+            ColumnState {
+                expected_oid: None, // Cette colonne est vide
+                color_index: 0,
+                branch_name: None,
+            },
+        ];
+
+        // Compacter
+        while active_columns.last().map_or(false, |s| s.expected_oid.is_none()) {
+            active_columns.pop();
+        }
+
+        // La colonne vide en fin devrait être supprimée
+        assert_eq!(active_columns.len(), 2, "La colonne vide terminale devrait être supprimée");
+        assert!(active_columns[0].expected_oid.is_some());
+        assert!(active_columns[1].expected_oid.is_some());
+
+        // Test avec colonnes vides au milieu (ne doivent PAS être supprimées)
+        let mut active_columns2: Vec<ColumnState> = vec![
+            ColumnState {
+                expected_oid: Some(Oid::from_bytes(&[1; 20]).unwrap()),
+                color_index: 0,
+                branch_name: None,
+            },
+            ColumnState {
+                expected_oid: None, // Vide au milieu
+                color_index: 0,
+                branch_name: None,
+            },
+            ColumnState {
+                expected_oid: Some(Oid::from_bytes(&[2; 20]).unwrap()),
+                color_index: 1,
+                branch_name: None,
+            },
+        ];
+
+        // Compacter
+        while active_columns2.last().map_or(false, |s| s.expected_oid.is_none()) {
+            active_columns2.pop();
+        }
+
+        // Seule la dernière colonne est supprimée si vide, pas celle du milieu
+        assert_eq!(active_columns2.len(), 3, "Les colonnes vides au milieu ne devraient pas être supprimées");
     }
 }
