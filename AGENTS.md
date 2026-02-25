@@ -24,6 +24,12 @@ cargo run -- --path /path/to/repo
 
 # Run in non-interactive mode (print commit log)
 cargo run -- log
+
+# Build with profiling feature
+cargo build --features profiling
+
+# Build with vendored OpenSSL
+cargo build --features vendored-ssl
 ```
 
 ---
@@ -45,6 +51,12 @@ cargo test -- --nocapture
 
 # Run tests matching a pattern
 cargo test pattern
+
+# Run integration tests only
+cargo test --test integration_test
+
+# Run tests and generate coverage (requires cargo-tarpaulin)
+cargo tarpaulin --out Html --output-dir coverage
 ```
 
 ---
@@ -102,34 +114,20 @@ use crate::git::GitRepo;
 - Use `anyhow::Result` for application-level errors (main.rs)
 - Use `thiserror` for custom error enums
 - Propagate errors with `?` operator
-- Define custom errors with `#[derive(Debug, Error)]` and `#[error(...)]`
+- Use `IoErrorContext` trait for adding context to I/O errors
 
 ```rust
-// Custom errors (defined in main.rs)
-#[derive(Debug, Error)]
-pub enum GitSvError {
-    #[error("Erreur git : {0}")]
-    Git(#[from] git2::Error),
+use crate::error::{GitSvError, IoErrorContext, Result};
 
-    #[error("Erreur I/O : {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("Erreur terminal : {0}")]
-    Terminal(String),
-
-    #[error("Erreur clipboard : {0}")]
-    Clipboard(String),
-}
-
-/// Alias pratique pour Result avec GitSvError.
-pub type Result<T> = std::result::Result<T, GitSvError>;
+// With context
+let file = File::open(path).with_context(|| format!("Failed to open {}", path))?;
 ```
 
 ### Comments & Documentation
 - Code comments in **French** (follow existing convention)
 - Use `///` for public API documentation
 - Use `//` for inline comments
-- Document complex algorithms and business logic
+- Use `//!` for module-level documentation
 
 ```rust
 /// Rafraîchit les données depuis le repository git.
@@ -141,6 +139,7 @@ pub fn refresh(&mut self) -> Result {
 ### Structs & Enums
 - Derive common traits: `Debug`, `Clone`, `PartialEq` when applicable
 - Use named fields over tuple structs for clarity
+- Use `pub` visibility modifier explicitly
 
 ```rust
 #[derive(Debug, Clone, PartialEq)]
@@ -148,11 +147,6 @@ pub enum AppAction {
     Quit,
     MoveUp,
     MoveDown,
-}
-
-pub struct App {
-    pub repo: GitRepo,
-    pub selected_index: usize,
 }
 ```
 
@@ -173,66 +167,14 @@ match action {
 }
 ```
 
-### Module Organization
-```
-src/
-├── main.rs          # Entry point, CLI parsing, error types
-├── app.rs           # App state and event loop
-├── event.rs         # Event handling
-├── state.rs         # Application state
-├── terminal.rs      # Terminal setup/teardown
-├── git/             # Git operations
-│   ├── mod.rs       # Re-exports
-│   ├── repo.rs      # Repository wrapper
-│   └── ...
-└── ui/              # UI rendering
-    ├── mod.rs
-    └── ...
-```
-
----
-
-## Dependencies
-
-Key crates (check Cargo.toml for versions):
-- `ratatui` - TUI framework
-- `crossterm` - Terminal backend
-- `git2` - Git operations
-- `clap` - CLI parsing (derive feature)
-- `anyhow` - Error handling
-- `thiserror` - Custom errors
-- `chrono` - Date formatting
-
----
-
-## CLI Structure
-
-The CLI uses `clap` with derive macros:
-
-```rust
-#[derive(Parser)]
-#[command(name = "git_sv")]
-#[command(about = "Visualisez le graphe git")]
-struct Cli {
-    #[arg(short, long, default_value = ".")]
-    path: String,
-
-    #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    Log { #[arg(short = 'n', long, default_value = "20")] max_count: usize },
-}
-```
-
 ---
 
 ## Testing Guidelines
 
 - Add unit tests in the same file under `#[cfg(test)]` module
 - Use integration tests in `tests/` directory
+- Use `tempfile` and `git2` to create test repositories
+- Use `insta` for snapshot testing when appropriate
 - Mock git operations when possible
 - Test error cases, not just happy paths
 
@@ -240,14 +182,50 @@ enum Commands {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::tests::test_utils::{create_test_repo, commit_file};
 
     #[test]
     fn test_feature() {
-        // Arrange
-        // Act
+        let (_temp, repo) = create_test_repo();
+        commit_file(&repo, "test.txt", "content", "Test commit");
         // Assert
     }
 }
+```
+
+---
+
+## Module Organization
+
+```
+src/
+├── main.rs          # Entry point, CLI parsing
+├── app.rs           # App orchestration
+├── error.rs         # Error types and Result alias
+├── error_display.rs # Error display utilities
+├── terminal.rs      # Terminal setup/teardown
+├── watcher.rs       # File system watching
+├── git/             # Git operations
+│   ├── mod.rs       # Re-exports GitRepo
+│   ├── repo.rs      # Repository wrapper
+│   ├── graph.rs     # Graph building
+│   ├── commit.rs    # Commit info
+│   ├── branch.rs    # Branch operations
+│   └── ...
+├── handler/         # Event handlers
+│   ├── mod.rs
+│   ├── dispatcher.rs
+│   └── ...
+├── state/           # Application state
+│   ├── mod.rs       # AppState
+│   ├── action.rs    # AppAction enums
+│   └── ...
+├── ui/              # UI rendering
+│   ├── mod.rs
+│   ├── graph_view.rs
+│   └── ...
+├── utils/           # Utilities
+└── test_utils/      # Test helpers
 ```
 
 ---
@@ -259,4 +237,5 @@ Before committing changes:
 2. `cargo test` passes
 3. `cargo fmt` applied
 4. `cargo clippy` shows no warnings
-5. Code follows naming conventions above
+5. Code follows naming conventions
+6. Comments are in French (follow existing convention)
