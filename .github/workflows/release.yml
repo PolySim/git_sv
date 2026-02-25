@@ -186,6 +186,8 @@ jobs:
           git clone https://x-access-token:${GH_TOKEN}@github.com/PolySim/scoop-git_sv.git
           cd scoop-git_sv
 
+          mkdir -p bucket
+
           cat > bucket/git_sv.json << MANIFEST
           {
             "version": "${VERSION}",
