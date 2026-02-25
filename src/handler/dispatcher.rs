@@ -269,6 +269,8 @@ impl ActionDispatcher {
             AppAction::SwitchToStaging => {
                 ctx.state.view_mode = ViewMode::Staging;
                 ctx.state.dirty = true;
+                // Charger le diff du premier fichier sélectionné
+                crate::handler::staging::load_staging_diff(ctx.state);
                 Ok(())
             }
             AppAction::SwitchToBranches => {

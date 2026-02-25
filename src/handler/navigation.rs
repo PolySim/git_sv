@@ -212,6 +212,8 @@ fn handle_staging_navigation(state: &mut AppState, direction: i32) {
                     state.staging_state.unstaged_selected().saturating_sub(1)
                 };
                 state.staging_state.set_unstaged_selected(new_idx);
+                // Recharger le diff après la navigation
+                crate::handler::staging::load_staging_diff(state);
             }
         }
         StagingFocus::Staged => {
@@ -223,6 +225,8 @@ fn handle_staging_navigation(state: &mut AppState, direction: i32) {
                     state.staging_state.staged_selected().saturating_sub(1)
                 };
                 state.staging_state.set_staged_selected(new_idx);
+                // Recharger le diff après la navigation
+                crate::handler::staging::load_staging_diff(state);
             }
         }
         StagingFocus::Diff => {

@@ -201,6 +201,11 @@ impl EventHandler {
             }
         }
 
+        // Charger le diff si on est en mode Staging
+        if self.state.view_mode == ViewMode::Staging {
+            staging::load_staging_diff(&mut self.state);
+        }
+
         // Réinitialiser le flag dirty
         self.state.dirty = false;
 

@@ -258,6 +258,8 @@ fn handle_commit_prompt(state: &mut AppState) -> Result<()> {
     state.staging_state.commit_message.clear();
     state.staging_state.cursor_position = 0;
     state.mark_dirty();
+    // Charger le diff du premier fichier sélectionné
+    crate::handler::staging::load_staging_diff(state);
     Ok(())
 }
 
