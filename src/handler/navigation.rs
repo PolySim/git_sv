@@ -39,8 +39,9 @@ fn handle_move_up(state: &mut AppState) {
                     state.branch_selected -= 1;
                 }
             } else if state.selected_index > 0 {
-                state.selected_index -= 1;
-                state.graph_state.select(Some(state.selected_index * 2));
+                let new_index = state.selected_index - 1;
+                state.graph_view.rows.select(new_index);
+                state.sync_graph_selection();
                 state.sync_legacy_selection();
             }
         }
@@ -65,8 +66,9 @@ fn handle_move_down(state: &mut AppState) {
                     state.branch_selected += 1;
                 }
             } else if state.selected_index + 1 < state.graph.len() {
-                state.selected_index += 1;
-                state.graph_state.select(Some(state.selected_index * 2));
+                let new_index = state.selected_index + 1;
+                state.graph_view.rows.select(new_index);
+                state.sync_graph_selection();
                 state.sync_legacy_selection();
             }
         }
@@ -91,8 +93,9 @@ fn handle_page_up(state: &mut AppState) {
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {
                 let page_size = 10;
-                state.selected_index = state.selected_index.saturating_sub(page_size);
-                state.graph_state.select(Some(state.selected_index * 2));
+                let new_index = state.selected_index.saturating_sub(page_size);
+                state.graph_view.rows.select(new_index);
+                state.sync_graph_selection();
                 state.sync_legacy_selection();
             }
         }
@@ -107,9 +110,9 @@ fn handle_page_down(state: &mut AppState) {
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {
                 let page_size = 10;
-                state.selected_index =
-                    (state.selected_index + page_size).min(state.graph.len() - 1);
-                state.graph_state.select(Some(state.selected_index * 2));
+                let new_index = (state.selected_index + page_size).min(state.graph.len() - 1);
+                state.graph_view.rows.select(new_index);
+                state.sync_graph_selection();
                 state.sync_legacy_selection();
             }
         }
@@ -123,8 +126,8 @@ fn handle_go_top(state: &mut AppState) {
         }
         _ => {
             if !state.show_branch_panel {
-                state.selected_index = 0;
-                state.graph_state.select(Some(0));
+                state.graph_view.rows.select(0);
+                state.sync_graph_selection();
                 state.sync_legacy_selection();
             }
         }
@@ -138,8 +141,9 @@ fn handle_go_bottom(state: &mut AppState) {
         }
         _ => {
             if !state.show_branch_panel && !state.graph.is_empty() {
-                state.selected_index = state.graph.len() - 1;
-                state.graph_state.select(Some(state.selected_index * 2));
+                let new_index = state.graph.len() - 1;
+                state.graph_view.rows.select(new_index);
+                state.sync_graph_selection();
                 state.sync_legacy_selection();
             }
         }

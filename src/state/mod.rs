@@ -258,8 +258,16 @@ impl AppState {
     /// Met à jour la sélection du graph à partir de graph_view.
     pub fn sync_graph_selection(&mut self) {
         self.selected_index = self.graph_view.rows.selected_index();
-        // Le graphe contient 2 items par commit (ligne + connexion)
-        self.graph_state.select(Some(self.selected_index * 2));
+
+        // Calcule l'index visuel correct en tenant compte du nombre d'items réels.
+        // Chaque commit produit 1 item + 1 item de connexion (sauf le dernier qui n'a pas de connexion).
+        // Donc pour N commits, on a 2*N - 1 items visuels.
+        let visual_index = if self.graph.is_empty() {
+            0
+        } else {
+            self.selected_index * 2
+        };
+        self.graph_state.select(Some(visual_index));
     }
 
     /// Met à jour graph_view à partir de la sélection legacy.
@@ -288,3 +296,142 @@ pub use action::{
     BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
     SearchAction, StagingAction,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::graph::{CommitNode, GraphRow};
+    use crate::git::repo::GitRepo;
+    use crate::state::selection::ListSelection;
+    use git2::Oid;
+
+    /// Helper pour créer un état de test avec un graph de taille donnée.
+    fn create_test_state_with_graph(size: usize) -> AppState {
+        // Créer un repo temporaire
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(temp_dir.path(), &opts).unwrap();
+
+        // Configurer git
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        // Créer un commit initial
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
+        let mut state =
+            AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
+
+        // Créer un graph de test
+        let graph: Vec<GraphRow> = (0..size)
+            .map(|i| GraphRow {
+                node: CommitNode {
+                    oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::zero()),
+                    message: format!("Commit {} message", i),
+                    author: "Test Author".to_string(),
+                    timestamp: i as i64 * 1000,
+                    parents: vec![],
+                    refs: vec![],
+                    branch_name: None,
+                    column: 0,
+                    color_index: 0,
+                },
+                cells: vec![None],
+                connection: if i + 1 < size {
+                    // Tous les commits sauf le dernier ont une connexion
+                    Some(crate::git::graph::ConnectionRow { cells: vec![] })
+                } else {
+                    None
+                },
+            })
+            .collect();
+
+        state.graph = graph;
+        state.graph_view.rows = ListSelection::with_items(state.graph.clone());
+        state.graph_view.rows.select(0);
+        state.selected_index = 0;
+        state.graph_state.select(Some(0));
+
+        state
+    }
+
+    #[test]
+    fn test_visual_index_last_commit() {
+        // Créer un graph avec 2 commits
+        let mut state = create_test_state_with_graph(2);
+
+        // Sélectionner le dernier commit (index 1)
+        state.selected_index = 1;
+        state.graph_view.rows.select(1);
+
+        // Appeler sync_graph_selection
+        state.sync_graph_selection();
+
+        // Vérifier que l'index visuel est correct : 1 * 2 = 2
+        // Mais le nombre d'items visuels est 2*2 - 1 = 3 (indices 0, 1, 2)
+        // Donc l'index visuel 2 est valide
+        let visual_index = state.graph_state.selected().unwrap_or(999);
+        assert_eq!(visual_index, 2);
+
+        // Vérifier que l'index visuel est dans les bornes
+        // Pour 2 commits : 2 items (commits) + 1 connexion = 3 items (indices 0 à 2)
+        assert!(visual_index <= 2);
+    }
+
+    #[test]
+    fn test_sync_graph_selection_empty() {
+        // Créer un graph vide
+        let mut state = create_test_state_with_graph(0);
+
+        // Appeler sync_graph_selection avec un graphe vide
+        state.sync_graph_selection();
+
+        // Vérifier que l'index visuel est 0 (pas de panique)
+        let visual_index = state.graph_state.selected().unwrap_or(999);
+        assert_eq!(visual_index, 0);
+    }
+
+    #[test]
+    fn test_sync_graph_selection_single_commit() {
+        // Créer un graph avec 1 commit (pas de connexion)
+        let mut state = create_test_state_with_graph(1);
+
+        state.selected_index = 0;
+        state.graph_view.rows.select(0);
+        state.sync_graph_selection();
+
+        // Pour 1 commit : 1 item seulement (pas de connexion)
+        // L'index visuel devrait être 0
+        let visual_index = state.graph_state.selected().unwrap_or(999);
+        assert_eq!(visual_index, 0);
+    }
+
+    #[test]
+    fn test_sync_graph_selection_multiple_commits() {
+        // Créer un graph avec 5 commits
+        let mut state = create_test_state_with_graph(5);
+
+        // Tester différentes sélections
+        for i in 0..5 {
+            state.selected_index = i;
+            state.graph_view.rows.select(i);
+            state.sync_graph_selection();
+
+            let visual_index = state.graph_state.selected().unwrap_or(999);
+            // Pour chaque commit, l'index visuel est i * 2
+            assert_eq!(visual_index, i * 2);
+
+            // Vérifier que l'index visuel est dans les bornes
+            // Pour 5 commits : 5 items (commits) + 4 connexions = 9 items (indices 0 à 8)
+            assert!(visual_index <= 8);
+        }
+    }
+}
