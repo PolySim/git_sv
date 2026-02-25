@@ -234,17 +234,24 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
                 }
             }
         } else {
-            // Colonne vide - vérifier s'il y a une ligne horizontale qui traverse.
-            let has_horizontal = connection.cells.iter().any(|c| {
-                c.as_ref()
-                    .map_or(false, |cell| cell.edge_type == EdgeType::Horizontal)
-            });
+            // Colonne vide — vérifier si on est entre deux cellules horizontales adjacentes.
+            let left_is_horizontal = col > 0
+                && connection.cells.get(col - 1)
+                    .and_then(|c| c.as_ref())
+                    .map_or(false, |c| matches!(c.edge_type,
+                        EdgeType::Horizontal | EdgeType::MergeFromRight | EdgeType::Cross));
 
-            if has_horizontal {
-                // Chercher la couleur d'une ligne horizontale adjacente.
-                let horizontal_color = find_horizontal_color(col, connection);
-                if let Some(color_idx) = horizontal_color {
-                    let color = get_branch_color(color_idx);
+            let right_is_horizontal = col + 1 < connection.cells.len()
+                && connection.cells.get(col + 1)
+                    .and_then(|c| c.as_ref())
+                    .map_or(false, |c| matches!(c.edge_type,
+                        EdgeType::Horizontal | EdgeType::ForkRight | EdgeType::ForkLeft | EdgeType::Cross));
+
+            if left_is_horizontal && right_is_horizontal {
+                // On est dans le chemin d'un merge/fork — tracer la ligne.
+                let color_idx = find_horizontal_color_bounded(col, connection);
+                if let Some(idx) = color_idx {
+                    let color = get_branch_color(idx);
                     spans.push(Span::styled("─", Style::default().fg(color)));
                     spans.push(Span::styled("─", Style::default().fg(color)));
                 } else {
@@ -259,26 +266,39 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
     Line::from(spans)
 }
 
-/// Trouve la couleur d'une ligne horizontale adjacente.
-fn find_horizontal_color(
+/// Trouve la couleur d'une ligne horizontale adjacente (recherche bornée).
+/// Ne cherche que dans les cellules immédiatement voisines.
+fn find_horizontal_color_bounded(
     col: usize,
     connection: &crate::git::graph::ConnectionRow,
 ) -> Option<usize> {
-    // Chercher à gauche.
-    for c in (0..=col).rev() {
-        if let Some(ref cell) = connection.cells[c] {
-            if cell.edge_type == EdgeType::Horizontal {
+    // Chercher vers la gauche (la cellule la plus proche).
+    for c in (0..col).rev() {
+        match &connection.cells[c] {
+            Some(cell) if cell.edge_type == EdgeType::Horizontal => {
                 return Some(cell.color_index);
             }
+            Some(cell) if matches!(cell.edge_type,
+                EdgeType::MergeFromRight | EdgeType::MergeFromLeft) => {
+                return Some(cell.color_index);
+            }
+            Some(_) => break, // Autre type de cellule = on arrête
+            None => continue, // Colonne vide = on continue
         }
     }
 
-    // Chercher à droite.
-    for c in col..connection.cells.len() {
-        if let Some(ref cell) = connection.cells[c] {
-            if cell.edge_type == EdgeType::Horizontal {
+    // Chercher vers la droite.
+    for c in (col + 1)..connection.cells.len() {
+        match &connection.cells[c] {
+            Some(cell) if cell.edge_type == EdgeType::Horizontal => {
                 return Some(cell.color_index);
             }
+            Some(cell) if matches!(cell.edge_type,
+                EdgeType::ForkRight | EdgeType::ForkLeft) => {
+                return Some(cell.color_index);
+            }
+            Some(_) => break,
+            None => continue,
         }
     }
 
@@ -293,7 +313,7 @@ fn get_branch_color(index: usize) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::graph::{CommitNode, EdgeType, GraphCell, GraphRow};
+    use crate::git::graph::{CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow};
     use git2::Oid;
     use ratatui::widgets::ListState;
 
@@ -439,5 +459,110 @@ mod tests {
         // Les couleurs devraient être différentes
         assert_ne!(color0, color1);
         assert_ne!(color1, color2);
+    }
+
+    #[test]
+    fn test_no_horizontal_leak_past_fork() {
+        // Créer une ConnectionRow avec merge col0→col2, colonne 3 vide
+        // Le fork s'arrête à col 2, donc col 3 ne devrait PAS avoir de ligne horizontale
+        let connection = ConnectionRow {
+            cells: vec![
+                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
+                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 0 }),
+                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                None, // ← Cette colonne NE doit PAS avoir de "──"
+                Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 1 }),
+            ],
+        };
+
+        let line = build_connection_line(&connection);
+        let all_spans: Vec<_> = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        
+        // Les spans attendus:
+        // col 0 (MergeFromRight): "╰" + "─"
+        // col 1 (Horizontal): "─" + "─" (car col 2 n'est pas vide, mais on vérifie col+1)
+        // col 2 (ForkRight): "╮" + "─" (car col 1 est Horizontal)
+        // col 3 (None): "  " (deux espaces - PAS de tirets!)
+        // col 4 (Vertical): "│"
+        //
+        // Résultat attendu: ["╰", "─", "─", "─", "╮", "─", "  ", "│"]
+        // Sans le fix, col 3 aurait "──" au lieu de "  "
+        
+        // Vérifier que spans[6] est "  " (deux espaces) et pas "──"
+        assert_eq!(all_spans[6], "  ", 
+            "La colonne vide après le fork devrait contenir des espaces, pas de lignes horizontales. Got: {:?}", 
+            all_spans);
+        
+        // Vérifier aussi qu'on n'a pas de "──" n'importe où après col 2
+        let after_fork: String = all_spans.iter().skip(6).copied().collect();
+        assert!(!after_fork.contains('─'), 
+            "Il ne devrait pas y avoir de lignes horizontales après le fork. Line: '{}'", 
+            after_fork);
+    }
+
+    #[test]
+    fn test_horizontal_between_merge_and_fork() {
+        // Test qu'une colonne vide entre un merge et un fork a bien une ligne horizontale
+        let connection = ConnectionRow {
+            cells: vec![
+                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
+                None, // Colonne vide entre merge et fork — DEVRAIT avoir une ligne
+                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+            ],
+        };
+
+        let line = build_connection_line(&connection);
+        let line_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+
+        // La colonne vide (col 1) devrait avoir des tirets car elle est entre un merge et un fork
+        assert!(line_text.contains("──"), "La colonne vide entre merge et fork devrait avoir une ligne horizontale");
+    }
+
+    #[test]
+    fn test_find_horizontal_color_bounded() {
+        // Cas 1: Colonne vide entre deux horizontales de la même branche
+        let connection1 = ConnectionRow {
+            cells: vec![
+                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
+                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 0 }),
+                None, // Colonne vide entre deux horizontales de couleur 0
+                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 0 }),
+                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+            ],
+        };
+
+        // Test col 2 (vide) entre deux horizontales de couleur 0
+        let color = find_horizontal_color_bounded(2, &connection1);
+        assert_eq!(color, Some(0), "Devrait trouver la couleur 0 entre deux horizontales");
+
+        // Cas 2: Colonne vide entre merge et fork (même couleur)
+        let connection2 = ConnectionRow {
+            cells: vec![
+                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
+                None, // Colonne vide entre merge et fork
+                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+            ],
+        };
+
+        let color2 = find_horizontal_color_bounded(1, &connection2);
+        // La fonction cherche vers la gauche et trouve MergeFromRight (color 0)
+        assert_eq!(color2, Some(0), "Devrait trouver la couleur du merge");
+
+        // Cas 3: Colonne vide après un fork (ne devrait pas être appelée, mais testons quand même)
+        // La fonction arrête la recherche à droite quand elle trouve un type non-horizontal
+        let connection3 = ConnectionRow {
+            cells: vec![
+                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                None, // Après le fork
+                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 1 }), // Autre branche
+            ],
+        };
+
+        let color3 = find_horizontal_color_bounded(1, &connection3);
+        // Vers la gauche: ForkRight (pas Horizontal/Merge) => break, pas de résultat
+        // Vers la droite: Horizontal (color 1) => retourne Some(1)
+        // Mais comme ForkRight n'est pas Horizontal, la fonction ne devrait pas être appelée
+        // car left_is_horizontal serait false (ForkRight n'est pas dans la liste des types "horizontal")
+        assert_eq!(color3, Some(1), "Trouve la couleur à droite même si gauche n'est pas horizontal");
     }
 }
