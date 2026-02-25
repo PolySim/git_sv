@@ -1,5 +1,7 @@
 //! État de la vue staging.
 
+#![allow(dead_code)]
+
 use crate::git::diff::{DiffViewMode, FileDiff};
 use crate::git::repo::StatusEntry;
 use crate::state::selection::ListSelection;

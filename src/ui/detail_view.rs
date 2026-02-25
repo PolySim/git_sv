@@ -1,6 +1,6 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
@@ -43,9 +43,7 @@ pub fn render(
         let (commit_type, type_style) = if node.parents.len() > 1 {
             (
                 "⊕ Merge",
-                Style::default()
-                    .fg(theme.info)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )
         } else if node.parents.is_empty() {
             (
@@ -255,11 +253,7 @@ mod tests {
         assert!(buffer.content.len() > 0);
 
         // Vérifier que le titre est présent
-        let content: String = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("Détail"));
         assert!(content.contains("First commit"));
     }
@@ -279,15 +273,13 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content: String = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
 
         // Vérifier que l'indicateur de merge est présent
-        assert!(content.contains("⊕ Merge") || content.contains("Merge"),
-            "Le détail devrait contenir l'indicateur de merge");
+        assert!(
+            content.contains("⊕ Merge") || content.contains("Merge"),
+            "Le détail devrait contenir l'indicateur de merge"
+        );
     }
 
     #[test]
@@ -305,15 +297,13 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content: String = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
 
         // Vérifier que l'indicateur initial est présent
-        assert!(content.contains("◆ Initial") || content.contains("Initial"),
-            "Le détail devrait contenir l'indicateur de commit initial");
+        assert!(
+            content.contains("◆ Initial") || content.contains("Initial"),
+            "Le détail devrait contenir l'indicateur de commit initial"
+        );
     }
 
     #[test]
@@ -330,17 +320,17 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content: String = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
 
         // Vérifier que les deux lignes du message sont présentes
-        assert!(content.contains("First commit"),
-            "Le message devrait contenir 'First commit'");
-        assert!(content.contains("With multiple lines"),
-            "Le message devrait contenir 'With multiple lines'");
+        assert!(
+            content.contains("First commit"),
+            "Le message devrait contenir 'First commit'"
+        );
+        assert!(
+            content.contains("With multiple lines"),
+            "Le message devrait contenir 'With multiple lines'"
+        );
     }
 
     #[test]
@@ -357,14 +347,12 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content: String = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
 
         // Vérifier que le message "Aucun commit sélectionné" est affiché
-        assert!(content.contains("Aucun commit"),
-            "Devrait afficher 'Aucun commit sélectionné' quand il n'y a pas de graphe");
+        assert!(
+            content.contains("Aucun commit"),
+            "Devrait afficher 'Aucun commit sélectionné' quand il n'y a pas de graphe"
+        );
     }
 }

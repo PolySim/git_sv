@@ -130,7 +130,7 @@ fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
                 f.path.clone(),
                 matches!(
                     f.conflict_type,
-                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                    Some(ConflictType::DeletedByUs | ConflictType::DeletedByThem)
                 ),
             )
         })
@@ -202,7 +202,7 @@ fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
                 f.path.clone(),
                 matches!(
                     f.conflict_type,
-                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                    Some(ConflictType::DeletedByUs | ConflictType::DeletedByThem)
                 ),
             )
         })
@@ -595,7 +595,7 @@ fn handle_set_mode_block(state: &mut AppState) -> Result<()> {
             .map(|f| {
                 matches!(
                     f.conflict_type,
-                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                    Some(ConflictType::DeletedByUs | ConflictType::DeletedByThem)
                 )
             })
             .unwrap_or(false);
@@ -625,7 +625,7 @@ fn handle_set_mode_line(state: &mut AppState) -> Result<()> {
             .map(|f| {
                 matches!(
                     f.conflict_type,
-                    Some(ConflictType::DeletedByUs) | Some(ConflictType::DeletedByThem)
+                    Some(ConflictType::DeletedByUs | ConflictType::DeletedByThem)
                 )
             })
             .unwrap_or(false);

@@ -1,5 +1,7 @@
 //! État de la vue graph.
 
+#![allow(dead_code)]
+
 use crate::git::graph::GraphRow;
 use crate::state::selection::ListSelection;
 

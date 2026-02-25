@@ -1,9 +1,12 @@
+#![allow(dead_code)]
+
 use git2::{Oid, Repository, Signature};
 
 use crate::error::Result;
 
 /// Informations essentielles d'un commit.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct CommitInfo {
     pub oid: Oid,
     pub message: String,
@@ -114,7 +117,7 @@ pub fn unstage_file(repo: &Repository, path: &str) -> Result<()> {
     let head_commit = head.peel_to_commit()?;
 
     // Réinitialiser ce fichier dans l'index depuis HEAD.
-    repo.reset_default(Some(&head_commit.as_object()), [path])?;
+    repo.reset_default(Some(head_commit.as_object()), [path])?;
     Ok(())
 }
 

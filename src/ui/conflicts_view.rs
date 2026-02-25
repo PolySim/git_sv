@@ -1,5 +1,7 @@
 //! Vue de résolution de conflits (style GitKraken).
 
+#![allow(dead_code)]
+
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -374,7 +376,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             let ours_style = if is_selected
                 && matches!(
                     section.resolution,
-                    Some(ConflictResolution::Ours) | Some(ConflictResolution::Both)
+                    Some(ConflictResolution::Ours | ConflictResolution::Both)
                 ) {
                 Style::default()
                     .fg(theme.success)
@@ -552,7 +554,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
             let theirs_style = if is_selected
                 && matches!(
                     section.resolution,
-                    Some(ConflictResolution::Theirs) | Some(ConflictResolution::Both)
+                    Some(ConflictResolution::Theirs | ConflictResolution::Both)
                 ) {
                 Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
             } else {

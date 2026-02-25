@@ -1,5 +1,7 @@
 //! Utilitaires de calcul de zones rectangulaires.
 
+#![allow(dead_code)]
+
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Crée un rectangle centré dans la zone donnée.

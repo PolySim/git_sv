@@ -1,8 +1,10 @@
 //! Barre de recherche pour la recherche de commits.
 
+#![allow(dead_code)]
+
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,

@@ -95,7 +95,7 @@ fn render_side_by_side(
     };
 
     // Diviser l'aire en deux colonnes avec un séparateur au milieu.
-    let chunks = Layout::default()
+    let _chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(50),
@@ -323,8 +323,6 @@ struct LinePair {
 /// - Les suppressions ont un placeholder à droite
 /// - Les ajouts ont un placeholder à gauche
 fn align_diff_lines(lines: &[crate::git::diff::DiffLine]) -> Vec<LinePair> {
-    use crate::git::diff::DiffLine;
-
     let mut pairs = Vec::new();
     let mut i = 0;
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::Result;
 use git2::{Cred, CredentialType, FetchOptions, PushOptions, RemoteCallbacks, Repository};
 use std::collections::HashMap;
@@ -165,7 +167,7 @@ fn resolve_ssh_credentials(
     if let Some(host) = extract_host_from_url(url) {
         // Chercher D'ABORD la config par HostName (priorité aux alias)
         // Ex: URL = github.com, config = Host github-pro HostName github.com
-        for (alias, config) in &ssh_configs {
+        for (_alias, config) in &ssh_configs {
             if let Some(hostname) = &config.hostname {
                 if hostname == &host {
                     if let Some(identity_path) = &config.identity_file {

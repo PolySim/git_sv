@@ -1,5 +1,7 @@
 //! Styles communs pour l'interface.
 
+#![allow(dead_code)]
+
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::ui::theme::current_theme;

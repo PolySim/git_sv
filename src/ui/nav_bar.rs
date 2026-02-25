@@ -1,5 +1,7 @@
 //! Barre de navigation entre les vues principales.
 
+#![allow(dead_code)]
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

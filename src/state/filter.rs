@@ -1,5 +1,7 @@
 //! État et logique de filtrage pour le graph de commits.
 
+#![allow(dead_code)]
+
 use crate::git::commit::CommitInfo;
 
 /// Filtres applicables sur le graph de commits.
@@ -245,7 +247,7 @@ fn parse_date(date_str: &str) -> Option<i64> {
     use chrono::NaiveDate;
     NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
         .ok()
-        .map(|date| date.and_hms_opt(0, 0, 0).unwrap().timestamp())
+        .map(|date| date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp())
 }
 
 #[cfg(test)]

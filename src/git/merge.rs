@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use git2::{build::CheckoutBuilder, Repository, Signature};
 
 use crate::error::{GitSvError, Result};

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use git2::{Oid, Repository};
 use std::collections::HashMap;
 
@@ -230,7 +232,10 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
 
         // Compacter : supprimer les colonnes terminales vides (celles sans expected_oid).
         // On ne supprime que par la droite pour maintenir l'alignement des colonnes internes.
-        while active_columns.last().map_or(false, |s| s.expected_oid.is_none()) {
+        while active_columns
+            .last()
+            .map_or(false, |s| s.expected_oid.is_none())
+        {
             active_columns.pop();
         }
 
@@ -545,12 +550,10 @@ fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<RefInfo>>> {
             };
 
             if let Some(oid) = target_oid {
-                map.entry(oid)
-                    .or_default()
-                    .push(RefInfo {
-                        name: name.to_string(),
-                        ref_type,
-                    });
+                map.entry(oid).or_default().push(RefInfo {
+                    name: name.to_string(),
+                    ref_type,
+                });
             }
         }
     }
@@ -774,12 +777,19 @@ mod tests {
         ];
 
         // Compacter
-        while active_columns.last().map_or(false, |s| s.expected_oid.is_none()) {
+        while active_columns
+            .last()
+            .map_or(false, |s| s.expected_oid.is_none())
+        {
             active_columns.pop();
         }
 
         // La colonne vide en fin devrait être supprimée
-        assert_eq!(active_columns.len(), 2, "La colonne vide terminale devrait être supprimée");
+        assert_eq!(
+            active_columns.len(),
+            2,
+            "La colonne vide terminale devrait être supprimée"
+        );
         assert!(active_columns[0].expected_oid.is_some());
         assert!(active_columns[1].expected_oid.is_some());
 
@@ -803,12 +813,19 @@ mod tests {
         ];
 
         // Compacter
-        while active_columns2.last().map_or(false, |s| s.expected_oid.is_none()) {
+        while active_columns2
+            .last()
+            .map_or(false, |s| s.expected_oid.is_none())
+        {
             active_columns2.pop();
         }
 
         // Seule la dernière colonne est supprimée si vide, pas celle du milieu
-        assert_eq!(active_columns2.len(), 3, "Les colonnes vides au milieu ne devraient pas être supprimées");
+        assert_eq!(
+            active_columns2.len(),
+            3,
+            "Les colonnes vides au milieu ne devraient pas être supprimées"
+        );
     }
 
     #[test]
@@ -834,19 +851,27 @@ mod tests {
 
         // Collecter les refs
         let refs_map = collect_refs(&repo).unwrap();
-        let commit_refs = refs_map.get(&oid).expect("Le commit devrait avoir des refs");
+        let commit_refs = refs_map
+            .get(&oid)
+            .expect("Le commit devrait avoir des refs");
 
         // Vérifier les types de refs
         assert!(
-            commit_refs.iter().any(|r| r.ref_type == RefType::Head && r.name == "main"),
+            commit_refs
+                .iter()
+                .any(|r| r.ref_type == RefType::Head && r.name == "main"),
             "Devrait avoir HEAD sur main"
         );
         assert!(
-            commit_refs.iter().any(|r| r.ref_type == RefType::LocalBranch && r.name == "feature"),
+            commit_refs
+                .iter()
+                .any(|r| r.ref_type == RefType::LocalBranch && r.name == "feature"),
             "Devrait avoir une branche locale 'feature'"
         );
         assert!(
-            commit_refs.iter().any(|r| r.ref_type == RefType::Tag && r.name == "v1.0"),
+            commit_refs
+                .iter()
+                .any(|r| r.ref_type == RefType::Tag && r.name == "v1.0"),
             "Devrait avoir un tag 'v1.0'"
         );
     }

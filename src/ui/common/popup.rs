@@ -1,5 +1,7 @@
 //! Composant de base pour les popups et dialogues.
 
+#![allow(dead_code)]
+
 use super::{rect::centered_rect, style::border_style};
 use ratatui::{
     layout::Rect,

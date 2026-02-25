@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{GitSvError, Result};
 
 /// Macro pour wrapper les opérations git avec contexte

@@ -1,5 +1,6 @@
 # git_sv — Interface Git en Terminal
 
+[![CI](https://github.com/PolySim/git_sv/actions/workflows/ci.yml/badge.svg)](https://github.com/PolySim/git_sv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Un client git interactif en terminal (TUI) avec graphe de commits style GitKraken, staging interactif, gestion des branches/worktrees/stashes, résolution de conflits, et bien plus.

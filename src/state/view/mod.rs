@@ -1,5 +1,7 @@
 //! États spécifiques à chaque vue.
 
+#![allow(dead_code)]
+
 mod blame;
 mod branches;
 mod conflicts;

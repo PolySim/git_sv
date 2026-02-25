@@ -1,5 +1,7 @@
 //! Composant de dialogue de confirmation pour les actions destructives.
 
+#![allow(dead_code)]
+
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

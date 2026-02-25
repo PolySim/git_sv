@@ -1,5 +1,7 @@
 //! Cache LRU pour les diffs de fichiers et lazy loading.
 
+#![allow(dead_code)]
+
 use git2::Oid;
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -232,7 +234,7 @@ impl DiffCache {
     pub fn clear_working_directory(&mut self) {
         // LruCache ne permet pas de supprimer par prédicat facilement,
         // donc on reconstruit le cache sans les entrées WD
-        let capacity = self.cache.cap();
+        let _capacity = self.cache.cap();
         let entries: Vec<_> = self
             .cache
             .iter()

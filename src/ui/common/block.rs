@@ -1,5 +1,7 @@
 //! Builder pour les blocs stylisés.
 
+#![allow(dead_code)]
+
 use super::style::{border_style, title_style};
 use ratatui::widgets::{Block, Borders};
 

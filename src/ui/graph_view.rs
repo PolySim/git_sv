@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::graph::{EdgeType, GraphRow, RefInfo, RefType};
+use crate::git::graph::{EdgeType, GraphRow, RefType};
 use crate::ui::theme::{branch_color, current_theme};
 use crate::utils::format_relative_time;
 
@@ -162,7 +162,7 @@ fn build_commit_line(
     }
 
     // Aligner jusqu'à max_graph_cols pour un alignement vertical cohérent.
-    for col in num_cols..max_graph_cols {
+    for _col in num_cols..max_graph_cols {
         spans.push(Span::raw(" ".repeat(COL_SPACING)));
     }
 
@@ -200,15 +200,18 @@ fn build_commit_line(
         RefType::RemoteBranch => 3,
     });
 
-    let refs_width: usize = sorted_refs.iter().map(|r| {
-        let bracket_len = match r.ref_type {
-            RefType::Head => 4,      // ⦗⦘ + espace
-            RefType::Tag => 3,       // () + espace
-            RefType::RemoteBranch => 4, // ⟨⟩ + espace
-            RefType::LocalBranch => 3,  // [] + espace
-        };
-        r.name.len() + bracket_len
-    }).sum();
+    let refs_width: usize = sorted_refs
+        .iter()
+        .map(|r| {
+            let bracket_len = match r.ref_type {
+                RefType::Head => 4,         // ⦗⦘ + espace
+                RefType::Tag => 3,          // () + espace
+                RefType::RemoteBranch => 4, // ⟨⟩ + espace
+                RefType::LocalBranch => 3,  // [] + espace
+            };
+            r.name.len() + bracket_len
+        })
+        .sum();
 
     if !sorted_refs.is_empty() {
         for ref_info in sorted_refs {
@@ -216,30 +219,28 @@ fn build_commit_line(
                 RefType::Head => {
                     // HEAD : mise en avant forte (vert gras inversé)
                     let bracket = format!("⦗{}⦘ ", ref_info.name);
-                    let style = sel_style(Color::Green)
-                        .add_modifier(Modifier::BOLD | Modifier::REVERSED);
+                    let style =
+                        sel_style(Color::Green).add_modifier(Modifier::BOLD | Modifier::REVERSED);
                     (bracket, style)
                 }
                 RefType::LocalBranch => {
                     // Branche locale : fond coloré (couleur de la branche)
                     let ref_color = get_branch_color(node.color_index);
                     let bracket = format!("[{}] ", ref_info.name);
-                    let style = sel_style(ref_color)
-                        .add_modifier(Modifier::BOLD | Modifier::REVERSED);
+                    let style =
+                        sel_style(ref_color).add_modifier(Modifier::BOLD | Modifier::REVERSED);
                     (bracket, style)
                 }
                 RefType::RemoteBranch => {
                     // Remote : style plus discret, pas de REVERSED
                     let bracket = format!("⟨{}⟩ ", ref_info.name);
-                    let style = sel_style(Color::DarkGray)
-                        .add_modifier(Modifier::DIM);
+                    let style = sel_style(Color::DarkGray).add_modifier(Modifier::DIM);
                     (bracket, style)
                 }
                 RefType::Tag => {
                     // Tag : jaune, pas de REVERSED
                     let bracket = format!("({}) ", ref_info.name);
-                    let style = sel_style(Color::Yellow)
-                        .add_modifier(Modifier::BOLD);
+                    let style = sel_style(Color::Yellow).add_modifier(Modifier::BOLD);
                     (bracket, style)
                 }
             };
@@ -254,7 +255,8 @@ fn build_commit_line(
     let author_date_prefix = format!(" — {}", node.author);
     let relative_date = format_relative_time(node.timestamp);
     let author_date_suffix = format!(" {}", relative_date);
-    let overhead = graph_width + hash_width + refs_width + author_date_prefix.len() + author_date_suffix.len();
+    let overhead =
+        graph_width + hash_width + refs_width + author_date_prefix.len() + author_date_suffix.len();
     let max_message_width = (available_width as usize).saturating_sub(overhead);
 
     // Tronquer le message si nécessaire.
@@ -267,7 +269,11 @@ fn build_commit_line(
     // Message du commit.
     spans.push(Span::styled(
         display_message,
-        sel_style(if is_selected { theme.selection_fg } else { theme.text_normal }),
+        sel_style(if is_selected {
+            theme.selection_fg
+        } else {
+            theme.text_normal
+        }),
     ));
 
     // Auteur (avec séparateur).
@@ -328,16 +334,31 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
         } else {
             // Colonne vide — vérifier si on est entre deux cellules horizontales adjacentes.
             let left_is_horizontal = col > 0
-                && connection.cells.get(col - 1)
+                && connection
+                    .cells
+                    .get(col - 1)
                     .and_then(|c| c.as_ref())
-                    .map_or(false, |c| matches!(c.edge_type,
-                        EdgeType::Horizontal | EdgeType::MergeFromRight | EdgeType::Cross));
+                    .map_or(false, |c| {
+                        matches!(
+                            c.edge_type,
+                            EdgeType::Horizontal | EdgeType::MergeFromRight | EdgeType::Cross
+                        )
+                    });
 
             let right_is_horizontal = col + 1 < connection.cells.len()
-                && connection.cells.get(col + 1)
+                && connection
+                    .cells
+                    .get(col + 1)
                     .and_then(|c| c.as_ref())
-                    .map_or(false, |c| matches!(c.edge_type,
-                        EdgeType::Horizontal | EdgeType::ForkRight | EdgeType::ForkLeft | EdgeType::Cross));
+                    .map_or(false, |c| {
+                        matches!(
+                            c.edge_type,
+                            EdgeType::Horizontal
+                                | EdgeType::ForkRight
+                                | EdgeType::ForkLeft
+                                | EdgeType::Cross
+                        )
+                    });
 
             if left_is_horizontal && right_is_horizontal {
                 // On est dans le chemin d'un merge/fork — tracer la ligne.
@@ -370,8 +391,12 @@ fn find_horizontal_color_bounded(
             Some(cell) if cell.edge_type == EdgeType::Horizontal => {
                 return Some(cell.color_index);
             }
-            Some(cell) if matches!(cell.edge_type,
-                EdgeType::MergeFromRight | EdgeType::MergeFromLeft) => {
+            Some(cell)
+                if matches!(
+                    cell.edge_type,
+                    EdgeType::MergeFromRight | EdgeType::MergeFromLeft
+                ) =>
+            {
                 return Some(cell.color_index);
             }
             Some(_) => break, // Autre type de cellule = on arrête
@@ -385,8 +410,7 @@ fn find_horizontal_color_bounded(
             Some(cell) if cell.edge_type == EdgeType::Horizontal => {
                 return Some(cell.color_index);
             }
-            Some(cell) if matches!(cell.edge_type,
-                EdgeType::ForkRight | EdgeType::ForkLeft) => {
+            Some(cell) if matches!(cell.edge_type, EdgeType::ForkRight | EdgeType::ForkLeft) => {
                 return Some(cell.color_index);
             }
             Some(_) => break,
@@ -561,7 +585,9 @@ mod tests {
         let theme = current_theme();
 
         // Compter combien de spans ont le bg de sélection
-        let spans_with_selection_bg: Vec<_> = line.spans.iter()
+        let spans_with_selection_bg: Vec<_> = line
+            .spans
+            .iter()
             .filter(|s| s.style.bg == Some(theme.selection_bg))
             .collect();
 
@@ -577,23 +603,35 @@ mod tests {
         // - info: " — Alice (...)" (avec bg)
         //
         // Au minimum, le hash, le message et l'info devraient avoir le bg
-        assert!(spans_with_selection_bg.len() >= 3,
+        assert!(
+            spans_with_selection_bg.len() >= 3,
             "Au moins 3 spans devraient avoir le fond de sélection. Got: {} spans",
-            spans_with_selection_bg.len());
+            spans_with_selection_bg.len()
+        );
 
         // Vérifier que le message a le bg de sélection
-        let message_span = line.spans.iter()
+        let message_span = line
+            .spans
+            .iter()
             .find(|s| s.content.contains("First commit"))
             .expect("Devrait trouver le span du message");
-        assert_eq!(message_span.style.bg, Some(theme.selection_bg),
-            "Le message devrait avoir le fond de sélection");
+        assert_eq!(
+            message_span.style.bg,
+            Some(theme.selection_bg),
+            "Le message devrait avoir le fond de sélection"
+        );
 
         // Vérifier que le hash a le bg de sélection
-        let hash_span = line.spans.iter()
+        let hash_span = line
+            .spans
+            .iter()
             .find(|s| s.content.len() == 8 && s.content.trim().len() == 7)
             .expect("Devrait trouver le span du hash (7 caractères + espace)");
-        assert_eq!(hash_span.style.bg, Some(theme.selection_bg),
-            "Le hash devrait avoir le fond de sélection");
+        assert_eq!(
+            hash_span.style.bg,
+            Some(theme.selection_bg),
+            "Le hash devrait avoir le fond de sélection"
+        );
     }
 
     #[test]
@@ -602,13 +640,14 @@ mod tests {
         let line = build_commit_line(row, false, 80, 2);
 
         // Aucun span ne devrait avoir de bg de sélection
-        let spans_with_selection_bg: Vec<_> = line.spans.iter()
-            .filter(|s| s.style.bg.is_some())
-            .collect();
+        let spans_with_selection_bg: Vec<_> =
+            line.spans.iter().filter(|s| s.style.bg.is_some()).collect();
 
-        assert!(spans_with_selection_bg.is_empty(),
+        assert!(
+            spans_with_selection_bg.is_empty(),
             "Aucun span ne devrait avoir de fond quand non sélectionné. Got: {} spans",
-            spans_with_selection_bg.len());
+            spans_with_selection_bg.len()
+        );
     }
 
     #[test]
@@ -617,17 +656,29 @@ mod tests {
         // Le fork s'arrête à col 2, donc col 3 ne devrait PAS avoir de ligne horizontale
         let connection = ConnectionRow {
             cells: vec![
-                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
-                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 0 }),
-                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::MergeFromRight,
+                    color_index: 0,
+                }),
+                Some(GraphCell {
+                    edge_type: EdgeType::Horizontal,
+                    color_index: 0,
+                }),
+                Some(GraphCell {
+                    edge_type: EdgeType::ForkRight,
+                    color_index: 0,
+                }),
                 None, // ← Cette colonne NE doit PAS avoir de "──"
-                Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 1 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::Vertical,
+                    color_index: 1,
+                }),
             ],
         };
 
         let line = build_connection_line(&connection);
         let all_spans: Vec<_> = line.spans.iter().map(|s| s.content.as_ref()).collect();
-        
+
         // Les spans attendus:
         // col 0 (MergeFromRight): "╰" + "─"
         // col 1 (Horizontal): "─" + "─" (car col 2 n'est pas vide, mais on vérifie col+1)
@@ -637,17 +688,19 @@ mod tests {
         //
         // Résultat attendu: ["╰", "─", "─", "─", "╮", "─", "  ", "│"]
         // Sans le fix, col 3 aurait "──" au lieu de "  "
-        
+
         // Vérifier que spans[6] est "  " (deux espaces) et pas "──"
         assert_eq!(all_spans[6], "  ", 
             "La colonne vide après le fork devrait contenir des espaces, pas de lignes horizontales. Got: {:?}", 
             all_spans);
-        
+
         // Vérifier aussi qu'on n'a pas de "──" n'importe où après col 2
         let after_fork: String = all_spans.iter().skip(6).copied().collect();
-        assert!(!after_fork.contains('─'), 
-            "Il ne devrait pas y avoir de lignes horizontales après le fork. Line: '{}'", 
-            after_fork);
+        assert!(
+            !after_fork.contains('─'),
+            "Il ne devrait pas y avoir de lignes horizontales après le fork. Line: '{}'",
+            after_fork
+        );
     }
 
     #[test]
@@ -655,9 +708,15 @@ mod tests {
         // Test qu'une colonne vide entre un merge et un fork a bien une ligne horizontale
         let connection = ConnectionRow {
             cells: vec![
-                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::MergeFromRight,
+                    color_index: 0,
+                }),
                 None, // Colonne vide entre merge et fork — DEVRAIT avoir une ligne
-                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::ForkRight,
+                    color_index: 0,
+                }),
             ],
         };
 
@@ -665,7 +724,10 @@ mod tests {
         let line_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
 
         // La colonne vide (col 1) devrait avoir des tirets car elle est entre un merge et un fork
-        assert!(line_text.contains("──"), "La colonne vide entre merge et fork devrait avoir une ligne horizontale");
+        assert!(
+            line_text.contains("──"),
+            "La colonne vide entre merge et fork devrait avoir une ligne horizontale"
+        );
     }
 
     #[test]
@@ -673,24 +735,46 @@ mod tests {
         // Cas 1: Colonne vide entre deux horizontales de la même branche
         let connection1 = ConnectionRow {
             cells: vec![
-                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
-                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::MergeFromRight,
+                    color_index: 0,
+                }),
+                Some(GraphCell {
+                    edge_type: EdgeType::Horizontal,
+                    color_index: 0,
+                }),
                 None, // Colonne vide entre deux horizontales de couleur 0
-                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 0 }),
-                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::Horizontal,
+                    color_index: 0,
+                }),
+                Some(GraphCell {
+                    edge_type: EdgeType::ForkRight,
+                    color_index: 0,
+                }),
             ],
         };
 
         // Test col 2 (vide) entre deux horizontales de couleur 0
         let color = find_horizontal_color_bounded(2, &connection1);
-        assert_eq!(color, Some(0), "Devrait trouver la couleur 0 entre deux horizontales");
+        assert_eq!(
+            color,
+            Some(0),
+            "Devrait trouver la couleur 0 entre deux horizontales"
+        );
 
         // Cas 2: Colonne vide entre merge et fork (même couleur)
         let connection2 = ConnectionRow {
             cells: vec![
-                Some(GraphCell { edge_type: EdgeType::MergeFromRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::MergeFromRight,
+                    color_index: 0,
+                }),
                 None, // Colonne vide entre merge et fork
-                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::ForkRight,
+                    color_index: 0,
+                }),
             ],
         };
 
@@ -702,9 +786,15 @@ mod tests {
         // La fonction arrête la recherche à droite quand elle trouve un type non-horizontal
         let connection3 = ConnectionRow {
             cells: vec![
-                Some(GraphCell { edge_type: EdgeType::ForkRight, color_index: 0 }),
+                Some(GraphCell {
+                    edge_type: EdgeType::ForkRight,
+                    color_index: 0,
+                }),
                 None, // Après le fork
-                Some(GraphCell { edge_type: EdgeType::Horizontal, color_index: 1 }), // Autre branche
+                Some(GraphCell {
+                    edge_type: EdgeType::Horizontal,
+                    color_index: 1,
+                }), // Autre branche
             ],
         };
 
@@ -713,7 +803,11 @@ mod tests {
         // Vers la droite: Horizontal (color 1) => retourne Some(1)
         // Mais comme ForkRight n'est pas Horizontal, la fonction ne devrait pas être appelée
         // car left_is_horizontal serait false (ForkRight n'est pas dans la liste des types "horizontal")
-        assert_eq!(color3, Some(1), "Trouve la couleur à droite même si gauche n'est pas horizontal");
+        assert_eq!(
+            color3,
+            Some(1),
+            "Trouve la couleur à droite même si gauche n'est pas horizontal"
+        );
     }
 
     #[test]
@@ -726,10 +820,14 @@ mod tests {
         let line_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
 
         // Le message devrait être tronqué avec "…" (pas les 200 caractères complets)
-        assert!(line_text.contains('…'),
-            "Le message tronqué devrait contenir '…'");
-        assert!(!line_text.contains(&"A".repeat(150)),
-            "Le message ne devrait pas contenir 150 caractères 'A'");
+        assert!(
+            line_text.contains('…'),
+            "Le message tronqué devrait contenir '…'"
+        );
+        assert!(
+            !line_text.contains(&"A".repeat(150)),
+            "Le message ne devrait pas contenir 150 caractères 'A'"
+        );
     }
 
     #[test]
@@ -738,12 +836,16 @@ mod tests {
         let line = build_commit_line(row, false, 80, 2);
 
         // Trouver le séparateur (devrait être "  " - 2 espaces)
-        let separator_span = line.spans.iter()
+        let separator_span = line
+            .spans
+            .iter()
             .find(|s| s.content == "  ")
             .expect("Devrait trouver le séparateur de 2 espaces");
 
-        assert_eq!(separator_span.content, "  ",
-            "Le séparateur devrait être 2 espaces");
+        assert_eq!(
+            separator_span.content, "  ",
+            "Le séparateur devrait être 2 espaces"
+        );
     }
 
     #[test]
@@ -752,42 +854,54 @@ mod tests {
         let line = build_commit_line(row, false, 80, 2);
 
         // Trouver les spans de l'auteur et de la date
-        let author_span = line.spans.iter()
+        let author_span = line
+            .spans
+            .iter()
             .find(|s| s.content.contains("Alice"))
             .expect("Devrait trouver le span de l'auteur");
 
         // La date est au format relatif français (ex: "il y a X ...")
         // Elle devrait être dans un span séparé après l'auteur
-        let author_idx = line.spans.iter().position(|s| s.content.contains("Alice")).unwrap();
-        let date_span = line.spans.get(author_idx + 1)
+        let author_idx = line
+            .spans
+            .iter()
+            .position(|s| s.content.contains("Alice"))
+            .unwrap();
+        let date_span = line
+            .spans
+            .get(author_idx + 1)
             .expect("Devrait trouver le span de la date après l'auteur");
 
         // La date devrait avoir le modificateur DIM
-        assert!(date_span.style.add_modifier.contains(Modifier::DIM),
-            "La date devrait avoir le modificateur DIM. Style: {:?}", date_span.style);
+        assert!(
+            date_span.style.add_modifier.contains(Modifier::DIM),
+            "La date devrait avoir le modificateur DIM. Style: {:?}",
+            date_span.style
+        );
     }
 
     #[test]
     fn test_graph_columns_aligned() {
         // Test que le padding jusqu'à max_graph_cols fonctionne
         // Une ligne avec moins de colonnes devrait avoir du padding supplémentaire
-        let graph = vec![
-            GraphRow {
-                node: CommitNode {
-                    oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
-                    message: "First".to_string(),
-                    author: "Alice".to_string(),
-                    timestamp: 1609459200,
-                    parents: vec![],
-                    refs: vec![],
-                    branch_name: None,
-                    column: 0,
-                    color_index: 0,
-                },
-                cells: vec![Some(GraphCell { edge_type: EdgeType::Vertical, color_index: 0 })],
-                connection: None,
+        let graph = vec![GraphRow {
+            node: CommitNode {
+                oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
+                message: "First".to_string(),
+                author: "Alice".to_string(),
+                timestamp: 1609459200,
+                parents: vec![],
+                refs: vec![],
+                branch_name: None,
+                column: 0,
+                color_index: 0,
             },
-        ];
+            cells: vec![Some(GraphCell {
+                edge_type: EdgeType::Vertical,
+                color_index: 0,
+            })],
+            connection: None,
+        }];
 
         let max_graph_cols = 3; // Forcer un padding à 3 colonnes
 
@@ -799,16 +913,23 @@ mod tests {
         // + 2 espaces pour le séparateur
         let expected_min_spans = 1; // Au moins un span
 
-        assert!(line.spans.len() >= expected_min_spans,
+        assert!(
+            line.spans.len() >= expected_min_spans,
             "La ligne devrait avoir au moins {} spans avec max_graph_cols=3. Got: {}",
-            expected_min_spans, line.spans.len());
+            expected_min_spans,
+            line.spans.len()
+        );
 
         // Vérifier qu'il y a des spans de padding (espaces)
-        let padding_spans: Vec<_> = line.spans.iter()
+        let padding_spans: Vec<_> = line
+            .spans
+            .iter()
             .filter(|s| s.content.chars().all(|c| c == ' '))
             .collect();
 
-        assert!(!padding_spans.is_empty(),
-            "La ligne devrait avoir des spans de padding pour aligner avec max_graph_cols");
+        assert!(
+            !padding_spans.is_empty(),
+            "La ligne devrait avoir des spans de padding pour aligner avec max_graph_cols"
+        );
     }
 }

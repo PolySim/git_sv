@@ -41,3 +41,7 @@ timeout = "300"
 out = ["Html", "Json"]
 output-dir = "coverage"
 exclude-files = ["tests/*", "src/main.rs"]
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+multiple_crate_versions = "allow"

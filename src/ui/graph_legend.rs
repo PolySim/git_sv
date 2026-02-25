@@ -1,5 +1,7 @@
 //! Légende du graphe montrant les couleurs des branches.
 
+#![allow(dead_code)]
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

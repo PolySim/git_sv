@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use git2::{Oid, Repository};
 use std::process::Command;
 

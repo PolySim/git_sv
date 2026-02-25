@@ -1,5 +1,7 @@
 //! Actions de l'application organisées par domaine.
 
+#![allow(dead_code)]
+
 mod branch;
 mod conflict;
 mod edit;

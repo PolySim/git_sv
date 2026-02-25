@@ -1,5 +1,7 @@
 //! Actions d'édition de texte.
 
+#![allow(dead_code)]
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum EditAction {
     /// Insérer un caractère

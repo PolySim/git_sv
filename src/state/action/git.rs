@@ -1,5 +1,7 @@
 //! Actions git (opérations remote, etc.)
 
+#![allow(dead_code)]
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum GitAction {
     /// Push vers le remote

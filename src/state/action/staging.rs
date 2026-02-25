@@ -1,5 +1,7 @@
 //! Actions de staging et commit.
 
+#![allow(dead_code)]
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StagingAction {
     /// Ajouter un fichier au staging

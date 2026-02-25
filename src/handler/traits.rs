@@ -1,5 +1,7 @@
 //! Traits pour les handlers d'actions.
 
+#![allow(dead_code)]
+
 use crate::error::Result;
 use crate::state::AppState;
 

@@ -1,5 +1,7 @@
 //! État du sélecteur de branche pour le merge.
 
+#![allow(dead_code)]
+
 use crate::state::selection::ListSelection;
 
 /// État du sélecteur de branche pour le merge.

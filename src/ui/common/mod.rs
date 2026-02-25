@@ -1,5 +1,8 @@
 //! Widgets et utilitaires UI réutilisables.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

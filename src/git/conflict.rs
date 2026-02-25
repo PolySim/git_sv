@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use git2::Repository;
 use std::collections::VecDeque;
 use std::io::Write;
@@ -389,13 +391,11 @@ pub fn get_merge_branch_name(repo: &Repository, operation_msg: Option<&str>) -> 
         if let Ok(oid) = git2::Oid::from_str(merge_head_oid) {
             // Chercher une branche qui pointe vers ce commit
             if let Ok(branches) = repo.branches(None) {
-                for branch_result in branches {
-                    if let Ok((branch, _)) = branch_result {
-                        if let Some(target) = branch.get().target() {
-                            if target == oid {
-                                if let Some(name) = branch.name().ok().flatten() {
-                                    return name.to_string();
-                                }
+                for (branch, _) in branches.flatten() {
+                    if let Some(target) = branch.get().target() {
+                        if target == oid {
+                            if let Some(name) = branch.name().ok().flatten() {
+                                return name.to_string();
                             }
                         }
                     }

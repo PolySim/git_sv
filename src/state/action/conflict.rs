@@ -1,5 +1,7 @@
 //! Actions de résolution de conflits.
 
+#![allow(dead_code)]
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConflictAction {
     /// Naviguer vers le fichier précédent

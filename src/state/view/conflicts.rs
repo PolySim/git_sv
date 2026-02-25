@@ -1,5 +1,7 @@
 //! État de la vue de résolution de conflits.
 
+#![allow(dead_code)]
+
 use crate::git::conflict::{ConflictResolutionMode, MergeFile};
 
 /// Focus dans les panneaux de la vue conflits.

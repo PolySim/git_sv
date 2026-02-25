@@ -1,5 +1,7 @@
 //! État de la vue blame.
 
+#![allow(dead_code)]
+
 /// État de la vue blame.
 #[derive(Debug, Clone)]
 pub struct BlameState {

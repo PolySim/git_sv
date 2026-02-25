@@ -1,5 +1,7 @@
 //! État de la vue de recherche.
 
+#![allow(dead_code)]
+
 use crate::git::search::SearchType;
 
 /// État de la recherche de commits.

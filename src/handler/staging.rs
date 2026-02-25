@@ -158,12 +158,12 @@ fn handle_switch_focus(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_stash_selected_file(state: &mut AppState) -> Result<()> {
+fn handle_stash_selected_file(_state: &mut AppState) -> Result<()> {
     // Action placeholder - sera implémentée
     Ok(())
 }
 
-fn handle_stash_unstaged_files(state: &mut AppState) -> Result<()> {
+fn handle_stash_unstaged_files(_state: &mut AppState) -> Result<()> {
     // Action placeholder - sera implémentée
     Ok(())
 }

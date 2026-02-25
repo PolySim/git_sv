@@ -309,7 +309,7 @@ fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_branch_list(state: &mut AppState) -> Result<()> {
+fn handle_branch_list(_state: &mut AppState) -> Result<()> {
     // Charge et affiche la liste des branches
     // Cette fonction nécessite une logique UI
     Ok(())

@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 use thiserror::Error;
 
-/// Erreurs principales de git_sv.
+/// Erreurs principales de `git_sv`.
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum GitSvError {
     /// Erreur provenant de libgit2
     #[error("Erreur git : {0}")]
@@ -60,10 +61,11 @@ impl From<std::io::Error> for GitSvError {
     }
 }
 
-/// Alias pratique pour Result avec GitSvError.
+/// Alias pratique pour Result avec `GitSvError`.
 pub type Result<T> = std::result::Result<T, GitSvError>;
 
 /// Trait d'extension pour ajouter du contexte aux erreurs I/O
+#[allow(dead_code)]
 pub trait IoErrorContext<T> {
     fn with_context(self, context: impl Into<String>) -> Result<T>;
 }

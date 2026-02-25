@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use std::time::Duration;
 
@@ -49,8 +51,8 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Si une confirmation est en attente, gérer y/n/ESC
     if state.pending_confirmation.is_some() {
         return match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => Some(AppAction::ConfirmAction),
-            KeyCode::Char('n') | KeyCode::Char('N') => Some(AppAction::CancelAction),
+            KeyCode::Char('y' | 'Y') => Some(AppAction::ConfirmAction),
+            KeyCode::Char('n' | 'N') => Some(AppAction::CancelAction),
             KeyCode::Esc => Some(AppAction::CancelAction),
             _ => None,
         };
@@ -428,8 +430,8 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Si une confirmation est en attente (pour ConflictValidateMerge)
     if state.pending_confirmation.is_some() {
         return match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => Some(AppAction::ConfirmAction),
-            KeyCode::Char('n') | KeyCode::Char('N') => Some(AppAction::CancelAction),
+            KeyCode::Char('y' | 'Y') => Some(AppAction::ConfirmAction),
+            KeyCode::Char('n' | 'N') => Some(AppAction::CancelAction),
             KeyCode::Esc => Some(AppAction::CancelAction),
             _ => None,
         };
@@ -527,7 +529,7 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         }
 
         // Mode édition (panneau résultat uniquement)
-        KeyCode::Char('i') | KeyCode::Char('e') => {
+        KeyCode::Char('i' | 'e') => {
             if panel_focus == Some(ConflictPanelFocus::ResultPanel) {
                 Some(AppAction::ConflictStartEditing)
             } else {

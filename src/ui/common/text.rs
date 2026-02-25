@@ -1,5 +1,7 @@
 //! Utilitaires de manipulation de texte Unicode-safe.
 
+#![allow(dead_code)]
+
 /// Tronque une chaîne de manière safe pour Unicode.
 ///
 /// # Arguments

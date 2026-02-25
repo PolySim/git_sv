@@ -1,5 +1,7 @@
 //! Indicateur de chargement (spinner).
 
+#![allow(dead_code)]
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

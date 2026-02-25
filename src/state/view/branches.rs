@@ -1,5 +1,7 @@
 //! État de la vue branches/worktrees/stashes.
 
+#![allow(dead_code)]
+
 use crate::git::branch::BranchInfo;
 use crate::git::stash::StashEntry;
 use crate::git::worktree::WorktreeInfo;

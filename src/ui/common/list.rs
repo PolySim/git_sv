@@ -1,5 +1,7 @@
 //! Composant liste stylisé et réutilisable.
 
+#![allow(dead_code)]
+
 use super::{block::StyledBlock, style::highlight_style};
 use ratatui::{
     layout::Rect,

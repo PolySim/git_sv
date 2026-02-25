@@ -4,6 +4,7 @@ use std::time::SystemTime;
 
 /// Information sur une ligne d'un fichier avec son auteur et commit.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct BlameLine {
     /// Numéro de ligne (1-indexed).
     pub line_num: usize,

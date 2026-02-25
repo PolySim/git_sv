@@ -1,5 +1,8 @@
 //! État global de l'application.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 pub mod action;
 pub mod cache;
 pub mod filter;

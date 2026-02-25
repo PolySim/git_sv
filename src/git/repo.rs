@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use git2::{Repository, StatusOptions};
 
 use super::branch::BranchInfo;
