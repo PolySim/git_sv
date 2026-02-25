@@ -8,7 +8,7 @@ use crate::state::action::{
     BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
     SearchAction, StagingAction,
 };
-use crate::state::{AppAction, AppState, FocusPanel, ViewMode};
+use crate::state::{AppAction, AppState, BranchesFocus, FocusPanel, ViewMode};
 
 use super::branch::BranchHandler;
 use super::conflict::ConflictHandler;
@@ -258,10 +258,61 @@ impl ActionDispatcher {
             }
 
             // Edit legacy
-            AppAction::InsertChar(c) => self.edit.handle(&mut ctx, EditAction::InsertChar(c)),
-            AppAction::DeleteChar => self.edit.handle(&mut ctx, EditAction::DeleteCharBefore),
-            AppAction::MoveCursorLeft => self.edit.handle(&mut ctx, EditAction::CursorLeft),
-            AppAction::MoveCursorRight => self.edit.handle(&mut ctx, EditAction::CursorRight),
+            AppAction::InsertChar(c) => {
+                if ctx.state.view_mode == ViewMode::Branches
+                    && ctx.state.branches_view_state.focus == BranchesFocus::Input
+                {
+                    // Modifier le texte de l'input branches
+                    let pos = ctx.state.branches_view_state.input_cursor;
+                    ctx.state.branches_view_state.input_text.insert(pos, c);
+                    ctx.state.branches_view_state.input_cursor += 1;
+                    Ok(())
+                } else {
+                    self.edit.handle(&mut ctx, EditAction::InsertChar(c))
+                }
+            }
+            AppAction::DeleteChar => {
+                if ctx.state.view_mode == ViewMode::Branches
+                    && ctx.state.branches_view_state.focus == BranchesFocus::Input
+                {
+                    // Supprimer un caractère dans l'input branches
+                    let pos = ctx.state.branches_view_state.input_cursor;
+                    if pos > 0 {
+                        ctx.state.branches_view_state.input_text.remove(pos - 1);
+                        ctx.state.branches_view_state.input_cursor -= 1;
+                    }
+                    Ok(())
+                } else {
+                    self.edit.handle(&mut ctx, EditAction::DeleteCharBefore)
+                }
+            }
+            AppAction::MoveCursorLeft => {
+                if ctx.state.view_mode == ViewMode::Branches
+                    && ctx.state.branches_view_state.focus == BranchesFocus::Input
+                {
+                    // Déplacer le curseur à gauche
+                    if ctx.state.branches_view_state.input_cursor > 0 {
+                        ctx.state.branches_view_state.input_cursor -= 1;
+                    }
+                    Ok(())
+                } else {
+                    self.edit.handle(&mut ctx, EditAction::CursorLeft)
+                }
+            }
+            AppAction::MoveCursorRight => {
+                if ctx.state.view_mode == ViewMode::Branches
+                    && ctx.state.branches_view_state.focus == BranchesFocus::Input
+                {
+                    // Déplacer le curseur à droite
+                    let len = ctx.state.branches_view_state.input_text.len();
+                    if ctx.state.branches_view_state.input_cursor < len {
+                        ctx.state.branches_view_state.input_cursor += 1;
+                    }
+                    Ok(())
+                } else {
+                    self.edit.handle(&mut ctx, EditAction::CursorRight)
+                }
+            }
 
             // View mode legacy
             AppAction::SwitchToGraph => {

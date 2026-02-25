@@ -28,8 +28,8 @@ impl ActionHandler for BranchHandler {
             BranchAction::WorktreeRemove => handle_worktree_remove(ctx.state),
             BranchAction::NextSection => handle_next_section(ctx.state),
             BranchAction::PrevSection => handle_prev_section(ctx.state),
-            BranchAction::ConfirmInput => Ok(()), // Géré par le handler d'édition
-            BranchAction::CancelInput => Ok(()),  // Géré par le handler d'édition
+            BranchAction::ConfirmInput => handle_confirm_input(ctx.state),
+            BranchAction::CancelInput => handle_cancel_input(ctx.state),
         }
     }
 }
