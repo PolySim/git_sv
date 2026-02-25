@@ -55,12 +55,7 @@ pub fn render(
                 .borders(Borders::ALL)
                 .border_style(border_style),
         )
-        .highlight_style(
-            Style::default()
-                .bg(theme.selection_bg)
-                .fg(theme.selection_fg)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(Style::default()); // Pas de style automatique, géré manuellement dans les spans
 
     frame.render_stateful_widget(list, area, state);
 }
@@ -150,12 +145,26 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
     // Espace entre le graphe et le contenu.
     spans.push(Span::raw(" "));
 
+    // === Partie informations — appliquer le style de sélection si sélectionné ===
+
+    // Helper pour le style conditionnel
+    let sel_style = |base_fg: Color| -> Style {
+        if is_selected {
+            Style::default()
+                .bg(theme.selection_bg)
+                .fg(base_fg) // Garder la couleur de texte d'origine
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(base_fg)
+        }
+    };
+
     // Hash du commit.
     let hash = node.oid.to_string();
     let short_hash = if hash.len() >= 7 { &hash[..7] } else { &hash };
     spans.push(Span::styled(
         format!("{} ", short_hash),
-        Style::default().fg(theme.commit_hash),
+        sel_style(theme.commit_hash),
     ));
 
     // Labels de branches si présents.
@@ -164,30 +173,22 @@ fn build_commit_line(row: &GraphRow, is_selected: bool) -> Line<'static> {
             let ref_color = get_branch_color(node.color_index);
             spans.push(Span::styled(
                 format!("[{}] ", ref_name),
-                Style::default()
-                    .fg(ref_color)
-                    .add_modifier(Modifier::BOLD)
-                    .add_modifier(Modifier::REVERSED),
+                sel_style(ref_color).add_modifier(Modifier::REVERSED),
             ));
         }
     }
 
     // Message du commit.
-    let message_style = if is_selected {
-        Style::default()
-            .bg(theme.selection_bg)
-            .fg(theme.selection_fg)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text_normal)
-    };
-    spans.push(Span::styled(node.message.clone(), message_style));
+    spans.push(Span::styled(
+        node.message.clone(),
+        sel_style(if is_selected { theme.selection_fg } else { theme.text_normal }),
+    ));
 
     // Auteur et date relative.
     let relative_date = format_relative_time(node.timestamp);
     spans.push(Span::styled(
         format!(" — {} ({})", node.author, relative_date),
-        Style::default().fg(theme.text_secondary),
+        sel_style(theme.text_secondary),
     ));
 
     Line::from(spans)
@@ -459,6 +460,64 @@ mod tests {
         // Les couleurs devraient être différentes
         assert_ne!(color0, color1);
         assert_ne!(color1, color2);
+    }
+
+    #[test]
+    fn test_selected_commit_line_all_spans_have_bg() {
+        let row = &create_test_graph()[0];
+        let line = build_commit_line(row, true);
+        
+        let theme = current_theme();
+        
+        // Compter combien de spans ont le bg de sélection
+        let spans_with_selection_bg: Vec<_> = line.spans.iter()
+            .filter(|s| s.style.bg == Some(theme.selection_bg))
+            .collect();
+        
+        // Les spans du graphe (colonnes 0 et 1) n'ont pas de bg de sélection
+        // Tous les autres spans (hash, message, auteur) devraient l'avoir
+        // 
+        // Spans attendus pour la ligne sélectionnée:
+        // - col 0: graphe (pas de bg)
+        // - col 1: graphe (pas de bg)  
+        // - espace: " " (pas de bg)
+        // - hash: "XXXXXXX " (avec bg)
+        // - message: "First commit" (avec bg)
+        // - info: " — Alice (...)" (avec bg)
+        //
+        // Au minimum, le hash, le message et l'info devraient avoir le bg
+        assert!(spans_with_selection_bg.len() >= 3, 
+            "Au moins 3 spans devraient avoir le fond de sélection. Got: {} spans", 
+            spans_with_selection_bg.len());
+        
+        // Vérifier que le message a le bg de sélection
+        let message_span = line.spans.iter()
+            .find(|s| s.content.contains("First commit"))
+            .expect("Devrait trouver le span du message");
+        assert_eq!(message_span.style.bg, Some(theme.selection_bg),
+            "Le message devrait avoir le fond de sélection");
+        
+        // Vérifier que le hash a le bg de sélection
+        let hash_span = line.spans.iter()
+            .find(|s| s.content.len() == 8 && s.content.trim().len() == 7)
+            .expect("Devrait trouver le span du hash (7 caractères + espace)");
+        assert_eq!(hash_span.style.bg, Some(theme.selection_bg),
+            "Le hash devrait avoir le fond de sélection");
+    }
+
+    #[test]
+    fn test_unselected_commit_line_no_bg() {
+        let row = &create_test_graph()[0];
+        let line = build_commit_line(row, false);
+        
+        // Aucun span ne devrait avoir de bg de sélection
+        let spans_with_selection_bg: Vec<_> = line.spans.iter()
+            .filter(|s| s.style.bg.is_some())
+            .collect();
+        
+        assert!(spans_with_selection_bg.is_empty(), 
+            "Aucun span ne devrait avoir de fond quand non sélectionné. Got: {} spans", 
+            spans_with_selection_bg.len());
     }
 
     #[test]
