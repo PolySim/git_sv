@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::graph::GraphRow;
+use crate::git::graph::{GraphRow, RefType};
 use crate::ui::theme;
 
 /// Rend une légende compacte des branches actives dans le graphe.
@@ -19,10 +19,13 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
 
     for row in graph.iter().take(20) {
         // Limiter à 20 commits récents pour la légende
-        for ref_name in &row.node.refs {
-            if !seen.contains(ref_name) {
-                seen.insert(ref_name.clone());
-                branches.push((ref_name.clone(), row.node.color_index));
+        // Ne prendre que les branches locales et HEAD (pas les tags/remotes)
+        for ref_info in &row.node.refs {
+            if matches!(ref_info.ref_type, RefType::LocalBranch | RefType::Head)
+                && !seen.contains(&ref_info.name)
+            {
+                seen.insert(ref_info.name.clone());
+                branches.push((ref_info.name.clone(), row.node.color_index));
             }
         }
     }
@@ -74,9 +77,9 @@ pub fn render_compact(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
     let mut seen_refs = std::collections::HashSet::new();
 
     for row in graph.iter().take(20) {
-        for ref_name in &row.node.refs {
-            if !seen_refs.contains(ref_name) && colors.len() < 5 {
-                seen_refs.insert(ref_name.clone());
+        for ref_info in &row.node.refs {
+            if !seen_refs.contains(&ref_info.name) && colors.len() < 5 {
+                seen_refs.insert(ref_info.name.clone());
                 colors.push(row.node.color_index);
             }
         }

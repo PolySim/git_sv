@@ -4,6 +4,38 @@ use std::collections::HashMap;
 use super::commit::CommitInfo;
 use crate::error::Result;
 
+/// Type de référence git.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RefType {
+    /// Branche locale.
+    LocalBranch,
+    /// Branche remote (origin/main, etc.).
+    RemoteBranch,
+    /// Tag.
+    Tag,
+    /// HEAD détaché ou HEAD pointant vers cette branche.
+    Head,
+}
+
+/// Information sur une référence git.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RefInfo {
+    /// Nom de la référence.
+    pub name: String,
+    /// Type de la référence.
+    pub ref_type: RefType,
+}
+
+impl RefInfo {
+    /// Crée une nouvelle RefInfo.
+    pub fn new(name: impl Into<String>, ref_type: RefType) -> Self {
+        Self {
+            name: name.into(),
+            ref_type,
+        }
+    }
+}
+
 /// Type de segment visuel dans le graphe.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdgeType {
@@ -52,8 +84,8 @@ pub struct CommitNode {
     pub timestamp: i64,
     /// OIDs des parents.
     pub parents: Vec<Oid>,
-    /// Noms des refs pointant vers ce commit (branches, tags).
-    pub refs: Vec<String>,
+    /// Références pointant vers ce commit (branches, tags).
+    pub refs: Vec<RefInfo>,
     /// Nom de la branche à laquelle appartient ce commit dans le graphe.
     pub branch_name: Option<String>,
     /// Colonne assignée pour le rendu du graphe.
@@ -82,6 +114,27 @@ impl CommitNode {
     /// Retourne le hash court du commit (7 premiers caractères).
     pub fn short_hash(&self) -> String {
         self.oid.to_string()[..7].to_string()
+    }
+
+    /// Vérifie si ce commit est HEAD.
+    pub fn is_head(&self) -> bool {
+        self.refs.iter().any(|r| r.ref_type == RefType::Head)
+    }
+
+    /// Retourne les branches locales de ce commit.
+    pub fn local_branches(&self) -> impl Iterator<Item = &str> {
+        self.refs
+            .iter()
+            .filter(|r| r.ref_type == RefType::LocalBranch)
+            .map(|r| r.name.as_str())
+    }
+
+    /// Retourne les tags de ce commit.
+    pub fn tags(&self) -> impl Iterator<Item = &str> {
+        self.refs
+            .iter()
+            .filter(|r| r.ref_type == RefType::Tag)
+            .map(|r| r.name.as_str())
     }
 }
 
@@ -395,19 +448,19 @@ fn build_connection_row(
 /// Détermine l'index de couleur pour un commit.
 fn determine_color_index(
     column: usize,
-    refs: &[String],
+    refs: &[RefInfo],
     branch_colors: &mut HashMap<String, usize>,
     next_color_index: &mut usize,
     active_columns: &[ColumnState],
 ) -> usize {
     // Si le commit a des refs (branches/tags), utiliser la première comme couleur.
     if let Some(first_ref) = refs.first() {
-        if let Some(&color) = branch_colors.get(first_ref) {
+        if let Some(&color) = branch_colors.get(&first_ref.name) {
             return color;
         }
         // Nouvelle branche : assigner une nouvelle couleur.
         let color = *next_color_index;
-        branch_colors.insert(first_ref.clone(), color);
+        branch_colors.insert(first_ref.name.clone(), color);
         *next_color_index += 1;
         return color;
     }
@@ -427,19 +480,20 @@ fn determine_color_index(
 /// Détermine le nom de la branche pour un commit.
 fn determine_branch_name(
     column: usize,
-    refs: &[String],
+    refs: &[RefInfo],
     active_columns: &[ColumnState],
 ) -> Option<String> {
     // Si le commit a des refs, utiliser la première comme nom de branche.
     // On filtre pour ne garder que les branches (pas les tags).
     if let Some(first_ref) = refs.first() {
-        if first_ref.starts_with("refs/heads/") {
-            return Some(first_ref.strip_prefix("refs/heads/").unwrap().to_string());
+        let name = &first_ref.name;
+        if name.starts_with("refs/heads/") {
+            return Some(name.strip_prefix("refs/heads/").unwrap().to_string());
         }
-        if !first_ref.contains('/') {
-            return Some(first_ref.clone());
+        if !name.contains('/') {
+            return Some(name.clone());
         }
-        return Some(first_ref.clone());
+        return Some(name.clone());
     }
 
     // Sinon, hériter du nom de la colonne si elle existe.
@@ -450,17 +504,64 @@ fn determine_branch_name(
     None
 }
 
-/// Collecte toutes les références (branches, tags) et les associe à leur OID.
-fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<String>>> {
-    let mut map = HashMap::new();
+/// Collecte toutes les références (branches, tags) et les associe à leur OID avec leur type.
+fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<RefInfo>>> {
+    let mut map: HashMap<Oid, Vec<RefInfo>> = HashMap::new();
+
+    // Déterminer HEAD
+    let head_oid = repo.head().ok().and_then(|h| h.target());
+    let head_branch = repo.head().ok().and_then(|h| {
+        if h.is_branch() {
+            h.shorthand().map(|s| s.to_string())
+        } else {
+            None
+        }
+    });
 
     for reference in repo.references()? {
         let reference = reference?;
         if let Some(name) = reference.shorthand() {
-            if let Some(oid) = reference.target() {
+            // Ignorer HEAD directement (on le gère via head_branch)
+            if name == "HEAD" {
+                continue;
+            }
+
+            let ref_type = if reference.is_tag() {
+                RefType::Tag
+            } else if reference.is_remote() || name.contains('/') {
+                RefType::RemoteBranch
+            } else {
+                RefType::LocalBranch
+            };
+
+            // Pour les tags, récupérer l'OID du commit pointé (pas l'OID du tag lui-même)
+            let target_oid = if reference.is_tag() {
+                reference
+                    .peel(git2::ObjectType::Commit)
+                    .ok()
+                    .and_then(|obj| obj.as_commit().map(|c| c.id()))
+            } else {
+                reference.target()
+            };
+
+            if let Some(oid) = target_oid {
                 map.entry(oid)
-                    .or_insert_with(Vec::new)
-                    .push(name.to_string());
+                    .or_default()
+                    .push(RefInfo {
+                        name: name.to_string(),
+                        ref_type,
+                    });
+            }
+        }
+    }
+
+    // Marquer HEAD
+    if let (Some(oid), Some(branch)) = (head_oid, head_branch) {
+        if let Some(refs) = map.get_mut(&oid) {
+            for r in refs.iter_mut() {
+                if r.name == branch {
+                    r.ref_type = RefType::Head;
+                }
             }
         }
     }
@@ -592,7 +693,7 @@ mod tests {
         // Avec refs, assigne une nouvelle couleur
         let color2 = determine_color_index(
             0,
-            &vec!["feature".to_string()],
+            &vec![RefInfo::new("feature", RefType::LocalBranch)],
             &mut branch_colors,
             &mut next_color,
             &columns,
@@ -603,7 +704,7 @@ mod tests {
         // Même ref, même couleur
         let color3 = determine_color_index(
             0,
-            &vec!["feature".to_string()],
+            &vec![RefInfo::new("feature", RefType::LocalBranch)],
             &mut branch_colors,
             &mut next_color,
             &columns,
@@ -613,7 +714,7 @@ mod tests {
         // Nouvelle ref, nouvelle couleur
         let color4 = determine_color_index(
             0,
-            &vec!["main".to_string()],
+            &vec![RefInfo::new("main", RefType::LocalBranch)],
             &mut branch_colors,
             &mut next_color,
             &columns,
@@ -641,8 +742,8 @@ mod tests {
 
         // La branche main et feature devraient pointer vers le commit
         if let Some(refs) = refs_map.get(&oid) {
-            assert!(refs.iter().any(|r| r.contains("main")));
-            assert!(refs.iter().any(|r| r.contains("feature")));
+            assert!(refs.iter().any(|r| r.name.contains("main")));
+            assert!(refs.iter().any(|r| r.name.contains("feature")));
         } else {
             panic!("Commit non trouvé dans refs_map");
         }
@@ -708,5 +809,45 @@ mod tests {
 
         // Seule la dernière colonne est supprimée si vide, pas celle du milieu
         assert_eq!(active_columns2.len(), 3, "Les colonnes vides au milieu ne devraient pas être supprimées");
+    }
+
+    #[test]
+    fn test_ref_classification() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Commit initial
+        let oid = commit_file(&repo, "test.txt", "content", "Initial commit");
+
+        // Créer une branche feature
+        let commit = repo.find_commit(oid).unwrap();
+        repo.branch("feature", &commit, false).unwrap();
+
+        // Créer un tag v1.0
+        repo.tag(
+            "v1.0",
+            &commit.clone().into_object(),
+            &git2::Signature::now("Test", "test@test.com").unwrap(),
+            "Version 1.0",
+            false,
+        )
+        .unwrap();
+
+        // Collecter les refs
+        let refs_map = collect_refs(&repo).unwrap();
+        let commit_refs = refs_map.get(&oid).expect("Le commit devrait avoir des refs");
+
+        // Vérifier les types de refs
+        assert!(
+            commit_refs.iter().any(|r| r.ref_type == RefType::Head && r.name == "main"),
+            "Devrait avoir HEAD sur main"
+        );
+        assert!(
+            commit_refs.iter().any(|r| r.ref_type == RefType::LocalBranch && r.name == "feature"),
+            "Devrait avoir une branche locale 'feature'"
+        );
+        assert!(
+            commit_refs.iter().any(|r| r.ref_type == RefType::Tag && r.name == "v1.0"),
+            "Devrait avoir un tag 'v1.0'"
+        );
     }
 }

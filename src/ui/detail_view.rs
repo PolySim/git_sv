@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::graph::GraphRow;
+use crate::git::graph::{GraphRow, RefType};
 use crate::utils::format_absolute_time;
 
 /// Rend le panneau de détail du commit sélectionné.
@@ -24,7 +24,8 @@ pub fn render(
         let author = node.author.clone();
         let message = node.message.clone();
 
-        let refs_display = node.refs.join(", ");
+        let refs_display: Vec<String> = node.refs.iter().map(|r| r.name.clone()).collect();
+        let refs_display = refs_display.join(", ");
         let has_refs = !node.refs.is_empty();
 
         let parents_str = node

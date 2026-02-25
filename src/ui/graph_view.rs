@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::graph::{EdgeType, GraphRow};
+use crate::git::graph::{EdgeType, GraphRow, RefInfo, RefType};
 use crate::ui::theme::{branch_color, current_theme};
 use crate::utils::format_relative_time;
 
@@ -191,15 +191,60 @@ fn build_commit_line(
         sel_style(theme.commit_hash),
     ));
 
-    // Labels de branches si présents.
-    let refs_width: usize = node.refs.iter().map(|r| r.len() + 3).sum();
-    if !node.refs.is_empty() {
-        for ref_name in &node.refs {
-            let ref_color = get_branch_color(node.color_index);
-            spans.push(Span::styled(
-                format!("[{}] ", ref_name),
-                sel_style(ref_color).add_modifier(Modifier::REVERSED),
-            ));
+    // Labels de branches si présents — triés par pertinence.
+    let mut sorted_refs: Vec<_> = node.refs.iter().collect();
+    sorted_refs.sort_by_key(|r| match r.ref_type {
+        RefType::Head => 0,
+        RefType::LocalBranch => 1,
+        RefType::Tag => 2,
+        RefType::RemoteBranch => 3,
+    });
+
+    let refs_width: usize = sorted_refs.iter().map(|r| {
+        let bracket_len = match r.ref_type {
+            RefType::Head => 4,      // ⦗⦘ + espace
+            RefType::Tag => 3,       // () + espace
+            RefType::RemoteBranch => 4, // ⟨⟩ + espace
+            RefType::LocalBranch => 3,  // [] + espace
+        };
+        r.name.len() + bracket_len
+    }).sum();
+
+    if !sorted_refs.is_empty() {
+        for ref_info in sorted_refs {
+            let (bracket, style) = match ref_info.ref_type {
+                RefType::Head => {
+                    // HEAD : mise en avant forte (vert gras inversé)
+                    let bracket = format!("⦗{}⦘ ", ref_info.name);
+                    let style = sel_style(Color::Green)
+                        .add_modifier(Modifier::BOLD | Modifier::REVERSED);
+                    (bracket, style)
+                }
+                RefType::LocalBranch => {
+                    // Branche locale : fond coloré (couleur de la branche)
+                    let ref_color = get_branch_color(node.color_index);
+                    let bracket = format!("[{}] ", ref_info.name);
+                    let style = sel_style(ref_color)
+                        .add_modifier(Modifier::BOLD | Modifier::REVERSED);
+                    (bracket, style)
+                }
+                RefType::RemoteBranch => {
+                    // Remote : style plus discret, pas de REVERSED
+                    let bracket = format!("⟨{}⟩ ", ref_info.name);
+                    let style = sel_style(Color::DarkGray)
+                        .add_modifier(Modifier::DIM);
+                    (bracket, style)
+                }
+                RefType::Tag => {
+                    // Tag : jaune, pas de REVERSED
+                    let bracket = format!("({}) ", ref_info.name);
+                    let style = sel_style(Color::Yellow)
+                        .add_modifier(Modifier::BOLD);
+                    (bracket, style)
+                }
+            };
+
+            spans.push(Span::styled(bracket, style));
         }
     }
 
