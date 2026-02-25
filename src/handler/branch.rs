@@ -57,21 +57,34 @@ fn handle_list(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_checkout(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Graph && state.show_branch_panel {
-        let branch_name = state
+    let branch_name = if state.view_mode == ViewMode::Branches {
+        // Lire depuis le nouvel état BranchesViewState
+        state
+            .branches_view_state
+            .selected_branch()
+            .map(|b| b.name.clone())
+    } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
+        // Legacy: panel overlay dans la vue Graph
+        state
             .branches
             .get(state.branch_selected)
-            .map(|b| b.name.clone());
-        if let Some(branch_name) = branch_name {
-            match crate::git::branch::checkout_branch(&state.repo.repo, &branch_name) {
-                Ok(_) => {
+            .map(|b| b.name.clone())
+    } else {
+        None
+    };
+
+    if let Some(branch_name) = branch_name {
+        match crate::git::branch::checkout_branch(&state.repo.repo, &branch_name) {
+            Ok(_) => {
+                // Fermer le panel si applicable
+                if state.show_branch_panel {
                     state.show_branch_panel = false;
-                    state.mark_dirty();
-                    state.set_flash_message(format!("Branche '{}' check-out ✓", branch_name));
                 }
-                Err(e) => {
-                    state.set_flash_message(format!("Erreur checkout: {}", e));
-                }
+                state.mark_dirty();
+                state.set_flash_message(format!("Branche '{}' check-out ✓", branch_name));
+            }
+            Err(e) => {
+                state.set_flash_message(format!("Erreur checkout: {}", e));
             }
         }
     }
