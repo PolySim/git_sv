@@ -264,8 +264,13 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         // Copier le contenu du panneau actif dans le clipboard
         KeyCode::Char('y') => Some(AppAction::CopyPanelContent),
 
-        // Basculer entre les modes du panneau bas-gauche
-        KeyCode::Tab => Some(AppAction::SwitchBottomMode),
+        // Changer le focus entre les panneaux (Graph -> BottomLeft -> BottomRight -> Graph)
+        KeyCode::Tab => Some(AppAction::Navigation(
+            crate::state::action::NavigationAction::SwitchPanel,
+        )),
+
+        // Basculer entre les modes du panneau bas-gauche (Files / Parents)
+        KeyCode::Char('M') => Some(AppAction::SwitchBottomMode),
 
         _ => None,
     }

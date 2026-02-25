@@ -119,11 +119,14 @@ impl ActionDispatcher {
                     ctx.state.focus = FocusPanel::BottomLeft;
                     // Réinitialiser la sélection de fichier pour commencer au début de la liste
                     ctx.state.file_selected_index = 0;
+                    ctx.state.graph_view.file_selected_index = 0;
                     // S'assurer que les fichiers du commit actuel sont chargés
                     if let Some(row) = ctx.state.graph.get(ctx.state.selected_index) {
                         ctx.state.commit_files =
                             ctx.state.repo.commit_diff(row.node.oid).unwrap_or_default();
                     }
+                    // Charger le diff du premier fichier
+                    crate::handler::navigation::load_commit_file_diff(ctx.state);
                 }
                 Ok(())
             }

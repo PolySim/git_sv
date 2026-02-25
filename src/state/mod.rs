@@ -273,9 +273,12 @@ impl AppState {
             if self.file_selected_index >= self.commit_files.len() {
                 self.file_selected_index = 0;
             }
+            // Charger le diff du fichier sélectionné
+            crate::handler::navigation::load_commit_file_diff(self);
         } else {
             self.commit_files.clear();
             self.file_selected_index = 0;
+            self.selected_file_diff = None;
         }
     }
 }

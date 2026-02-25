@@ -157,6 +157,10 @@ fn handle_switch_panel(state: &mut AppState) {
                 FocusPanel::Files => FocusPanel::BottomRight,
                 FocusPanel::Detail => FocusPanel::Graph,
             };
+            // Quand on passe au panneau BottomLeft, charger le diff du fichier sélectionné
+            if state.focus == FocusPanel::BottomLeft {
+                load_commit_file_diff(state);
+            }
         }
         ViewMode::Staging => {
             state.staging_state.focus = match state.staging_state.focus {
@@ -184,6 +188,8 @@ fn handle_file_up(state: &mut AppState) {
     if state.file_selected_index > 0 {
         state.file_selected_index -= 1;
         state.graph_view.file_selected_index = state.file_selected_index;
+        // Charger le diff du fichier sélectionné
+        load_commit_file_diff(state);
     }
 }
 
@@ -191,6 +197,8 @@ fn handle_file_down(state: &mut AppState) {
     if state.file_selected_index + 1 < state.commit_files.len() {
         state.file_selected_index += 1;
         state.graph_view.file_selected_index = state.file_selected_index;
+        // Charger le diff du fichier sélectionné
+        load_commit_file_diff(state);
     }
 }
 
@@ -308,6 +316,18 @@ fn handle_blame_navigation(state: &mut AppState, delta: i32) {
         };
         blame_state.selected_line = new_idx;
     }
+}
+
+/// Charge le diff pour le fichier sélectionné dans le commit courant.
+pub fn load_commit_file_diff(state: &mut AppState) {
+    if let Some(row) = state.graph.get(state.selected_index) {
+        if let Some(file) = state.commit_files.get(state.file_selected_index) {
+            state.selected_file_diff = state.repo.file_diff(row.node.oid, &file.path).ok();
+            state.graph_view.diff_scroll_offset = 0;
+            return;
+        }
+    }
+    state.selected_file_diff = None;
 }
 
 #[cfg(test)]
