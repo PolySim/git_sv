@@ -49,6 +49,12 @@ pub struct ConflictsState {
     pub edit_cursor_line: usize,
     /// Colonne du curseur dans le buffer d'édition.
     pub edit_cursor_col: usize,
+    /// Hauteur visible du panneau Ours (pour le scroll automatique).
+    pub ours_panel_height: usize,
+    /// Hauteur visible du panneau Theirs (pour le scroll automatique).
+    pub theirs_panel_height: usize,
+    /// Hauteur visible du panneau Résultat (pour le scroll automatique).
+    pub result_panel_height: usize,
 }
 
 impl ConflictsState {
@@ -88,6 +94,9 @@ impl ConflictsState {
             edit_buffer: Vec::new(),
             edit_cursor_line: 0,
             edit_cursor_col: 0,
+            ours_panel_height: 0,
+            theirs_panel_height: 0,
+            result_panel_height: 0,
         }
     }
 

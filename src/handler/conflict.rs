@@ -2,12 +2,69 @@
 
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
-use crate::git::conflict::ConflictResolutionMode;
+use crate::git::conflict::{ConflictResolutionMode, MergeFile};
 use crate::state::action::ConflictAction;
 use crate::state::{AppState, ConflictPanelFocus, ViewMode};
 
 /// Handler pour les opérations de résolution de conflits.
 pub struct ConflictHandler;
+
+/// Ajuste le scroll pour garder la ligne sélectionnée visible.
+fn adjust_scroll(selected: usize, scroll_offset: usize, visible_height: usize) -> usize {
+    if visible_height == 0 {
+        return 0;
+    }
+    if selected < scroll_offset {
+        // La ligne est au-dessus de la vue, on remonte
+        selected
+    } else if selected >= scroll_offset + visible_height {
+        // La ligne est en dessous de la vue, on descend
+        selected.saturating_add(1).saturating_sub(visible_height)
+    } else {
+        // La ligne est visible, on ne change rien
+        scroll_offset
+    }
+}
+
+/// Calcule la position absolue d'une ligne dans le contenu rendu d'un panneau.
+/// Retourne (ligne_absolue, nombre_total_de_lignes)
+fn calculate_absolute_line_position(
+    file: &MergeFile,
+    section_selected: usize,
+    line_selected: usize,
+    is_file_mode: bool,
+) -> (usize, usize) {
+    let mut current_line: usize = 0;
+    
+    for (idx, section) in file.conflicts.iter().enumerate() {
+        // Ajouter le séparateur entre sections (sauf la première)
+        if idx > 0 {
+            current_line += 1;
+        }
+        
+        // Ajouter le titre de section (sauf en mode Fichier)
+        if !is_file_mode {
+            current_line += 1;
+        }
+        
+        // Ajouter les lignes de contexte avant
+        current_line += section.context_before.len();
+        
+        // Si c'est la section sélectionnée, on ajoute la ligne sélectionnée
+        if idx == section_selected {
+            current_line += line_selected;
+            break;
+        }
+        
+        // Sinon, on ajoute toutes les lignes de conflit de cette section
+        current_line += section.ours.len();
+        
+        // Ajouter les lignes de contexte après
+        current_line += section.context_after.len();
+    }
+    
+    (current_line, current_line + 1)
+}
 
 impl ActionHandler for ConflictHandler {
     type Action = ConflictAction;
@@ -84,9 +141,41 @@ fn handle_next_file(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_previous_section(state: &mut AppState) -> Result<()> {
-    if let Some(ref mut conflicts) = state.conflicts_state {
+    if let Some(conflicts) = &mut state.conflicts_state {
+        let is_file_mode = conflicts.resolution_mode == ConflictResolutionMode::File;
+        let file_selected = conflicts.file_selected;
+        
         if conflicts.section_selected > 0 {
             conflicts.section_selected -= 1;
+            
+            // Calculer la position absolue pour le scroll (début de la section)
+            let absolute_line = conflicts.all_files.get(file_selected).map(|file| {
+                calculate_absolute_line_position(
+                    file,
+                    conflicts.section_selected,
+                    0, // Début de la section
+                    is_file_mode,
+                ).0
+            });
+            
+            // Mettre à jour le scroll pour positionner la section au début de la vue
+            if let Some(line) = absolute_line {
+                let panel_focus = conflicts.panel_focus;
+                let visible_height = match panel_focus {
+                    ConflictPanelFocus::OursPanel => conflicts.ours_panel_height,
+                    ConflictPanelFocus::TheirsPanel => conflicts.theirs_panel_height,
+                    _ => 0,
+                };
+                let scroll_ref = match panel_focus {
+                    ConflictPanelFocus::OursPanel => &mut conflicts.ours_scroll,
+                    ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
+                    _ => return Ok(()),
+                };
+                
+                if visible_height > 0 {
+                    *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
+                }
+            }
         }
     }
     Ok(())
@@ -94,11 +183,43 @@ fn handle_previous_section(state: &mut AppState) -> Result<()> {
 
 fn handle_next_section(state: &mut AppState) -> Result<()> {
     if let Some(conflicts) = &mut state.conflicts_state {
+        let is_file_mode = conflicts.resolution_mode == ConflictResolutionMode::File;
+        let file_selected = conflicts.file_selected;
         let file = &conflicts.all_files[conflicts.file_selected];
         let max_section = file.conflicts.len().saturating_sub(1);
+        
         if conflicts.section_selected < max_section {
             conflicts.section_selected += 1;
-            conflicts.line_selected = 0; // Reset la sélection de ligne
+            conflicts.line_selected = 0;
+            
+            // Calculer la position absolue pour le scroll (début de la section)
+            let absolute_line = conflicts.all_files.get(file_selected).map(|file| {
+                calculate_absolute_line_position(
+                    file,
+                    conflicts.section_selected,
+                    0, // Début de la section
+                    is_file_mode,
+                ).0
+            });
+            
+            // Mettre à jour le scroll pour positionner la section au début de la vue
+            if let Some(line) = absolute_line {
+                let panel_focus = conflicts.panel_focus;
+                let visible_height = match panel_focus {
+                    ConflictPanelFocus::OursPanel => conflicts.ours_panel_height,
+                    ConflictPanelFocus::TheirsPanel => conflicts.theirs_panel_height,
+                    _ => 0,
+                };
+                let scroll_ref = match panel_focus {
+                    ConflictPanelFocus::OursPanel => &mut conflicts.ours_scroll,
+                    ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
+                    _ => return Ok(()),
+                };
+                
+                if visible_height > 0 {
+                    *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
+                }
+            }
         }
     }
     Ok(())
@@ -709,6 +830,10 @@ fn handle_line_down(state: &mut AppState) -> Result<()> {
             0
         };
 
+        let is_file_mode = conflicts.resolution_mode == ConflictResolutionMode::File;
+        let file_selected = conflicts.file_selected;
+        let _section_selected_before = conflicts.section_selected;
+
         if conflicts.line_selected < max_lines.saturating_sub(1) {
             // Naviguer dans les lignes du block courant
             conflicts.line_selected += 1;
@@ -720,6 +845,36 @@ fn handle_line_down(state: &mut AppState) -> Result<()> {
                 conflicts.line_selected = 0;
             }
         }
+
+        // Calculer la position absolue pour le scroll
+        let absolute_line = conflicts.all_files.get(file_selected).map(|file| {
+            calculate_absolute_line_position(
+                file,
+                conflicts.section_selected,
+                conflicts.line_selected,
+                is_file_mode,
+            ).0
+        });
+        
+        // Mettre à jour le scroll pour garder la ligne visible
+        if let Some(line) = absolute_line {
+            // On doit sortir du scope du borrow mutable avant d'appeler update_scrolls_for_position
+            let panel_focus = conflicts.panel_focus;
+            let visible_height = match panel_focus {
+                ConflictPanelFocus::OursPanel => conflicts.ours_panel_height,
+                ConflictPanelFocus::TheirsPanel => conflicts.theirs_panel_height,
+                _ => 0,
+            };
+            let scroll_ref = match panel_focus {
+                ConflictPanelFocus::OursPanel => &mut conflicts.ours_scroll,
+                ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
+                _ => return Ok(()),
+            };
+            
+            if visible_height > 0 {
+                *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
+            }
+        }
     }
     Ok(())
 }
@@ -728,6 +883,9 @@ fn handle_line_up(state: &mut AppState) -> Result<()> {
     use crate::state::ConflictPanelFocus;
 
     if let Some(ref mut conflicts) = state.conflicts_state {
+        let is_file_mode = conflicts.resolution_mode == ConflictResolutionMode::File;
+        let file_selected = conflicts.file_selected;
+
         if conflicts.line_selected > 0 {
             // Naviguer dans les lignes du block courant
             conflicts.line_selected -= 1;
@@ -742,6 +900,35 @@ fn handle_line_up(state: &mut AppState) -> Result<()> {
                 _ => 0,
             };
             conflicts.line_selected = max_lines.saturating_sub(1);
+        }
+
+        // Calculer la position absolue pour le scroll
+        let absolute_line = conflicts.all_files.get(file_selected).map(|file| {
+            calculate_absolute_line_position(
+                file,
+                conflicts.section_selected,
+                conflicts.line_selected,
+                is_file_mode,
+            ).0
+        });
+        
+        // Mettre à jour le scroll pour garder la ligne visible
+        if let Some(line) = absolute_line {
+            let panel_focus = conflicts.panel_focus;
+            let visible_height = match panel_focus {
+                ConflictPanelFocus::OursPanel => conflicts.ours_panel_height,
+                ConflictPanelFocus::TheirsPanel => conflicts.theirs_panel_height,
+                _ => 0,
+            };
+            let scroll_ref = match panel_focus {
+                ConflictPanelFocus::OursPanel => &mut conflicts.ours_scroll,
+                ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
+                _ => return Ok(()),
+            };
+            
+            if visible_height > 0 {
+                *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
+            }
         }
     }
     Ok(())

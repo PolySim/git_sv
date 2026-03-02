@@ -70,13 +70,18 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     );
                 }
                 Some(ViewMode::Conflicts) | _ if state.conflicts_state.is_some() => {
-                    if let Some(ref conflicts_state) = state.conflicts_state {
+                    // Extraire les valeurs nécessaires avant l'emprunt mutable
+                    let flash_msg = state.current_flash_message().map(|s| s.to_string());
+                    let current_branch = state.current_branch.clone();
+                    let repo_path = state.repo_path.clone();
+                    
+                    if let Some(ref mut conflicts_state) = state.conflicts_state {
                         conflicts_view::render(
                             frame,
                             conflicts_state,
-                            &state.current_branch,
-                            &state.repo_path,
-                            state.current_flash_message(),
+                            &current_branch,
+                            &repo_path,
+                            flash_msg.as_deref(),
                         );
                     }
                     conflicts_view::render_help_overlay(frame, frame.area());
@@ -103,13 +108,18 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             }
         }
         ViewMode::Conflicts => {
-            if let Some(ref conflicts_state) = state.conflicts_state {
+            // Extraire les valeurs nécessaires avant l'emprunt mutable
+            let flash_msg = state.current_flash_message().map(|s| s.to_string());
+            let current_branch = state.current_branch.clone();
+            let repo_path = state.repo_path.clone();
+            
+            if let Some(ref mut conflicts_state) = state.conflicts_state {
                 conflicts_view::render(
                     frame,
                     conflicts_state,
-                    &state.current_branch,
-                    &state.repo_path,
-                    state.current_flash_message(),
+                    &current_branch,
+                    &repo_path,
+                    flash_msg.as_deref(),
                 );
             }
         }

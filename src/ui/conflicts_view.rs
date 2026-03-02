@@ -18,7 +18,7 @@ use crate::ui::theme::current_theme;
 /// Rend la vue de résolution de conflits.
 pub fn render(
     frame: &mut Frame,
-    state: &ConflictsState,
+    state: &mut ConflictsState,
     current_branch: &Option<String>,
     repo_path: &str,
     flash_message: Option<&str>,
@@ -57,6 +57,11 @@ pub fn render(
             Constraint::Percentage(34),
         ])
         .split(content_layout[1]);
+
+    // Sauvegarder les hauteurs des panneaux pour le scroll automatique (hauteur - 2 bordures)
+    state.ours_panel_height = (resolution_layout[0].height as usize).saturating_sub(2);
+    state.theirs_panel_height = (resolution_layout[1].height as usize).saturating_sub(2);
+    state.result_panel_height = (resolution_layout[2].height as usize).saturating_sub(2);
 
     render_ours_panel(frame, state, resolution_layout[0]);
     render_theirs_panel(frame, state, resolution_layout[1]);
