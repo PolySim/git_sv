@@ -31,8 +31,21 @@ pub fn render(
     // Calculer la largeur disponible pour le contenu (hors bordures).
     let content_width = area.width.saturating_sub(2);
 
+    // Calculer la fenêtre visible (approximation: chaque commit utilise 1-2 lignes)
+    let visible_height = area.height.saturating_sub(2) as usize; // Sans les bordures
+    let visible_commits = (visible_height / 2).max(1);
+    
+    // Calculer l'index de départ centré sur la sélection
+    let scroll_offset = selected_index.saturating_sub(visible_commits / 2);
+    
     // Construire les lignes du graphe avec les edges de connexion.
-    let items = build_graph_items(graph, selected_index, content_width);
+    let items = build_graph_items(
+        graph,
+        selected_index,
+        content_width,
+        scroll_offset,
+        visible_commits,
+    );
 
     let branch_name = current_branch.as_deref().unwrap_or("???");
     let title = if graph.len() < total_commits {
@@ -70,11 +83,16 @@ fn build_graph_items(
     graph: &[GraphRow],
     selected_index: usize,
     available_width: u16,
+    scroll_offset: usize,
+    visible_count: usize,
 ) -> Vec<ListItem<'static>> {
     let mut items = Vec::with_capacity(graph.len() * 2);
 
-    // Calculer le nombre maximum de colonnes dans le graphe pour l'alignement.
-    let max_graph_cols = graph
+    // Calculer le nombre maximum de colonnes SEULEMENT sur la fenêtre visible.
+    // Cela évite les grands espaces blancs quand il y a beaucoup de branches en bas du graphe.
+    let end_offset = (scroll_offset + visible_count).min(graph.len());
+    let visible_rows = &graph[scroll_offset..end_offset];
+    let max_graph_cols = visible_rows
         .iter()
         .map(|r| r.cells.len().max(r.node.column + 1))
         .max()
@@ -479,7 +497,7 @@ mod tests {
     #[test]
     fn test_build_graph_items() {
         let graph = create_test_graph();
-        let items = build_graph_items(&graph, 0, 80);
+        let items = build_graph_items(&graph, 0, 80, 0, graph.len());
 
         // Chaque GraphRow génère au moins 1 item
         assert!(!items.is_empty());
