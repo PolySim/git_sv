@@ -46,6 +46,7 @@ pub struct BranchesViewState {
     pub stashes: ListSelection<StashEntry>,
     pub stash_file_selected: usize,
     pub stash_file_diff: Option<Vec<String>>,
+    pub stash_diff_scroll: usize,
     pub input_text: String,
     pub input_cursor: usize,
     pub input_action: Option<InputAction>,

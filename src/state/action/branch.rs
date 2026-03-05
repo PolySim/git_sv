@@ -26,6 +26,10 @@ pub enum BranchAction {
     StashPop,
     /// Supprimer un stash
     StashDrop,
+    /// Fichier suivant dans le stash
+    StashFileNext,
+    /// Fichier précédent dans le stash
+    StashFilePrev,
     /// Créer un worktree
     WorktreeCreate,
     /// Supprimer un worktree

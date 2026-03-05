@@ -34,6 +34,10 @@ pub enum NavigationAction {
     ScrollDiffLeft,
     /// Faire défiler le diff vers la droite (horizontal)
     ScrollDiffRight,
+    /// Faire défiler le diff de stash vers le haut
+    ScrollStashDiffUp,
+    /// Faire défiler le diff de stash vers le bas
+    ScrollStashDiffDown,
     /// Naviguer vers le haut dans le panneau de fichiers
     FileUp,
     /// Naviguer vers le bas dans le panneau de fichiers

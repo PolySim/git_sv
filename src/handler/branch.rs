@@ -24,6 +24,8 @@ impl ActionHandler for BranchHandler {
             BranchAction::StashApply => handle_stash_apply(ctx.state),
             BranchAction::StashPop => handle_stash_pop(ctx.state),
             BranchAction::StashDrop => handle_stash_drop(ctx.state),
+            BranchAction::StashFileNext => handle_stash_file_next(ctx.state),
+            BranchAction::StashFilePrev => handle_stash_file_prev(ctx.state),
             BranchAction::WorktreeCreate => handle_worktree_create(ctx.state),
             BranchAction::WorktreeRemove => handle_worktree_remove(ctx.state),
             BranchAction::NextSection => handle_next_section(ctx.state),
@@ -342,6 +344,52 @@ fn handle_cancel_input(state: &mut AppState) -> Result<()> {
     state.branches_view_state.input_action = None;
     state.branches_view_state.input_text.clear();
     state.branches_view_state.input_cursor = 0;
+    Ok(())
+}
+
+fn handle_stash_file_next(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches
+        && state.branches_view_state.section == BranchesSection::Stashes
+    {
+        if let Some(stash) = state.branches_view_state.stashes.selected_item() {
+            let file_count = stash.files.len();
+            if file_count > 0 {
+                let idx = &mut state.branches_view_state.stash_file_selected;
+                *idx = (*idx + 1).min(file_count - 1);
+                // Charger le diff du fichier sélectionné
+                load_stash_file_diff(state)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn handle_stash_file_prev(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches
+        && state.branches_view_state.section == BranchesSection::Stashes
+    {
+        let idx = &mut state.branches_view_state.stash_file_selected;
+        *idx = idx.saturating_sub(1);
+        load_stash_file_diff(state)?;
+    }
+    Ok(())
+}
+
+pub fn load_stash_file_diff(state: &mut AppState) -> Result<()> {
+    if let Some(stash) = state.branches_view_state.stashes.selected_item() {
+        let idx = state.branches_view_state.stash_file_selected;
+        if let Some(file) = stash.files.get(idx) {
+            match state.repo.stash_file_diff(stash.oid, &file.path) {
+                Ok(diff) => {
+                    state.branches_view_state.stash_file_diff = Some(diff);
+                }
+                Err(e) => {
+                    state.set_flash_message(format!("Erreur chargement diff: {}", e));
+                    state.branches_view_state.stash_file_diff = None;
+                }
+            }
+        }
+    }
     Ok(())
 }
 

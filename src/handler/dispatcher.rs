@@ -518,6 +518,17 @@ impl ActionDispatcher {
                         ctx.state.mark_dirty();
                     }
                 }
+                ConfirmAction::StashDrop(index) => {
+                    ctx.state.pending_confirmation = None;
+                    if let Err(e) = crate::git::stash::drop_stash(&mut ctx.state.repo.repo, index) {
+                        ctx.state
+                            .set_flash_message(format!("Erreur suppression stash: {}", e));
+                    } else {
+                        ctx.state
+                            .set_flash_message(format!("Stash @{{{}}} supprimé ✓", index));
+                        ctx.state.mark_dirty();
+                    }
+                }
                 _ => {
                     ctx.state.pending_confirmation = None;
                 }

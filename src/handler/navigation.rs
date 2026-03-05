@@ -28,6 +28,8 @@ impl ActionHandler for NavigationHandler {
             NavigationAction::ScrollDiffBottom => handle_scroll_diff_bottom(ctx.state),
             NavigationAction::ScrollDiffLeft => handle_scroll_diff_left(ctx.state),
             NavigationAction::ScrollDiffRight => handle_scroll_diff_right(ctx.state),
+            NavigationAction::ScrollStashDiffUp => handle_scroll_stash_diff_up(ctx.state),
+            NavigationAction::ScrollStashDiffDown => handle_scroll_stash_diff_down(ctx.state),
             NavigationAction::FileUp => handle_file_up(ctx.state),
             NavigationAction::FileDown => handle_file_down(ctx.state),
             NavigationAction::BackToGraph => handle_back_to_graph(ctx.state),
@@ -244,6 +246,16 @@ fn handle_scroll_diff_right(state: &mut AppState) {
     state.diff_horizontal_offset += 1;
 }
 
+fn handle_scroll_stash_diff_up(state: &mut AppState) {
+    if state.branches_view_state.stash_diff_scroll > 0 {
+        state.branches_view_state.stash_diff_scroll -= 1;
+    }
+}
+
+fn handle_scroll_stash_diff_down(state: &mut AppState) {
+    state.branches_view_state.stash_diff_scroll += 1;
+}
+
 fn handle_file_up(state: &mut AppState) {
     if state.file_selected_index > 0 {
         state.file_selected_index -= 1;
@@ -356,6 +368,12 @@ fn handle_branches_navigation(state: &mut AppState, direction: i32) {
                     state.branches_view_state.stash_selected().saturating_sub(1)
                 };
                 state.branches_view_state.set_stash_selected(new_idx);
+                // Réinitialiser la sélection de fichier et charger le diff du premier fichier
+                state.branches_view_state.stash_file_selected = 0;
+                state.branches_view_state.stash_file_diff = None;
+                state.branches_view_state.stash_diff_scroll = 0;
+                // Charger le diff du premier fichier du nouveau stash sélectionné
+                let _ = crate::handler::branch::load_stash_file_diff(state);
             }
         }
     }

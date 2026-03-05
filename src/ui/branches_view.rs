@@ -318,8 +318,20 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
         vec![Line::from("Aucune branche sélectionnée")]
     };
 
-    let paragraph =
-        Paragraph::new(content).block(Block::default().title(" Détail ").borders(Borders::ALL));
+    // Déterminer si on a un diff à scroller
+    let has_diff = state
+        .stash_file_diff
+        .as_ref()
+        .map_or(false, |d| !d.is_empty());
+    let scroll_offset = if has_diff {
+        state.stash_diff_scroll as u16
+    } else {
+        0
+    };
+
+    let paragraph = Paragraph::new(content)
+        .block(Block::default().title(" Détail ").borders(Borders::ALL))
+        .scroll((scroll_offset, 0));
     frame.render_widget(paragraph, area);
 }
 
@@ -397,8 +409,20 @@ fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Re
         vec![Line::from("Aucun worktree sélectionné")]
     };
 
-    let paragraph =
-        Paragraph::new(content).block(Block::default().title(" Détail ").borders(Borders::ALL));
+    // Déterminer si on a un diff à scroller
+    let has_diff = state
+        .stash_file_diff
+        .as_ref()
+        .map_or(false, |d| !d.is_empty());
+    let scroll_offset = if has_diff {
+        state.stash_diff_scroll as u16
+    } else {
+        0
+    };
+
+    let paragraph = Paragraph::new(content)
+        .block(Block::default().title(" Détail ").borders(Borders::ALL))
+        .scroll((scroll_offset, 0));
     frame.render_widget(paragraph, area);
 }
 
@@ -500,25 +524,24 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
                         Style::default().add_modifier(Modifier::BOLD),
                     )]));
 
-                    // Limiter le nombre de lignes affichées
-                    let max_lines = 30;
-                    for line in diff_lines.iter().take(max_lines) {
-                        let styled_line = if line.starts_with('+') {
-                            Span::styled(line, Style::default().fg(Color::Green))
-                        } else if line.starts_with('-') {
-                            Span::styled(line, Style::default().fg(Color::Red))
-                        } else {
-                            Span::raw(line)
-                        };
-                        lines.push(Line::from(styled_line));
-                    }
+                    // Construire toutes les lignes du diff avec coloration
+                    let mut diff_content: Vec<Line> = diff_lines
+                        .iter()
+                        .map(|line| {
+                            let styled_line = if line.starts_with("+") {
+                                Span::styled(line, Style::default().fg(Color::Green))
+                            } else if line.starts_with("-") {
+                                Span::styled(line, Style::default().fg(Color::Red))
+                            } else if line.starts_with("@") {
+                                Span::styled(line, Style::default().fg(Color::Cyan))
+                            } else {
+                                Span::raw(line)
+                            };
+                            Line::from(styled_line)
+                        })
+                        .collect();
 
-                    if diff_lines.len() > max_lines {
-                        lines.push(Line::from(Span::styled(
-                            format!("... ({} lignes masquées)", diff_lines.len() - max_lines),
-                            Style::default().fg(Color::DarkGray),
-                        )));
-                    }
+                    lines.append(&mut diff_content);
                 }
             }
         }
@@ -528,8 +551,20 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
         vec![Line::from("Aucun stash sélectionné")]
     };
 
-    let paragraph =
-        Paragraph::new(content).block(Block::default().title(" Détail ").borders(Borders::ALL));
+    // Déterminer si on a un diff à scroller
+    let has_diff = state
+        .stash_file_diff
+        .as_ref()
+        .map_or(false, |d| !d.is_empty());
+    let scroll_offset = if has_diff {
+        state.stash_diff_scroll as u16
+    } else {
+        0
+    };
+
+    let paragraph = Paragraph::new(content)
+        .block(Block::default().title(" Détail ").borders(Borders::ALL))
+        .scroll((scroll_offset, 0));
     frame.render_widget(paragraph, area);
 }
 
@@ -551,7 +586,7 @@ fn render_branches_help(
                 "Tab:section  n:new  d:delete  1:graph  2:staging"
             }
             BranchesSection::Stashes => {
-                "Tab:section  h/l:fichiers  a:apply  p:pop  d:drop  s:save  1:graph  2:staging"
+                "Tab:section  h/l:fichiers  J/K:scroll diff  a:apply  p:pop  d:drop  s:save  1:graph  2:staging"
             }
         }
     };

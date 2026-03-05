@@ -443,15 +443,19 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                 Some(AppAction::Navigation(NavigationAction::MoveUp))
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                Some(AppAction::Navigation(NavigationAction::FileDown))
+                Some(AppAction::Branch(BranchAction::StashFileNext))
             }
             KeyCode::Char('h') | KeyCode::Left => {
-                Some(AppAction::Navigation(NavigationAction::FileUp))
+                Some(AppAction::Branch(BranchAction::StashFilePrev))
             }
             KeyCode::Char('a') => Some(AppAction::Branch(BranchAction::StashApply)),
             KeyCode::Char('p') => Some(AppAction::Branch(BranchAction::StashPop)),
             KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::StashDrop)),
             KeyCode::Char('s') => Some(AppAction::Branch(BranchAction::StashSave)),
+            KeyCode::Char('J') => {
+                Some(AppAction::Navigation(NavigationAction::ScrollStashDiffDown))
+            }
+            KeyCode::Char('K') => Some(AppAction::Navigation(NavigationAction::ScrollStashDiffUp)),
             _ => None,
         },
     }
