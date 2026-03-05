@@ -51,6 +51,7 @@ pub struct LayoutChunks {
 /// ├───────────────────────────┤
 /// │       Help Bar (1 ligne)  │
 /// └───────────────────────────┘
+#[allow(dead_code)]
 pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
     build_layout_with_diff_mode(area, show_search, false)
 }
