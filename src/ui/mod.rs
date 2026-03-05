@@ -47,6 +47,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                 &state.current_branch,
                 &state.repo_path,
                 state.current_flash_message(),
+                state.is_merging,
             );
         }
         ViewMode::Help => {
@@ -59,6 +60,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                         &state.current_branch,
                         &state.repo_path,
                         state.current_flash_message(),
+                        state.is_merging,
                     );
                 }
                 Some(ViewMode::Branches) => {
@@ -163,6 +165,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         &state.status_entries,
         state.current_flash_message(),
         &state.graph_filter,
+        state.is_merging,
         layout.status_bar,
     );
 
@@ -273,6 +276,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         state.graph.len(),
         state.bottom_left_mode.clone(),
         state.graph_filter.is_active(),
+        state.is_merging,
         layout.help_bar,
     );
 

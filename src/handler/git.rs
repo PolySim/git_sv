@@ -26,6 +26,7 @@ impl ActionHandler for GitHandler {
             GitAction::MergePrompt => handle_merge_prompt(ctx.state),
             GitAction::BranchList => handle_branch_list(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
+            GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
     }
 }
@@ -340,6 +341,18 @@ fn handle_reset_prompt(state: &mut AppState) -> Result<()> {
     } else {
         state.set_flash_message("Aucun commit sélectionné".to_string());
     }
+
+    Ok(())
+}
+
+fn handle_abort_merge(state: &mut AppState) -> Result<()> {
+    if !state.is_merging {
+        state.set_flash_message("Aucun merge en cours".to_string());
+        return Ok(());
+    }
+
+    // Demander confirmation via le dialogue existant
+    state.pending_confirmation = Some(crate::ui::confirm_dialog::ConfirmAction::AbortMerge);
 
     Ok(())
 }

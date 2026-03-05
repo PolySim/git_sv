@@ -529,6 +529,11 @@ pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
     Ok(())
 }
 
+/// Vérifie si le repository est en état de merge (MERGE_HEAD existe).
+pub fn is_merging(repo: &Repository) -> bool {
+    repo.path().join("MERGE_HEAD").exists()
+}
+
 /// Annule le merge en cours (cleanup_state).
 pub fn abort_merge(repo: &Repository) -> Result<()> {
     repo.cleanup_state()

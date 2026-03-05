@@ -480,6 +480,7 @@ impl ActionDispatcher {
                     } else {
                         ctx.state.set_flash_message("Merge annulé ✓".to_string());
                         ctx.state.conflicts_state = None;
+                        ctx.state.is_merging = false;
                     }
                     ctx.state.mark_dirty();
                 }

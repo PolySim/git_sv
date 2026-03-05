@@ -350,6 +350,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         // Reset
         KeyCode::Char('R') => Some(AppAction::Git(GitAction::ResetPrompt)),
 
+        // Abort merge (uniquement si un merge est en cours)
+        KeyCode::Char('A') if state.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
+
         // Aide
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
 
@@ -481,6 +484,9 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('y') => return Some(AppAction::CopyPanelContent),
         KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
         KeyCode::Char('P') => return Some(AppAction::Git(GitAction::Push)),
+        KeyCode::Char('A') if state.is_merging => {
+            return Some(AppAction::Git(GitAction::AbortMerge))
+        }
         _ => {}
     }
 

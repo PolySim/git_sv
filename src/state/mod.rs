@@ -149,6 +149,9 @@ pub struct AppState {
     /// Index de la branche sélectionnée dans le panneau (compatibilité).
     pub branch_selected: usize,
 
+    /// Indique si un merge est en cours (MERGE_HEAD existe).
+    pub is_merging: bool,
+
     /// Flag pour quitter l'application.
     pub should_quit: bool,
 
@@ -211,6 +214,7 @@ impl AppState {
             loading_spinner: None,
             show_branch_panel: false,
             branch_selected: 0,
+            is_merging: false,
             should_quit: false,
             diff_cache: DiffCache::new(DIFF_CACHE_CAPACITY),
             graph_filter: GraphFilter::new(),

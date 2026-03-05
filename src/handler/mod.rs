@@ -214,6 +214,9 @@ impl EventHandler {
             staging::load_staging_diff(&mut self.state);
         }
 
+        // Détecter si un merge est en cours
+        self.state.is_merging = crate::git::conflict::is_merging(&self.state.repo.repo);
+
         // Réinitialiser le flag dirty
         self.state.dirty = false;
 

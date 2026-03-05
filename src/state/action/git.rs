@@ -39,4 +39,6 @@ pub enum GitAction {
     BranchList,
     /// Ouvrir le dialogue de reset
     ResetPrompt,
+    /// Annuler le merge en cours
+    AbortMerge,
 }

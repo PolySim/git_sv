@@ -19,6 +19,7 @@ pub fn render(
     current_branch: &Option<String>,
     repo_path: &str,
     flash_message: Option<&str>,
+    is_merging: bool,
 ) {
     let theme = current_theme();
     let layout = super::staging_layout::build_staging_layout(frame.area());
@@ -79,7 +80,13 @@ pub fn render(
     );
 
     // Help bar.
-    render_staging_help(frame, &staging_state.focus, layout.help_bar, theme);
+    render_staging_help(
+        frame,
+        &staging_state.focus,
+        is_merging,
+        layout.help_bar,
+        theme,
+    );
 }
 
 /// Rend la status bar de la vue staging.
@@ -254,20 +261,23 @@ fn render_commit_input(
 fn render_staging_help(
     frame: &mut Frame,
     focus: &StagingFocus,
+    is_merging: bool,
     area: Rect,
     theme: &crate::ui::theme::Theme,
 ) {
+    let abort_merge_text = if is_merging { "  A:abort merge" } else { "" };
+
     let help_text = match focus {
         StagingFocus::Unstaged => {
-            "j/k:nav  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit  P:push  1:graph  q:quit"
+            format!("j/k:nav  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit  P:push{}  1:graph  q:quit", abort_merge_text)
         }
         StagingFocus::Staged => {
-            "j/k:nav  u/Enter:unstage  U:unstage all  Tab:→Diff  c:commit  P:push  1:graph  q:quit"
+            format!("j/k:nav  u/Enter:unstage  U:unstage all  Tab:→Diff  c:commit  P:push{}  1:graph  q:quit", abort_merge_text)
         }
         StagingFocus::Diff => {
-            "j/k:scroll  v:vue  Tab:→Unstaged  Esc:Unstaged  c:commit  P:push  1:graph  q:quit"
+            format!("j/k:scroll  v:vue  Tab:→Unstaged  Esc:Unstaged  c:commit  P:push{}  1:graph  q:quit", abort_merge_text)
         }
-        StagingFocus::CommitMessage => "Enter:confirmer  Esc:annuler  ←→:curseur",
+        StagingFocus::CommitMessage => "Enter:confirmer  Esc:annuler  ←→:curseur".to_string(),
     };
 
     let line = Line::from(vec![Span::styled(

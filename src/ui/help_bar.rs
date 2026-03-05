@@ -18,6 +18,7 @@ pub fn render(
     total_commits: usize,
     bottom_left_mode: BottomLeftMode,
     filter_active: bool,
+    is_merging: bool,
     area: Rect,
 ) {
     let theme = current_theme();
@@ -32,6 +33,11 @@ pub fn render(
         ("m", "merge"),
         ("P", "push"),
     ];
+
+    // Ajouter abort merge si un merge est en cours.
+    if is_merging {
+        keys.push(("A", "abort merge"));
+    }
 
     // Ajouter le contexte du panneau bas.
     match bottom_left_mode {

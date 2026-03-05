@@ -20,6 +20,7 @@ pub fn render(
     status_entries: &[StatusEntry],
     flash_message: Option<&str>,
     filter: &GraphFilter,
+    is_merging: bool,
     area: Rect,
 ) {
     let theme = current_theme();
@@ -57,6 +58,17 @@ pub fn render(
         ),
         status_text,
     ];
+
+    // Ajouter l'indicateur MERGING si un merge est en cours.
+    if is_merging {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            "⚠ MERGING",
+            Style::default()
+                .fg(theme.error)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
     // Ajouter l'indicateur de filtre actif s'il y en a un.
     if filter.is_active() {
