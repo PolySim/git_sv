@@ -307,6 +307,102 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     }
 }
 
+/// Push la branche courante en utilisant git CLI (version pour threading).
+/// Prend le chemin du repository comme paramètre.
+pub fn push_current_branch_cli_path(repo_path: &std::path::Path) -> Result<String> {
+    use std::process::Command;
+
+    // Ouvrir le repo temporairement pour obtenir la branche courante
+    let repo = Repository::open(repo_path)?;
+    let head = repo.head()?;
+    let branch_name = head
+        .shorthand()
+        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?
+        .to_string();
+
+    // Vérifier si la branche a un upstream configuré
+    let has_upstream = repo
+        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
+        .is_ok();
+
+    // Construire la commande git push
+    let mut cmd = Command::new("git");
+    cmd.arg("push");
+
+    // Ajouter --set-upstream si pas d'upstream
+    if !has_upstream {
+        cmd.arg("--set-upstream");
+    }
+
+    // Exécuter depuis le chemin du repository
+    let output = cmd
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git push: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(git2::Error::from_str(&format!("Erreur git push: {}", stderr)).into());
+    }
+
+    if has_upstream {
+        Ok(format!("Push de '{}' effectué", branch_name))
+    } else {
+        Ok(format!(
+            "Push de '{}' effectué (upstream configuré)",
+            branch_name
+        ))
+    }
+}
+
+/// Pull depuis le remote en utilisant git CLI (version pour threading).
+/// Prend le chemin du repository comme paramètre.
+pub fn pull_current_branch_cli_path(repo_path: &std::path::Path) -> Result<String> {
+    use std::process::Command;
+
+    // Ouvrir le repo temporairement pour obtenir la branche courante
+    let repo = Repository::open(repo_path)?;
+    let head = repo.head()?;
+    let branch_name = head
+        .shorthand()
+        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pull"))?
+        .to_string();
+
+    // Exécuter git pull
+    let output = Command::new("git")
+        .args(["pull"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git pull: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(git2::Error::from_str(&format!("Erreur git pull: {}", stderr)).into());
+    }
+
+    Ok(format!("Pull de '{}' effectué", branch_name))
+}
+
+/// Fetch tous les remotes en utilisant git CLI (version pour threading).
+/// Prend le chemin du repository comme paramètre.
+pub fn fetch_all_cli_path(repo_path: &std::path::Path) -> Result<String> {
+    use std::process::Command;
+
+    // Exécuter git fetch --all
+    let output = Command::new("git")
+        .args(["fetch", "--all"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git fetch: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(git2::Error::from_str(&format!("Erreur git fetch: {}", stderr)).into());
+    }
+
+    Ok("Fetch effectué".to_string())
+}
+
 /// Pull (fetch + merge) depuis le remote.
 pub fn pull_current_branch(repo: &Repository) -> Result<()> {
     // D'abord, faire un fetch

@@ -1,7 +1,5 @@
 //! Indicateur de chargement (spinner).
 
-#![allow(dead_code)]
-
 use crate::ui::common::centered_rect;
 use ratatui::{
     layout::Rect,
