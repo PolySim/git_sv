@@ -30,6 +30,10 @@ pub enum ConfirmAction {
     MergeBranch(String, String),
     /// Avorter le merge en cours
     AbortMerge,
+    /// Reset soft vers un commit
+    ResetSoft(git2::Oid),
+    /// Reset hard vers un commit
+    ResetHard(git2::Oid),
 }
 
 impl ConfirmAction {
@@ -73,6 +77,18 @@ impl ConfirmAction {
             ConfirmAction::AbortMerge => {
                 "Êtes-vous sûr de vouloir avorter le merge en cours ?".to_string()
             }
+            ConfirmAction::ResetSoft(oid) => {
+                format!(
+                    "Reset SOFT vers {} ?\nLes modifications seront conservées dans l'index.",
+                    format!("{:.7}", oid)
+                )
+            }
+            ConfirmAction::ResetHard(oid) => {
+                format!(
+                    "⚠ RESET HARD vers {} ?\n\n⚠ ATTENTION : Toutes les modifications non committées seront PERDUES !",
+                    format!("{:.7}", oid)
+                )
+            }
         }
     }
 
@@ -87,6 +103,8 @@ impl ConfirmAction {
             ConfirmAction::CherryPick(_) => "Confirmer le cherry-pick",
             ConfirmAction::MergeBranch(_, _) => "Confirmer le merge",
             ConfirmAction::AbortMerge => "Confirmer l'annulation du merge",
+            ConfirmAction::ResetSoft(_) => "Confirmer le reset soft",
+            ConfirmAction::ResetHard(_) => "⚠ Confirmer le reset hard",
         }
     }
 }

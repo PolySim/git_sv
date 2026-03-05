@@ -128,6 +128,9 @@ pub struct AppState {
     /// Picker de merge (si actif).
     pub merge_picker: Option<MergePickerState>,
 
+    /// Picker de reset (si actif).
+    pub reset_picker: Option<ResetPickerState>,
+
     // ═══════════════════════════════════════════════════
     // UI transient
     // ═══════════════════════════════════════════════════
@@ -202,6 +205,7 @@ impl AppState {
             conflicts_state: None,
             search_state: SearchState::default(),
             merge_picker: None,
+            reset_picker: None,
             flash_message: None,
             pending_confirmation: None,
             loading_spinner: None,

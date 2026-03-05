@@ -7,6 +7,7 @@ mod branches;
 mod conflicts;
 mod graph;
 mod merge_picker;
+mod reset_picker;
 mod search;
 mod staging;
 
@@ -15,6 +16,7 @@ pub use branches::{BranchesFocus, BranchesSection, BranchesViewState, InputActio
 pub use conflicts::{ConflictPanelFocus, ConflictsState};
 pub use graph::GraphViewState;
 pub use merge_picker::MergePickerState;
+pub use reset_picker::ResetPickerState;
 pub use search::SearchState;
 pub use staging::{StagingFocus, StagingState};
 

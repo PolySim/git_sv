@@ -25,6 +25,7 @@ impl ActionHandler for GitHandler {
             GitAction::StashPrompt => handle_stash_prompt(ctx.state),
             GitAction::MergePrompt => handle_merge_prompt(ctx.state),
             GitAction::BranchList => handle_branch_list(ctx.state),
+            GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
         }
     }
 }
@@ -316,5 +317,29 @@ fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
 // un widget popup dédié qui n'est pas prioritaire pour le MVP.
 #[allow(dead_code)]
 fn handle_branch_list(_state: &mut AppState) -> Result<()> {
+    Ok(())
+}
+
+fn handle_reset_prompt(state: &mut AppState) -> Result<()> {
+    if !matches!(state.view_mode, ViewMode::Graph) {
+        return Ok(());
+    }
+
+    // Récupérer le commit sélectionné
+    if let Some(row) = state.graph.get(state.selected_index) {
+        let oid = row.node.oid;
+        let short_hash = row.node.short_hash();
+        let commit_message = row.node.message.lines().next().unwrap_or("").to_string();
+
+        // Créer le reset picker
+        state.reset_picker = Some(crate::state::ResetPickerState::new(
+            oid,
+            short_hash,
+            commit_message,
+        ));
+    } else {
+        state.set_flash_message("Aucun commit sélectionné".to_string());
+    }
+
     Ok(())
 }

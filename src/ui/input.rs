@@ -79,6 +79,21 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
 
+    // Si le reset picker est actif, gérer ses keybindings
+    if state.reset_picker.as_ref().map_or(false, |p| p.is_active) {
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('s') => {
+                Some(AppAction::ResetPickerSelectSoft)
+            }
+            KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') => {
+                Some(AppAction::ResetPickerSelectHard)
+            }
+            KeyCode::Enter => Some(AppAction::ResetPickerConfirm),
+            KeyCode::Esc => Some(AppAction::ResetPickerCancel),
+            _ => None,
+        };
+    }
+
     // Si une confirmation est en attente, gérer y/n/ESC
     if state.pending_confirmation.is_some() {
         return match key.code {
@@ -331,6 +346,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 
         // Cherry-pick
         KeyCode::Char('x') => Some(AppAction::Git(GitAction::CherryPick)),
+
+        // Reset
+        KeyCode::Char('R') => Some(AppAction::Git(GitAction::ResetPrompt)),
 
         // Aide
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),

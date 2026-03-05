@@ -171,6 +171,16 @@ pub fn cherry_pick(repo: &Repository, commit_oid: Oid) -> Result<()> {
     Ok(())
 }
 
+/// Reset la branche courante vers le commit spécifié.
+pub fn reset_to_commit(repo: &Repository, oid: Oid, reset_type: git2::ResetType) -> Result<()> {
+    let commit = repo.find_commit(oid)?;
+    let object = commit.as_object();
+    let mut checkout_builder = git2::build::CheckoutBuilder::new();
+    checkout_builder.force(); // Nécessaire pour Hard reset
+    repo.reset(object, reset_type, Some(&mut checkout_builder))?;
+    Ok(())
+}
+
 /// Cherry-pick avec résultat typé pour gérer les conflits.
 pub fn cherry_pick_with_result(
     repo: &Repository,
@@ -335,5 +345,62 @@ mod tests {
         // Vérifier que le commit existe
         let commit = repo.find_commit(oid).unwrap();
         assert_eq!(commit.summary().unwrap(), "My commit message");
+    }
+
+    #[test]
+    fn test_reset_to_commit_soft() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer un premier commit
+        let first_oid = commit_file(&repo, "test.txt", "Initial content", "First commit");
+
+        // Créer un second commit
+        let second_oid = commit_file(&repo, "test.txt", "Modified content", "Second commit");
+
+        // Vérifier que HEAD pointe vers le second commit
+        let head = repo.head().unwrap();
+        let head_oid = head.target().unwrap();
+        assert_eq!(head_oid, second_oid);
+
+        // Reset soft vers le premier commit
+        reset_to_commit(&repo, first_oid, git2::ResetType::Soft).unwrap();
+
+        // Vérifier que HEAD pointe maintenant vers le premier commit
+        let head = repo.head().unwrap();
+        let head_oid = head.target().unwrap();
+        assert_eq!(head_oid, first_oid);
+
+        // En mode soft, les modifications devraient être dans l'index
+        let index = repo.index().unwrap();
+        assert_eq!(index.iter().count(), 1);
+    }
+
+    #[test]
+    fn test_reset_to_commit_hard() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        // Créer un premier commit
+        let first_oid = commit_file(&repo, "test.txt", "Initial content", "First commit");
+
+        // Créer un second commit
+        let second_oid = commit_file(&repo, "test.txt", "Modified content", "Second commit");
+
+        // Vérifier que HEAD pointe vers le second commit
+        let head = repo.head().unwrap();
+        let head_oid = head.target().unwrap();
+        assert_eq!(head_oid, second_oid);
+
+        // Reset hard vers le premier commit
+        reset_to_commit(&repo, first_oid, git2::ResetType::Hard).unwrap();
+
+        // Vérifier que HEAD pointe maintenant vers le premier commit
+        let head = repo.head().unwrap();
+        let head_oid = head.target().unwrap();
+        assert_eq!(head_oid, first_oid);
+
+        // En mode hard, l'index devrait correspondre au commit cible
+        // Donc le fichier devrait avoir le contenu initial
+        let index = repo.index().unwrap();
+        assert_eq!(index.iter().count(), 1);
     }
 }

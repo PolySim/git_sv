@@ -2,6 +2,15 @@
 
 #![allow(dead_code)]
 
+/// Mode de reset pour l'action ResetToCommit.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResetMode {
+    /// Soft reset : déplace HEAD, garde les modifications dans l'index (staged)
+    Soft,
+    /// Hard reset : déplace HEAD, réinitialise l'index ET le working directory
+    Hard,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum GitAction {
     /// Push vers le remote
@@ -28,4 +37,6 @@ pub enum GitAction {
     MergePrompt,
     /// Lister les branches
     BranchList,
+    /// Ouvrir le dialogue de reset
+    ResetPrompt,
 }

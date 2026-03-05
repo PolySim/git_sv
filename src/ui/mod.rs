@@ -20,6 +20,7 @@ pub mod layout;
 pub mod loading;
 pub mod merge_picker;
 pub mod nav_bar;
+pub mod reset_picker;
 pub mod search_bar;
 pub mod staging_layout;
 pub mod staging_view;
@@ -129,6 +130,13 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
     if let Some(ref picker) = state.merge_picker {
         if picker.is_active {
             merge_picker::render(frame, picker, &state.current_branch, frame.area());
+        }
+    }
+
+    // Rendre le reset picker si actif
+    if let Some(ref picker) = state.reset_picker {
+        if picker.is_active {
+            reset_picker::render(frame, picker, &state.current_branch, frame.area());
         }
     }
 

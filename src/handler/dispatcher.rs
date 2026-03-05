@@ -157,6 +157,41 @@ impl ActionDispatcher {
                 Ok(())
             }
 
+            // Reset picker actions
+            AppAction::ResetPickerSelectSoft => {
+                if let Some(ref mut reset) = ctx.state.reset_picker {
+                    reset.selected_index = 0;
+                }
+                Ok(())
+            }
+
+            AppAction::ResetPickerSelectHard => {
+                if let Some(ref mut reset) = ctx.state.reset_picker {
+                    reset.selected_index = 1;
+                }
+                Ok(())
+            }
+
+            AppAction::ResetPickerConfirm => {
+                if let Some(ref reset) = ctx.state.reset_picker {
+                    let oid = reset.target_oid;
+                    if reset.is_soft_selected() {
+                        ctx.state.pending_confirmation =
+                            Some(crate::ui::confirm_dialog::ConfirmAction::ResetSoft(oid));
+                    } else {
+                        ctx.state.pending_confirmation =
+                            Some(crate::ui::confirm_dialog::ConfirmAction::ResetHard(oid));
+                    }
+                    ctx.state.reset_picker = None;
+                }
+                Ok(())
+            }
+
+            AppAction::ResetPickerCancel => {
+                ctx.state.reset_picker = None;
+                Ok(())
+            }
+
             // Confirmations
             AppAction::ConfirmAction => self.handle_confirm_action(&mut ctx),
             AppAction::CancelAction => {
@@ -447,6 +482,40 @@ impl ActionDispatcher {
                         ctx.state.conflicts_state = None;
                     }
                     ctx.state.mark_dirty();
+                }
+                ConfirmAction::ResetSoft(oid) => {
+                    ctx.state.pending_confirmation = None;
+                    if let Err(e) = crate::git::commit::reset_to_commit(
+                        &ctx.state.repo.repo,
+                        oid,
+                        git2::ResetType::Soft,
+                    ) {
+                        ctx.state
+                            .set_flash_message(format!("Erreur reset soft: {}", e));
+                    } else {
+                        ctx.state.set_flash_message(format!(
+                            "Reset soft vers {} effectué ✓",
+                            format!("{:.7}", oid)
+                        ));
+                        ctx.state.mark_dirty();
+                    }
+                }
+                ConfirmAction::ResetHard(oid) => {
+                    ctx.state.pending_confirmation = None;
+                    if let Err(e) = crate::git::commit::reset_to_commit(
+                        &ctx.state.repo.repo,
+                        oid,
+                        git2::ResetType::Hard,
+                    ) {
+                        ctx.state
+                            .set_flash_message(format!("Erreur reset hard: {}", e));
+                    } else {
+                        ctx.state.set_flash_message(format!(
+                            "Reset hard vers {} effectué ✓",
+                            format!("{:.7}", oid)
+                        ));
+                        ctx.state.mark_dirty();
+                    }
                 }
                 _ => {
                     ctx.state.pending_confirmation = None;
