@@ -34,10 +34,10 @@ pub fn render(
     // Calculer la fenêtre visible (approximation: chaque commit utilise 1-2 lignes)
     let visible_height = area.height.saturating_sub(2) as usize; // Sans les bordures
     let visible_commits = (visible_height / 2).max(1);
-    
+
     // Calculer l'index de départ centré sur la sélection
     let scroll_offset = selected_index.saturating_sub(visible_commits / 2);
-    
+
     // Construire les lignes du graphe avec les edges de connexion.
     let items = build_graph_items(
         graph,

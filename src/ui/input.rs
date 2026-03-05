@@ -28,7 +28,10 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use std::time::Duration;
 
-use crate::state::action::{BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction, SearchAction, StagingAction};
+use crate::state::action::{
+    BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
+    SearchAction, StagingAction,
+};
 use crate::state::{
     AppAction, AppState, BranchesFocus, BranchesSection, ConflictPanelFocus, FocusPanel,
     StagingFocus, ViewMode,
@@ -175,13 +178,13 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         match key.code {
             KeyCode::Char('d') => {
                 if state.focus == FocusPanel::BottomRight {
-                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffDown));
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffPageDown));
                 }
                 return Some(AppAction::Navigation(NavigationAction::PageDown));
             }
             KeyCode::Char('u') => {
                 if state.focus == FocusPanel::BottomRight {
-                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffUp));
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffPageUp));
                 }
                 return Some(AppAction::Navigation(NavigationAction::PageUp));
             }
@@ -199,8 +202,12 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return Some(AppAction::ToggleHelp);
     }
 
-    // Escape pour revenir au panneau précédent quand on est dans BottomLeft ou BottomRight.
+    // Escape pour quitter le mode diff plein écran ou revenir au panneau précédent.
     if key.code == KeyCode::Esc {
+        // Si mode diff plein écran actif, le quitter
+        if state.diff_fullscreen {
+            return Some(AppAction::ToggleDiffFullscreen);
+        }
         match state.focus {
             FocusPanel::BottomRight => {
                 return Some(AppAction::SwitchBottomMode);
@@ -219,8 +226,12 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     if state.show_branch_panel {
         return match key.code {
             KeyCode::Esc | KeyCode::Char('b') => Some(AppAction::CloseBranchPanel),
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            }
             KeyCode::Enter => Some(AppAction::Branch(BranchAction::Checkout)),
             KeyCode::Char('n') => Some(AppAction::Branch(BranchAction::Create)),
             KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::Delete)),
@@ -233,8 +244,12 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         FocusPanel::BottomLeft => {
             // Quand focus sur BottomLeft, j/k naviguent dans la liste des fichiers.
             match key.code {
-                KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::Navigation(NavigationAction::FileDown)),
-                KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::Navigation(NavigationAction::FileUp)),
+                KeyCode::Char('j') | KeyCode::Down => {
+                    return Some(AppAction::Navigation(NavigationAction::FileDown))
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    return Some(AppAction::Navigation(NavigationAction::FileUp))
+                }
                 KeyCode::Enter => return Some(AppAction::SwitchBottomMode), // Passer au diff
                 _ => {}
             }
@@ -242,9 +257,34 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         FocusPanel::BottomRight => {
             // Quand focus sur BottomRight, j/k scrollent le diff.
             match key.code {
-                KeyCode::Char('j') | KeyCode::Down => return Some(AppAction::Navigation(NavigationAction::ScrollDiffDown)),
-                KeyCode::Char('k') | KeyCode::Up => return Some(AppAction::Navigation(NavigationAction::ScrollDiffUp)),
+                KeyCode::Char('j') | KeyCode::Down => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffDown))
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffUp))
+                }
+                KeyCode::Char('h') | KeyCode::Left => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffLeft))
+                }
+                KeyCode::Char('l') | KeyCode::Right => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffRight))
+                }
+                KeyCode::Char('g') | KeyCode::Home => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffTop))
+                }
+                KeyCode::Char('G') | KeyCode::End => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffBottom))
+                }
+                KeyCode::Char('z') | KeyCode::Enter => {
+                    return Some(AppAction::ToggleDiffFullscreen)
+                }
                 KeyCode::Char('v') => return Some(AppAction::ToggleDiffViewMode),
+                KeyCode::PageUp => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffPageUp))
+                }
+                KeyCode::PageDown => {
+                    return Some(AppAction::Navigation(NavigationAction::ScrollDiffPageDown))
+                }
                 _ => {}
             }
         }
@@ -257,10 +297,14 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     match key.code {
         // Navigation dans le graphe
         KeyCode::Char('q') => Some(AppAction::Quit),
-        KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(AppAction::Navigation(NavigationAction::MoveDown))
+        }
         KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
         KeyCode::Char('g') | KeyCode::Home => Some(AppAction::Navigation(NavigationAction::GoTop)),
-        KeyCode::Char('G') | KeyCode::End => Some(AppAction::Navigation(NavigationAction::GoBottom)),
+        KeyCode::Char('G') | KeyCode::End => {
+            Some(AppAction::Navigation(NavigationAction::GoBottom))
+        }
         KeyCode::PageUp => Some(AppAction::Navigation(NavigationAction::PageUp)),
         KeyCode::PageDown => Some(AppAction::Navigation(NavigationAction::PageDown)),
         KeyCode::Enter => Some(AppAction::Select),
@@ -345,8 +389,12 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Actions par section.
     match state.branches_view_state.section {
         BranchesSection::Branches => match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            }
             KeyCode::Enter => Some(AppAction::Branch(BranchAction::Checkout)),
             KeyCode::Char('n') => Some(AppAction::Branch(BranchAction::Create)),
             KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::Delete)),
@@ -356,17 +404,29 @@ fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
         BranchesSection::Worktrees => match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            }
             KeyCode::Char('n') => Some(AppAction::Branch(BranchAction::WorktreeCreate)),
             KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::WorktreeRemove)),
             _ => None,
         },
         BranchesSection::Stashes => match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
-            KeyCode::Char('l') | KeyCode::Right => Some(AppAction::Navigation(NavigationAction::FileDown)),
-            KeyCode::Char('h') | KeyCode::Left => Some(AppAction::Navigation(NavigationAction::FileUp)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                Some(AppAction::Navigation(NavigationAction::FileDown))
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                Some(AppAction::Navigation(NavigationAction::FileUp))
+            }
             KeyCode::Char('a') => Some(AppAction::Branch(BranchAction::StashApply)),
             KeyCode::Char('p') => Some(AppAction::Branch(BranchAction::StashPop)),
             KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::StashDrop)),
@@ -409,9 +469,15 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Navigation selon le focus dans la vue staging
     match state.staging_state.focus {
         StagingFocus::Unstaged => match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
-            KeyCode::Char('s') | KeyCode::Enter => Some(AppAction::Staging(StagingAction::StageFile)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            }
+            KeyCode::Char('s') | KeyCode::Enter => {
+                Some(AppAction::Staging(StagingAction::StageFile))
+            }
             KeyCode::Char('S') => Some(AppAction::Staging(StagingAction::StashSelectedFile)),
             KeyCode::Char('a') => Some(AppAction::Staging(StagingAction::StageAll)),
             KeyCode::Char('d') => Some(AppAction::Staging(StagingAction::DiscardFile)),
@@ -426,9 +492,15 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
         StagingFocus::Staged => match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
-            KeyCode::Char('u') | KeyCode::Enter => Some(AppAction::Staging(StagingAction::UnstageFile)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            }
+            KeyCode::Char('u') | KeyCode::Enter => {
+                Some(AppAction::Staging(StagingAction::UnstageFile))
+            }
             KeyCode::Char('U') => Some(AppAction::Staging(StagingAction::UnstageAll)),
             KeyCode::Tab => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
@@ -436,8 +508,12 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             _ => None,
         },
         StagingFocus::Diff => match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::ScrollDiffDown)),
-            KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::ScrollDiffUp)),
+            KeyCode::Char('j') | KeyCode::Down => {
+                Some(AppAction::Navigation(NavigationAction::ScrollDiffDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                Some(AppAction::Navigation(NavigationAction::ScrollDiffUp))
+            }
             KeyCode::Tab | KeyCode::Esc => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
             KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
@@ -452,10 +528,14 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 fn map_blame_key(key: KeyEvent, _state: &AppState) -> Option<AppAction> {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::Git(GitAction::CloseBlame)),
-        KeyCode::Char('j') | KeyCode::Down => Some(AppAction::Navigation(NavigationAction::MoveDown)),
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(AppAction::Navigation(NavigationAction::MoveDown))
+        }
         KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
         KeyCode::Char('g') | KeyCode::Home => Some(AppAction::Navigation(NavigationAction::GoTop)),
-        KeyCode::Char('G') | KeyCode::End => Some(AppAction::Navigation(NavigationAction::GoBottom)),
+        KeyCode::Char('G') | KeyCode::End => {
+            Some(AppAction::Navigation(NavigationAction::GoBottom))
+        }
         KeyCode::PageUp => Some(AppAction::Navigation(NavigationAction::PageUp)),
         KeyCode::PageDown => Some(AppAction::Navigation(NavigationAction::PageDown)),
         KeyCode::Enter => Some(AppAction::Git(GitAction::JumpToBlameCommit)),
@@ -515,44 +595,70 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 
         // Navigation flèches/j/k : dépend du panneau actif et du mode de résolution
         KeyCode::Char('j') | KeyCode::Down => match panel_focus {
-            Some(ConflictPanelFocus::FileList) => Some(AppAction::Conflict(ConflictAction::NextFile)),
+            Some(ConflictPanelFocus::FileList) => {
+                Some(AppAction::Conflict(ConflictAction::NextFile))
+            }
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
                 match resolution_mode {
                     // En mode Fichier, naviguer entre les fichiers (pas entre sections)
-                    ConflictResolutionMode::File => Some(AppAction::Conflict(ConflictAction::NextFile)),
-                    ConflictResolutionMode::Line => Some(AppAction::Conflict(ConflictAction::LineDown)),
-                    ConflictResolutionMode::Block => Some(AppAction::Conflict(ConflictAction::NextSection)),
+                    ConflictResolutionMode::File => {
+                        Some(AppAction::Conflict(ConflictAction::NextFile))
+                    }
+                    ConflictResolutionMode::Line => {
+                        Some(AppAction::Conflict(ConflictAction::LineDown))
+                    }
+                    ConflictResolutionMode::Block => {
+                        Some(AppAction::Conflict(ConflictAction::NextSection))
+                    }
                 }
             }
-            Some(ConflictPanelFocus::ResultPanel) => Some(AppAction::Conflict(ConflictAction::ResultScrollDown)),
+            Some(ConflictPanelFocus::ResultPanel) => {
+                Some(AppAction::Conflict(ConflictAction::ResultScrollDown))
+            }
             _ => None,
         },
         KeyCode::Char('k') | KeyCode::Up => match panel_focus {
-            Some(ConflictPanelFocus::FileList) => Some(AppAction::Conflict(ConflictAction::PreviousFile)),
+            Some(ConflictPanelFocus::FileList) => {
+                Some(AppAction::Conflict(ConflictAction::PreviousFile))
+            }
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
                 match resolution_mode {
                     // En mode Fichier, naviguer entre les fichiers (pas entre sections)
-                    ConflictResolutionMode::File => Some(AppAction::Conflict(ConflictAction::PreviousFile)),
-                    ConflictResolutionMode::Line => Some(AppAction::Conflict(ConflictAction::LineUp)),
-                    ConflictResolutionMode::Block => Some(AppAction::Conflict(ConflictAction::PreviousSection)),
+                    ConflictResolutionMode::File => {
+                        Some(AppAction::Conflict(ConflictAction::PreviousFile))
+                    }
+                    ConflictResolutionMode::Line => {
+                        Some(AppAction::Conflict(ConflictAction::LineUp))
+                    }
+                    ConflictResolutionMode::Block => {
+                        Some(AppAction::Conflict(ConflictAction::PreviousSection))
+                    }
                 }
             }
-            Some(ConflictPanelFocus::ResultPanel) => Some(AppAction::Conflict(ConflictAction::ResultScrollUp)),
+            Some(ConflictPanelFocus::ResultPanel) => {
+                Some(AppAction::Conflict(ConflictAction::ResultScrollUp))
+            }
             _ => None,
         },
 
         // Résolution rapide depuis le panneau FileList
         KeyCode::Char('o') | KeyCode::Left => match panel_focus {
-            Some(ConflictPanelFocus::FileList) => Some(AppAction::Conflict(ConflictAction::AcceptOursFile)),
+            Some(ConflictPanelFocus::FileList) => {
+                Some(AppAction::Conflict(ConflictAction::AcceptOursFile))
+            }
             _ => None,
         },
         KeyCode::Char('t') | KeyCode::Right => match panel_focus {
-            Some(ConflictPanelFocus::FileList) => Some(AppAction::Conflict(ConflictAction::AcceptTheirsFile)),
+            Some(ConflictPanelFocus::FileList) => {
+                Some(AppAction::Conflict(ConflictAction::AcceptTheirsFile))
+            }
             _ => None,
         },
         // Marquer comme résolu depuis le panneau FileList
         KeyCode::Char('r') => match panel_focus {
-            Some(ConflictPanelFocus::FileList) => Some(AppAction::Conflict(ConflictAction::MarkResolved)),
+            Some(ConflictPanelFocus::FileList) => {
+                Some(AppAction::Conflict(ConflictAction::MarkResolved))
+            }
             _ => None,
         },
 
@@ -587,8 +693,12 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char(' ') => match panel_focus {
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
                 match resolution_mode {
-                    ConflictResolutionMode::Block => Some(AppAction::Conflict(ConflictAction::EnterResolve)),
-                    ConflictResolutionMode::Line => Some(AppAction::Conflict(ConflictAction::ToggleLine)),
+                    ConflictResolutionMode::Block => {
+                        Some(AppAction::Conflict(ConflictAction::EnterResolve))
+                    }
+                    ConflictResolutionMode::Line => {
+                        Some(AppAction::Conflict(ConflictAction::ToggleLine))
+                    }
                     _ => None,
                 }
             }
@@ -600,7 +710,9 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             Some(ConflictPanelFocus::OursPanel | ConflictPanelFocus::TheirsPanel) => {
                 match resolution_mode {
                     // En mode Fichier, Enter résout selon le panneau actif
-                    ConflictResolutionMode::File => Some(AppAction::Conflict(ConflictAction::EnterResolve)),
+                    ConflictResolutionMode::File => {
+                        Some(AppAction::Conflict(ConflictAction::EnterResolve))
+                    }
                     // En mode Block/Ligne, Enter valide le fichier (écrit sur disque)
                     ConflictResolutionMode::Block | ConflictResolutionMode::Line => {
                         Some(AppAction::Conflict(ConflictAction::MarkResolved))

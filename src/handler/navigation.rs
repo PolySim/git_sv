@@ -22,6 +22,12 @@ impl ActionHandler for NavigationHandler {
             NavigationAction::SwitchPanel => handle_switch_panel(ctx.state),
             NavigationAction::ScrollDiffUp => handle_scroll_diff_up(ctx.state),
             NavigationAction::ScrollDiffDown => handle_scroll_diff_down(ctx.state),
+            NavigationAction::ScrollDiffPageUp => handle_scroll_diff_page_up(ctx.state),
+            NavigationAction::ScrollDiffPageDown => handle_scroll_diff_page_down(ctx.state),
+            NavigationAction::ScrollDiffTop => handle_scroll_diff_top(ctx.state),
+            NavigationAction::ScrollDiffBottom => handle_scroll_diff_bottom(ctx.state),
+            NavigationAction::ScrollDiffLeft => handle_scroll_diff_left(ctx.state),
+            NavigationAction::ScrollDiffRight => handle_scroll_diff_right(ctx.state),
             NavigationAction::FileUp => handle_file_up(ctx.state),
             NavigationAction::FileDown => handle_file_down(ctx.state),
             NavigationAction::BackToGraph => handle_back_to_graph(ctx.state),
@@ -181,6 +187,10 @@ fn handle_switch_panel(state: &mut AppState) {
     }
 }
 
+/// Hauteur visible estimée du panneau diff (en lignes).
+/// Cette valeur est approximative et sera ajustée par le rendu réel.
+const DIFF_VISIBLE_HEIGHT_ESTIMATE: usize = 20;
+
 fn handle_scroll_diff_up(state: &mut AppState) {
     if state.diff_scroll_offset > 0 {
         state.diff_scroll_offset -= 1;
@@ -188,7 +198,50 @@ fn handle_scroll_diff_up(state: &mut AppState) {
 }
 
 fn handle_scroll_diff_down(state: &mut AppState) {
-    state.diff_scroll_offset += 1;
+    // Calculer la borne maximale du scroll
+    let max_scroll = state
+        .diff_total_lines
+        .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
+    if state.diff_scroll_offset < max_scroll {
+        state.diff_scroll_offset += 1;
+    }
+}
+
+fn handle_scroll_diff_page_up(state: &mut AppState) {
+    // Scroller d'une demi-page (environ 10 lignes)
+    let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
+    state.diff_scroll_offset = state.diff_scroll_offset.saturating_sub(page_size);
+}
+
+fn handle_scroll_diff_page_down(state: &mut AppState) {
+    // Scroller d'une demi-page
+    let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
+    let max_scroll = state
+        .diff_total_lines
+        .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
+    state.diff_scroll_offset = (state.diff_scroll_offset + page_size).min(max_scroll);
+}
+
+fn handle_scroll_diff_top(state: &mut AppState) {
+    state.diff_scroll_offset = 0;
+}
+
+fn handle_scroll_diff_bottom(state: &mut AppState) {
+    let max_scroll = state
+        .diff_total_lines
+        .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
+    state.diff_scroll_offset = max_scroll;
+}
+
+fn handle_scroll_diff_left(state: &mut AppState) {
+    if state.diff_horizontal_offset > 0 {
+        state.diff_horizontal_offset -= 1;
+    }
+}
+
+fn handle_scroll_diff_right(state: &mut AppState) {
+    // Pas de borne max pour le scroll horizontal (on peut scroller indéfiniment)
+    state.diff_horizontal_offset += 1;
 }
 
 fn handle_file_up(state: &mut AppState) {
@@ -330,6 +383,10 @@ pub fn load_commit_file_diff(state: &mut AppState) {
     if let Some(row) = state.graph.get(state.selected_index) {
         if let Some(file) = state.commit_files.get(state.file_selected_index) {
             state.selected_file_diff = state.repo.file_diff(row.node.oid, &file.path).ok();
+            // Réinitialiser tous les offsets de scroll
+            state.diff_scroll_offset = 0;
+            state.diff_horizontal_offset = 0;
+            state.diff_total_lines = 0;
             state.graph_view.diff_scroll_offset = 0;
             return;
         }

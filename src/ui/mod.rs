@@ -74,7 +74,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     let flash_msg = state.current_flash_message().map(|s| s.to_string());
                     let current_branch = state.current_branch.clone();
                     let repo_path = state.repo_path.clone();
-                    
+
                     if let Some(ref mut conflicts_state) = state.conflicts_state {
                         conflicts_view::render(
                             frame,
@@ -112,7 +112,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             let flash_msg = state.current_flash_message().map(|s| s.to_string());
             let current_branch = state.current_branch.clone();
             let repo_path = state.repo_path.clone();
-            
+
             if let Some(ref mut conflicts_state) = state.conflicts_state {
                 conflicts_view::render(
                     frame,
@@ -140,7 +140,12 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
 
 /// Rend la vue Graph (vue principale).
 fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
-    let layout = layout::build_layout(frame.area(), state.search_state.is_active);
+    // Utiliser le layout avec support du mode diff plein écran
+    let layout = layout::build_layout_with_diff_mode(
+        frame.area(),
+        state.search_state.is_active,
+        state.diff_fullscreen,
+    );
 
     // Rendu de la status bar en haut.
     status_bar::render(
@@ -166,20 +171,22 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         .unwrap_or(0);
     nav_bar::render(frame, state.view_mode, layout.nav_bar, unresolved_count);
 
-    // Rendu du graphe.
-    let is_graph_focused = state.focus == FocusPanel::Graph;
-    // Utiliser le total de commits (si filtres actifs, c'est le dernier total connu)
-    let total_commits = state.graph_view.rows.len().max(state.graph.len());
-    graph_view::render(
-        frame,
-        &state.graph,
-        &state.current_branch,
-        state.selected_index,
-        total_commits,
-        layout.graph,
-        &mut state.graph_state,
-        is_graph_focused,
-    );
+    // Rendu du graphe (masqué en mode diff plein écran).
+    if !state.diff_fullscreen {
+        let is_graph_focused = state.focus == FocusPanel::Graph;
+        // Utiliser le total de commits (si filtres actifs, c'est le dernier total connu)
+        let total_commits = state.graph_view.rows.len().max(state.graph.len());
+        graph_view::render(
+            frame,
+            &state.graph,
+            &state.current_branch,
+            state.selected_index,
+            total_commits,
+            layout.graph,
+            &mut state.graph_state,
+            is_graph_focused,
+        );
+    }
 
     // Obtenir le hash du commit sélectionné pour le titre.
     let selected_hash = state.graph.get(state.selected_index).map(|row| {
@@ -187,43 +194,67 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         hash[..7].to_string()
     });
 
-    // Rendu du panneau de fichiers.
-    let is_files_focused = state.focus == FocusPanel::BottomLeft;
-    files_view::render(
-        frame,
-        &state.commit_files,
-        &state.status_entries,
-        selected_hash,
-        state.bottom_left_mode.clone(),
-        layout.bottom_left,
-        is_files_focused,
-        state.file_selected_index,
-    );
+    // Rendu du panneau de fichiers (masqué en mode diff plein écran).
+    if !state.diff_fullscreen {
+        let is_files_focused = state.focus == FocusPanel::BottomLeft;
+        files_view::render(
+            frame,
+            &state.commit_files,
+            &state.status_entries,
+            selected_hash,
+            state.bottom_left_mode.clone(),
+            layout.bottom_left,
+            is_files_focused,
+            state.file_selected_index,
+        );
+    }
 
     // Rendu du panneau bas-droit (contextuel selon le focus).
     let is_detail_focused = state.focus == FocusPanel::BottomRight;
 
-    match state.focus {
-        FocusPanel::Graph | FocusPanel::BottomRight => {
-            // Afficher les métadonnées du commit.
-            detail_view::render(
-                frame,
-                &state.graph,
-                state.selected_index,
-                layout.bottom_right,
-                is_detail_focused,
-            );
-        }
-        FocusPanel::BottomLeft => {
-            // Afficher le diff du fichier sélectionné.
-            diff_view::render(
+    // Si mode diff plein écran est actif, afficher le diff sur toute la zone
+    if let Some(diff_area) = layout.diff_fullscreen {
+        if state.focus == FocusPanel::BottomLeft {
+            // En mode plein écran, le diff est toujours visible
+            let total_lines = diff_view::render(
                 frame,
                 state.selected_file_diff.as_ref(),
                 state.diff_scroll_offset,
-                layout.bottom_right,
-                false,
+                state.diff_horizontal_offset,
+                diff_area,
+                true,
                 state.diff_view_mode,
+                true,
             );
+            state.diff_total_lines = total_lines;
+        }
+    } else {
+        // Mode normal
+        match state.focus {
+            FocusPanel::Graph | FocusPanel::BottomRight => {
+                // Afficher les métadonnées du commit.
+                detail_view::render(
+                    frame,
+                    &state.graph,
+                    state.selected_index,
+                    layout.bottom_right,
+                    is_detail_focused,
+                );
+            }
+            FocusPanel::BottomLeft => {
+                // Afficher le diff du fichier sélectionné.
+                let total_lines = diff_view::render(
+                    frame,
+                    state.selected_file_diff.as_ref(),
+                    state.diff_scroll_offset,
+                    state.diff_horizontal_offset,
+                    layout.bottom_right,
+                    false,
+                    state.diff_view_mode,
+                    false,
+                );
+                state.diff_total_lines = total_lines;
+            }
         }
     }
 

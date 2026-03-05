@@ -18,10 +18,22 @@ pub enum NavigationAction {
     GoBottom,
     /// Changer de panneau (Tab)
     SwitchPanel,
-    /// Faire défiler le diff vers le haut
+    /// Faire défiler le diff vers le haut (ligne par ligne)
     ScrollDiffUp,
-    /// Faire défiler le diff vers le bas
+    /// Faire défiler le diff vers le bas (ligne par ligne)
     ScrollDiffDown,
+    /// Faire défiler le diff d'une page vers le haut
+    ScrollDiffPageUp,
+    /// Faire défiler le diff d'une page vers le bas
+    ScrollDiffPageDown,
+    /// Aller au début du diff
+    ScrollDiffTop,
+    /// Aller à la fin du diff
+    ScrollDiffBottom,
+    /// Faire défiler le diff vers la gauche (horizontal)
+    ScrollDiffLeft,
+    /// Faire défiler le diff vers la droite (horizontal)
+    ScrollDiffRight,
     /// Naviguer vers le haut dans le panneau de fichiers
     FileUp,
     /// Naviguer vers le bas dans le panneau de fichiers

@@ -388,7 +388,10 @@ mod tests {
             let mut ctx = HandlerContext { state: &mut state };
             handler.handle(&mut ctx, BranchAction::NextSection).unwrap();
         }
-        assert_eq!(state.branches_view_state.section, BranchesSection::Worktrees);
+        assert_eq!(
+            state.branches_view_state.section,
+            BranchesSection::Worktrees
+        );
 
         {
             let mut ctx = HandlerContext { state: &mut state };
@@ -421,7 +424,10 @@ mod tests {
             let mut ctx = HandlerContext { state: &mut state };
             handler.handle(&mut ctx, BranchAction::PrevSection).unwrap();
         }
-        assert_eq!(state.branches_view_state.section, BranchesSection::Worktrees);
+        assert_eq!(
+            state.branches_view_state.section,
+            BranchesSection::Worktrees
+        );
 
         {
             let mut ctx = HandlerContext { state: &mut state };
@@ -440,13 +446,17 @@ mod tests {
 
         {
             let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, BranchAction::ToggleRemote).unwrap();
+            handler
+                .handle(&mut ctx, BranchAction::ToggleRemote)
+                .unwrap();
         }
         assert!(state.branches_view_state.show_remote);
 
         {
             let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, BranchAction::ToggleRemote).unwrap();
+            handler
+                .handle(&mut ctx, BranchAction::ToggleRemote)
+                .unwrap();
         }
         assert!(!state.branches_view_state.show_remote);
     }
@@ -464,7 +474,10 @@ mod tests {
         }
 
         assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
-        assert_eq!(state.branches_view_state.input_action, Some(InputAction::CreateBranch));
+        assert_eq!(
+            state.branches_view_state.input_action,
+            Some(InputAction::CreateBranch)
+        );
         assert!(state.branches_view_state.input_text.is_empty());
         assert_eq!(state.branches_view_state.input_cursor, 0);
     }
@@ -519,7 +532,10 @@ mod tests {
         }
 
         assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
-        assert_eq!(state.branches_view_state.input_action, Some(InputAction::SaveStash));
+        assert_eq!(
+            state.branches_view_state.input_action,
+            Some(InputAction::SaveStash)
+        );
         assert!(state.branches_view_state.input_text.is_empty());
     }
 }

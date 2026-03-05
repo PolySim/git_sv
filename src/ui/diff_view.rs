@@ -18,10 +18,12 @@ pub fn render(
     frame: &mut Frame,
     diff: Option<&FileDiff>,
     scroll_offset: usize,
+    horizontal_offset: usize,
     area: Rect,
     is_focused: bool,
     view_mode: DiffViewMode,
-) {
+    is_fullscreen: bool,
+) -> usize {
     // Déterminer si on peut utiliser le mode side-by-side.
     let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
     let effective_mode = if can_side_by_side {
@@ -31,10 +33,24 @@ pub fn render(
     };
 
     match effective_mode {
-        DiffViewMode::Unified => render_unified(frame, diff, scroll_offset, area, is_focused),
-        DiffViewMode::SideBySide => {
-            render_side_by_side(frame, diff, scroll_offset, area, is_focused)
-        }
+        DiffViewMode::Unified => render_unified(
+            frame,
+            diff,
+            scroll_offset,
+            horizontal_offset,
+            area,
+            is_focused,
+            is_fullscreen,
+        ),
+        DiffViewMode::SideBySide => render_side_by_side(
+            frame,
+            diff,
+            scroll_offset,
+            horizontal_offset,
+            area,
+            is_focused,
+            is_fullscreen,
+        ),
     }
 }
 
@@ -43,13 +59,19 @@ fn render_unified(
     frame: &mut Frame,
     diff: Option<&FileDiff>,
     scroll_offset: usize,
+    horizontal_offset: usize,
     area: Rect,
     is_focused: bool,
-) {
+    is_fullscreen: bool,
+) -> usize {
     let content = match diff {
         Some(d) => build_diff_lines(d),
         None => vec![Line::from("Sélectionnez un fichier pour voir le diff")],
     };
+
+    let total_lines = content.len();
+    let visible_height = area.height.saturating_sub(2) as usize; // -2 pour les bordures
+    let max_scroll = total_lines.saturating_sub(visible_height);
 
     let border_style = if is_focused {
         Style::default().fg(Color::Cyan)
@@ -58,12 +80,26 @@ fn render_unified(
     };
 
     let title = match diff {
-        Some(d) => format!(" Diff — {} (+{}/-{}) ", d.path, d.additions, d.deletions),
-        None => " Diff ".to_string(),
+        Some(d) => {
+            let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
+            let scroll_indicator = if total_lines > 0 {
+                format!(" [{}/{}]", scroll_offset.min(max_scroll) + 1, total_lines)
+            } else {
+                String::new()
+            };
+            format!(
+                " Diff — {} (+{}/-{}){}{} ",
+                d.path, d.additions, d.deletions, fullscreen_indicator, scroll_indicator
+            )
+        }
+        None => {
+            let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
+            format!(" Diff{} ", fullscreen_indicator)
+        }
     };
 
     let paragraph = Paragraph::new(content)
-        .scroll((scroll_offset as u16, 0))
+        .scroll((scroll_offset as u16, horizontal_offset as u16))
         .block(
             Block::default()
                 .title(title)
@@ -72,6 +108,7 @@ fn render_unified(
         );
 
     frame.render_widget(paragraph, area);
+    total_lines
 }
 
 /// Rend le diff en mode côte à côte.
@@ -79,9 +116,11 @@ fn render_side_by_side(
     frame: &mut Frame,
     diff: Option<&FileDiff>,
     scroll_offset: usize,
+    horizontal_offset: usize,
     area: Rect,
     is_focused: bool,
-) {
+    is_fullscreen: bool,
+) -> usize {
     let border_style = if is_focused {
         Style::default().fg(Color::Cyan)
     } else {
@@ -89,11 +128,17 @@ fn render_side_by_side(
     };
 
     let title = match diff {
-        Some(d) => format!(
-            " Diff (side-by-side) — {} (+{}/-{}) ",
-            d.path, d.additions, d.deletions
-        ),
-        None => " Diff (side-by-side) ".to_string(),
+        Some(d) => {
+            let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
+            format!(
+                " Diff (side-by-side) — {} (+{}/-{}){} ",
+                d.path, d.additions, d.deletions, fullscreen_indicator
+            )
+        }
+        None => {
+            let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
+            format!(" Diff (side-by-side){} ", fullscreen_indicator)
+        }
     };
 
     // Diviser l'aire en deux colonnes avec un séparateur au milieu.
@@ -134,11 +179,13 @@ fn render_side_by_side(
         .split(inner_area);
 
     // Rendre le contenu si disponible.
-    if let Some(d) = diff {
+    let total_lines = if let Some(d) = diff {
         let (left_lines, right_lines) = build_side_by_side_lines(d);
+        let total = left_lines.len().max(right_lines.len());
 
         // Colonne ancienne (suppressions + contexte).
-        let left_paragraph = Paragraph::new(left_lines).scroll((scroll_offset as u16, 0));
+        let left_paragraph =
+            Paragraph::new(left_lines).scroll((scroll_offset as u16, horizontal_offset as u16));
         frame.render_widget(left_paragraph, inner_chunks[0]);
 
         // Séparateur vertical.
@@ -147,13 +194,19 @@ fn render_side_by_side(
         frame.render_widget(separator, inner_chunks[1]);
 
         // Colonne nouvelle (ajouts + contexte).
-        let right_paragraph = Paragraph::new(right_lines).scroll((scroll_offset as u16, 0));
+        let right_paragraph =
+            Paragraph::new(right_lines).scroll((scroll_offset as u16, horizontal_offset as u16));
         frame.render_widget(right_paragraph, inner_chunks[2]);
+
+        total
     } else {
         let msg = vec![Line::from("Sélectionnez un fichier pour voir le diff")];
         let paragraph = Paragraph::new(msg);
         frame.render_widget(paragraph, inner_chunks[0]);
-    }
+        0
+    };
+
+    total_lines
 }
 
 /// Construit les lignes de diff avec coloration (mode unifié).

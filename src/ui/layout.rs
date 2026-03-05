@@ -18,6 +18,8 @@ pub struct LayoutChunks {
     pub search_bar: Option<Rect>,
     /// Zone de la barre d'aide (1 ligne en bas).
     pub help_bar: Rect,
+    /// Zone plein écran pour le diff (optionnelle, quand diff_fullscreen est actif).
+    pub diff_fullscreen: Option<Rect>,
 }
 
 /// Construit le layout principal de l'application.
@@ -50,6 +52,17 @@ pub struct LayoutChunks {
 /// │       Help Bar (1 ligne)  │
 /// └───────────────────────────┘
 pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
+    build_layout_with_diff_mode(area, show_search, false)
+}
+
+/// Construit le layout avec support du mode diff plein écran.
+///
+/// Quand diff_fullscreen est true, le diff occupe toute la zone bottom (100%).
+pub fn build_layout_with_diff_mode(
+    area: Rect,
+    show_search: bool,
+    diff_fullscreen: bool,
+) -> LayoutChunks {
     let search_height = if show_search { 3 } else { 0 };
 
     // Split vertical : status bar + nav bar + contenu principal + [search bar] + help bar.
@@ -70,6 +83,20 @@ pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(outer[2]);
 
+    // Si mode diff plein écran, on retourne une zone spéciale pour le diff.
+    if diff_fullscreen {
+        return LayoutChunks {
+            status_bar: outer[0],
+            nav_bar: outer[1],
+            graph: main_chunks[0],
+            bottom_left: Rect::default(), // Pas visible en mode plein écran
+            bottom_right: Rect::default(), // Pas visible en mode plein écran
+            search_bar: if show_search { Some(outer[3]) } else { None },
+            help_bar: outer[4],
+            diff_fullscreen: Some(main_chunks[1]), // Toute la zone bottom
+        };
+    }
+
     // Split de la partie basse : gauche (50%) + droite (50%).
     let bottom_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -84,5 +111,6 @@ pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
         bottom_right: bottom_chunks[1],
         search_bar: if show_search { Some(outer[3]) } else { None },
         help_bar: outer[4],
+        diff_fullscreen: None,
     }
 }

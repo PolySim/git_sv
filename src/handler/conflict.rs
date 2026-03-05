@@ -35,34 +35,34 @@ fn calculate_absolute_line_position(
     is_file_mode: bool,
 ) -> (usize, usize) {
     let mut current_line: usize = 0;
-    
+
     for (idx, section) in file.conflicts.iter().enumerate() {
         // Ajouter le séparateur entre sections (sauf la première)
         if idx > 0 {
             current_line += 1;
         }
-        
+
         // Ajouter le titre de section (sauf en mode Fichier)
         if !is_file_mode {
             current_line += 1;
         }
-        
+
         // Ajouter les lignes de contexte avant
         current_line += section.context_before.len();
-        
+
         // Si c'est la section sélectionnée, on ajoute la ligne sélectionnée
         if idx == section_selected {
             current_line += line_selected;
             break;
         }
-        
+
         // Sinon, on ajoute toutes les lignes de conflit de cette section
         current_line += section.ours.len();
-        
+
         // Ajouter les lignes de contexte après
         current_line += section.context_after.len();
     }
-    
+
     (current_line, current_line + 1)
 }
 
@@ -144,10 +144,10 @@ fn handle_previous_section(state: &mut AppState) -> Result<()> {
     if let Some(conflicts) = &mut state.conflicts_state {
         let is_file_mode = conflicts.resolution_mode == ConflictResolutionMode::File;
         let file_selected = conflicts.file_selected;
-        
+
         if conflicts.section_selected > 0 {
             conflicts.section_selected -= 1;
-            
+
             // Calculer la position absolue pour le scroll (début de la section)
             let absolute_line = conflicts.all_files.get(file_selected).map(|file| {
                 calculate_absolute_line_position(
@@ -155,9 +155,10 @@ fn handle_previous_section(state: &mut AppState) -> Result<()> {
                     conflicts.section_selected,
                     0, // Début de la section
                     is_file_mode,
-                ).0
+                )
+                .0
             });
-            
+
             // Mettre à jour le scroll pour positionner la section au début de la vue
             if let Some(line) = absolute_line {
                 let panel_focus = conflicts.panel_focus;
@@ -171,7 +172,7 @@ fn handle_previous_section(state: &mut AppState) -> Result<()> {
                     ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
                     _ => return Ok(()),
                 };
-                
+
                 if visible_height > 0 {
                     *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
                 }
@@ -187,11 +188,11 @@ fn handle_next_section(state: &mut AppState) -> Result<()> {
         let file_selected = conflicts.file_selected;
         let file = &conflicts.all_files[conflicts.file_selected];
         let max_section = file.conflicts.len().saturating_sub(1);
-        
+
         if conflicts.section_selected < max_section {
             conflicts.section_selected += 1;
             conflicts.line_selected = 0;
-            
+
             // Calculer la position absolue pour le scroll (début de la section)
             let absolute_line = conflicts.all_files.get(file_selected).map(|file| {
                 calculate_absolute_line_position(
@@ -199,9 +200,10 @@ fn handle_next_section(state: &mut AppState) -> Result<()> {
                     conflicts.section_selected,
                     0, // Début de la section
                     is_file_mode,
-                ).0
+                )
+                .0
             });
-            
+
             // Mettre à jour le scroll pour positionner la section au début de la vue
             if let Some(line) = absolute_line {
                 let panel_focus = conflicts.panel_focus;
@@ -215,7 +217,7 @@ fn handle_next_section(state: &mut AppState) -> Result<()> {
                     ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
                     _ => return Ok(()),
                 };
-                
+
                 if visible_height > 0 {
                     *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
                 }
@@ -853,9 +855,10 @@ fn handle_line_down(state: &mut AppState) -> Result<()> {
                 conflicts.section_selected,
                 conflicts.line_selected,
                 is_file_mode,
-            ).0
+            )
+            .0
         });
-        
+
         // Mettre à jour le scroll pour garder la ligne visible
         if let Some(line) = absolute_line {
             // On doit sortir du scope du borrow mutable avant d'appeler update_scrolls_for_position
@@ -870,7 +873,7 @@ fn handle_line_down(state: &mut AppState) -> Result<()> {
                 ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
                 _ => return Ok(()),
             };
-            
+
             if visible_height > 0 {
                 *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
             }
@@ -909,9 +912,10 @@ fn handle_line_up(state: &mut AppState) -> Result<()> {
                 conflicts.section_selected,
                 conflicts.line_selected,
                 is_file_mode,
-            ).0
+            )
+            .0
         });
-        
+
         // Mettre à jour le scroll pour garder la ligne visible
         if let Some(line) = absolute_line {
             let panel_focus = conflicts.panel_focus;
@@ -925,7 +929,7 @@ fn handle_line_up(state: &mut AppState) -> Result<()> {
                 ConflictPanelFocus::TheirsPanel => &mut conflicts.theirs_scroll,
                 _ => return Ok(()),
             };
-            
+
             if visible_height > 0 {
                 *scroll_ref = adjust_scroll(line, *scroll_ref, visible_height);
             }

@@ -60,9 +60,11 @@ pub fn render(
         frame,
         staging_state.current_diff.as_ref(),
         staging_state.diff_scroll,
+        0, // horizontal_offset (pas de scroll horizontal en mode staging)
         layout.diff_panel,
         staging_state.focus == StagingFocus::Diff,
         staging_state.diff_view_mode,
+        false, // is_fullscreen
     );
 
     // Zone de message commit.

@@ -172,6 +172,16 @@ impl ActionDispatcher {
                 Ok(())
             }
 
+            // Toggle diff fullscreen mode
+            AppAction::ToggleDiffFullscreen => {
+                ctx.state.diff_fullscreen = !ctx.state.diff_fullscreen;
+                // Réinitialiser le scroll horizontal quand on bascule
+                if !ctx.state.diff_fullscreen {
+                    ctx.state.diff_horizontal_offset = 0;
+                }
+                Ok(())
+            }
+
             // Aucune action
             AppAction::None => Ok(()),
         }
@@ -515,12 +525,16 @@ mod tests {
         let mut dispatcher = ActionDispatcher::new();
 
         // Activer l'aide
-        dispatcher.dispatch(&mut state, AppAction::ToggleHelp).unwrap();
+        dispatcher
+            .dispatch(&mut state, AppAction::ToggleHelp)
+            .unwrap();
         assert_eq!(state.view_mode, ViewMode::Help);
         assert_eq!(state.previous_view_mode, Some(ViewMode::Graph));
 
         // Désactiver l'aide
-        dispatcher.dispatch(&mut state, AppAction::ToggleHelp).unwrap();
+        dispatcher
+            .dispatch(&mut state, AppAction::ToggleHelp)
+            .unwrap();
         assert_eq!(state.view_mode, ViewMode::Graph);
         assert_eq!(state.previous_view_mode, None);
     }
@@ -577,7 +591,9 @@ mod tests {
         state.pending_confirmation = Some(ConfirmAction::DiscardAll);
         let mut dispatcher = ActionDispatcher::new();
 
-        dispatcher.dispatch(&mut state, AppAction::ConfirmAction).unwrap();
+        dispatcher
+            .dispatch(&mut state, AppAction::ConfirmAction)
+            .unwrap();
 
         // La confirmation devrait être consommée
         assert!(state.pending_confirmation.is_none());
@@ -591,7 +607,9 @@ mod tests {
         state.pending_confirmation = Some(ConfirmAction::DiscardAll);
         let mut dispatcher = ActionDispatcher::new();
 
-        dispatcher.dispatch(&mut state, AppAction::CancelAction).unwrap();
+        dispatcher
+            .dispatch(&mut state, AppAction::CancelAction)
+            .unwrap();
 
         assert!(state.pending_confirmation.is_none());
     }
@@ -616,7 +634,9 @@ mod tests {
         state.show_branch_panel = true;
         let mut dispatcher = ActionDispatcher::new();
 
-        dispatcher.dispatch(&mut state, AppAction::CloseBranchPanel).unwrap();
+        dispatcher
+            .dispatch(&mut state, AppAction::CloseBranchPanel)
+            .unwrap();
 
         assert!(!state.show_branch_panel);
     }
@@ -629,7 +649,9 @@ mod tests {
         state.bottom_left_mode = BottomLeftMode::Files;
         let mut dispatcher = ActionDispatcher::new();
 
-        dispatcher.dispatch(&mut state, AppAction::SwitchBottomMode).unwrap();
+        dispatcher
+            .dispatch(&mut state, AppAction::SwitchBottomMode)
+            .unwrap();
 
         assert_eq!(state.bottom_left_mode, BottomLeftMode::Parents);
     }

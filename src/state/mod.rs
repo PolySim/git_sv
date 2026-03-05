@@ -86,8 +86,17 @@ pub struct AppState {
     /// Diff du fichier sélectionné.
     pub selected_file_diff: Option<crate::git::diff::FileDiff>,
 
-    /// Offset de scroll dans le diff (compatibilité - migrer vers graph_view.diff_scroll_offset).
+    /// Offset de scroll vertical dans le diff.
     pub diff_scroll_offset: usize,
+
+    /// Offset de scroll horizontal dans le diff.
+    pub diff_horizontal_offset: usize,
+
+    /// Nombre total de lignes dans le diff actuel.
+    pub diff_total_lines: usize,
+
+    /// Mode plein écran pour le diff.
+    pub diff_fullscreen: bool,
 
     /// Mode d'affichage du diff (unifié ou côte à côte).
     pub diff_view_mode: DiffViewMode,
@@ -181,6 +190,9 @@ impl AppState {
             file_selected_index: 0,
             selected_file_diff: None,
             diff_scroll_offset: 0,
+            diff_horizontal_offset: 0,
+            diff_total_lines: 0,
+            diff_fullscreen: false,
             diff_view_mode: DiffViewMode::default(),
             status_entries: Vec::new(),
             branches: Vec::new(),

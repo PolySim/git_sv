@@ -92,6 +92,9 @@ pub enum AppAction {
     /// Diff: Basculer entre mode unifié et side-by-side.
     ToggleDiffViewMode,
 
+    /// Diff: Basculer le mode plein écran du diff.
+    ToggleDiffFullscreen,
+
     /// Aucune action (événement ignoré)
     None,
 }
