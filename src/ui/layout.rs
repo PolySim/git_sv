@@ -58,7 +58,7 @@ pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
 
 /// Construit le layout avec support du mode diff plein écran.
 ///
-/// Quand diff_fullscreen est true, le diff occupe toute la zone bottom (100%).
+/// Quand diff_fullscreen est true, le diff occupe toute la zone de contenu principal.
 pub fn build_layout_with_diff_mode(
     area: Rect,
     show_search: bool,
@@ -94,7 +94,7 @@ pub fn build_layout_with_diff_mode(
             bottom_right: Rect::default(), // Pas visible en mode plein écran
             search_bar: if show_search { Some(outer[3]) } else { None },
             help_bar: outer[4],
-            diff_fullscreen: Some(main_chunks[1]), // Toute la zone bottom
+            diff_fullscreen: Some(outer[2]), // Toute la zone de contenu principal
         };
     }
 

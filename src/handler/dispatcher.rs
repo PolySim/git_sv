@@ -120,6 +120,12 @@ impl ActionDispatcher {
                     }
                     // Charger le diff du premier fichier
                     crate::handler::navigation::load_commit_file_diff(ctx.state);
+                } else if ctx.state.view_mode == ViewMode::Graph
+                    && ctx.state.focus == FocusPanel::BottomLeft
+                {
+                    // Depuis la liste de fichiers, Enter ouvre le diff en grand pour lecture.
+                    ctx.state.focus = FocusPanel::BottomRight;
+                    ctx.state.diff_fullscreen = true;
                 }
                 Ok(())
             }
@@ -210,6 +216,11 @@ impl ActionDispatcher {
             // Toggle diff fullscreen mode
             AppAction::ToggleDiffFullscreen => {
                 ctx.state.diff_fullscreen = !ctx.state.diff_fullscreen;
+                if ctx.state.diff_fullscreen {
+                    ctx.state.focus = FocusPanel::BottomRight;
+                } else if ctx.state.view_mode == ViewMode::Graph {
+                    ctx.state.focus = FocusPanel::BottomLeft;
+                }
                 // Réinitialiser le scroll horizontal quand on bascule
                 if !ctx.state.diff_fullscreen {
                     ctx.state.diff_horizontal_offset = 0;
@@ -735,5 +746,40 @@ mod tests {
             .unwrap();
 
         assert_eq!(state.bottom_left_mode, BottomLeftMode::Parents);
+    }
+
+    #[test]
+    fn test_dispatch_select_from_bottom_left_opens_fullscreen_diff() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Graph;
+        state.focus = FocusPanel::BottomLeft;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher.dispatch(&mut state, AppAction::Select).unwrap();
+
+        assert_eq!(state.focus, FocusPanel::BottomRight);
+        assert!(state.diff_fullscreen);
+    }
+
+    #[test]
+    fn test_dispatch_toggle_diff_fullscreen_restores_file_focus_when_closing() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Graph;
+        state.focus = FocusPanel::BottomLeft;
+        let mut dispatcher = ActionDispatcher::new();
+
+        dispatcher
+            .dispatch(&mut state, AppAction::ToggleDiffFullscreen)
+            .unwrap();
+        assert!(state.diff_fullscreen);
+        assert_eq!(state.focus, FocusPanel::BottomRight);
+
+        dispatcher
+            .dispatch(&mut state, AppAction::ToggleDiffFullscreen)
+            .unwrap();
+        assert!(!state.diff_fullscreen);
+        assert_eq!(state.focus, FocusPanel::BottomLeft);
     }
 }

@@ -225,20 +225,18 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
 
     // Si mode diff plein écran est actif, afficher le diff sur toute la zone
     if let Some(diff_area) = layout.diff_fullscreen {
-        if state.focus == FocusPanel::BottomLeft {
-            // En mode plein écran, le diff est toujours visible
-            let total_lines = diff_view::render(
-                frame,
-                state.selected_file_diff.as_ref(),
-                state.diff_scroll_offset,
-                state.diff_horizontal_offset,
-                diff_area,
-                true,
-                state.diff_view_mode,
-                true,
-            );
-            state.diff_total_lines = total_lines;
-        }
+        // En mode plein écran, le diff est toujours visible.
+        let total_lines = diff_view::render(
+            frame,
+            state.selected_file_diff.as_ref(),
+            state.diff_scroll_offset,
+            state.diff_horizontal_offset,
+            diff_area,
+            state.focus == FocusPanel::BottomRight,
+            state.diff_view_mode,
+            true,
+        );
+        state.diff_total_lines = total_lines;
     } else {
         // Mode normal
         match state.focus {

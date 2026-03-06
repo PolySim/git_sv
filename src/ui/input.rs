@@ -265,7 +265,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                 KeyCode::Char('k') | KeyCode::Up => {
                     return Some(AppAction::Navigation(NavigationAction::FileUp))
                 }
-                KeyCode::Enter => return Some(AppAction::SwitchBottomMode), // Passer au diff
+                KeyCode::Char('z') | KeyCode::Enter => return Some(AppAction::Select),
                 _ => {}
             }
         }
