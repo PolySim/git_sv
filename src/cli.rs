@@ -49,20 +49,6 @@ impl Default for CliOptions {
     }
 }
 
-/// Affiche le log des commits.
-pub fn log(repo: &GitRepo, max_count: usize, options: &CliOptions) -> Result<()> {
-    let filter = GraphFilter::default();
-    let commits = repo.log_filtered(max_count, &filter)?;
-
-    match options.format {
-        OutputFormat::Json => print_log_json(&commits)?,
-        OutputFormat::Plain => print_log_plain(&commits)?,
-        OutputFormat::Human => print_log_human(&commits)?,
-    }
-
-    Ok(())
-}
-
 /// Affiche le log filtré.
 pub fn log_filtered(
     repo: &GitRepo,

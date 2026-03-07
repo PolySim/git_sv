@@ -3,9 +3,10 @@
 #![allow(dead_code)]
 
 use crate::ui::common::centered_rect;
+use crate::ui::theme::current_theme;
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
@@ -66,10 +67,7 @@ impl ConfirmAction {
                     .to_string()
             }
             ConfirmAction::CherryPick(oid) => {
-                format!(
-                    "Êtes-vous sûr de vouloir cherry-pick le commit {} ?",
-                    format!("{:.7}", oid)
-                )
+                format!("Êtes-vous sûr de vouloir cherry-pick le commit {oid:.7} ?")
             }
             ConfirmAction::MergeBranch(source, target) => {
                 format!("Merger '{}' dans '{}' ?", source, target)
@@ -79,15 +77,11 @@ impl ConfirmAction {
             }
             ConfirmAction::ResetSoft(oid) => {
                 format!(
-                    "Reset SOFT vers {} ?\nLes modifications seront conservées dans l'index.",
-                    format!("{:.7}", oid)
+                    "Reset SOFT vers {oid:.7} ?\nLes modifications seront conservées dans l'index."
                 )
             }
             ConfirmAction::ResetHard(oid) => {
-                format!(
-                    "⚠ RESET HARD vers {} ?\n\n⚠ ATTENTION : Toutes les modifications non committées seront PERDUES !",
-                    format!("{:.7}", oid)
-                )
+                format!("⚠ RESET HARD vers {oid:.7} ?\n\n⚠ ATTENTION : Toutes les modifications non committées seront PERDUES !")
             }
         }
     }
@@ -111,6 +105,7 @@ impl ConfirmAction {
 
 /// Rend un dialogue de confirmation en overlay.
 pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
+    let theme = current_theme();
     // Calculer la zone centrale pour le popup
     let popup_area = centered_rect(60, 30, area);
 
@@ -128,19 +123,21 @@ pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
             Span::styled(
                 "y",
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(theme.success)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" - Oui  "),
             Span::styled(
                 "n",
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.error)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" - Non  "),
             Span::styled(
                 "ESC",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme.warning)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" - Annuler"),
@@ -153,8 +150,9 @@ pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
                 .title(action.title())
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_style(Style::default().fg(theme.warning)),
         )
+        .style(Style::default().bg(theme.background).fg(theme.text_normal))
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, popup_area);

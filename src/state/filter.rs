@@ -251,7 +251,7 @@ fn timestamp_to_date_string(timestamp: i64) -> String {
     use chrono::{DateTime, Local};
     let datetime = DateTime::from_timestamp(timestamp, 0)
         .map(|dt| dt.with_timezone(&Local))
-        .unwrap_or_else(|| Local::now());
+        .unwrap_or_else(Local::now);
     datetime.format("%Y-%m-%d").to_string()
 }
 

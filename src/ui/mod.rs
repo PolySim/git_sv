@@ -76,7 +76,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                         state.current_flash_message(),
                     );
                 }
-                Some(ViewMode::Conflicts) | _ if state.conflicts_state.is_some() => {
+                Some(ViewMode::Conflicts) => {
                     // Extraire les valeurs nécessaires avant l'emprunt mutable
                     let flash_msg = state.current_flash_message().map(|s| s.to_string());
                     let current_branch = state.current_branch.clone();
@@ -95,6 +95,24 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     return; // L'overlay de conflits est spécifique
                 }
                 _ => {
+                    if state.conflicts_state.is_some() {
+                        let flash_msg = state.current_flash_message().map(|s| s.to_string());
+                        let current_branch = state.current_branch.clone();
+                        let repo_path = state.repo_path.clone();
+
+                        if let Some(ref mut conflicts_state) = state.conflicts_state {
+                            conflicts_view::render(
+                                frame,
+                                conflicts_state,
+                                &current_branch,
+                                &repo_path,
+                                flash_msg.as_deref(),
+                            );
+                        }
+                        conflicts_view::render_help_overlay(frame, frame.area());
+                        return;
+                    }
+
                     render_graph_view(frame, state);
                 }
             }
@@ -245,7 +263,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
             &state.graph_view.commit_files,
             &state.status_entries,
             selected_hash,
-            state.bottom_left_mode.clone(),
+            state.bottom_left_mode,
             layout.bottom_left,
             is_files_focused,
             file_selected_index,
@@ -307,7 +325,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         frame,
         selected_index,
         graph_len,
-        state.bottom_left_mode.clone(),
+        state.bottom_left_mode,
         state.graph_filter.is_active(),
         state.is_merging,
         layout.help_bar,

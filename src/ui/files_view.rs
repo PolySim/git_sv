@@ -16,6 +16,7 @@ use crate::git::repo::StatusEntry;
 ///
 /// Affiche soit les fichiers du commit sélectionné, soit le status du working directory
 /// selon le mode actif.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     commit_files: &[DiffFile],

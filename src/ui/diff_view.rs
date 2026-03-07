@@ -14,6 +14,7 @@ use crate::git::diff::{DiffLineType, DiffViewMode, FileDiff};
 const MIN_SIDE_BY_SIDE_WIDTH: u16 = 60;
 
 /// Rend le diff d'un fichier avec coloration syntaxique.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     diff: Option<&FileDiff>,

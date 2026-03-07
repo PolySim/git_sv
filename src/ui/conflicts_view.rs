@@ -717,8 +717,7 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
         resolved
             .into_iter()
-            .enumerate()
-            .map(|(_idx, rline)| {
+            .map(|rline| {
                 let style = match rline.source {
                     LineSource::Context => Style::default().fg(theme.text_normal),
                     LineSource::Ours => Style::default().bg(theme.ours_bg).fg(theme.text_normal),

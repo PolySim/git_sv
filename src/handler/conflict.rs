@@ -622,7 +622,7 @@ fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
         let resolved = conflicts
             .all_files
             .get(conflicts.file_selected)
-            .map(|f| all_sections_resolved(f))
+            .map(all_sections_resolved)
             .unwrap_or(false);
         (path, resolved)
     } else {

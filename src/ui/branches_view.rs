@@ -135,7 +135,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
             .add_modifier(Modifier::BOLD),
     ))));
 
-    for (_i, branch) in state.local_branches.iter().enumerate() {
+    for branch in state.local_branches.iter() {
         let prefix = if branch.is_head { "● " } else { "  " };
         let style = if branch.is_head {
             Style::default()
@@ -325,7 +325,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
     let has_diff = state
         .stash_file_diff
         .as_ref()
-        .map_or(false, |d| !d.is_empty());
+        .is_some_and(|d| !d.is_empty());
     let scroll_offset = if has_diff {
         state.stash_diff_scroll as u16
     } else {
@@ -344,8 +344,7 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
     let items: Vec<ListItem> = state
         .worktrees
         .iter()
-        .enumerate()
-        .map(|(_i, worktree)| {
+        .map(|worktree| {
             let prefix = if worktree.is_main { "● " } else { "  " };
             let style = if worktree.is_main {
                 Style::default()
@@ -418,7 +417,7 @@ fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Re
     let has_diff = state
         .stash_file_diff
         .as_ref()
-        .map_or(false, |d| !d.is_empty());
+        .is_some_and(|d| !d.is_empty());
     let scroll_offset = if has_diff {
         state.stash_diff_scroll as u16
     } else {
@@ -437,8 +436,7 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
     let items: Vec<ListItem> = state
         .stashes
         .iter()
-        .enumerate()
-        .map(|(_i, stash)| {
+        .map(|stash| {
             let line = Line::from(vec![
                 Span::styled(
                     format!("stash@{{{}}}: ", stash.index),
@@ -562,7 +560,7 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
     let has_diff = state
         .stash_file_diff
         .as_ref()
-        .map_or(false, |d| !d.is_empty());
+        .is_some_and(|d| !d.is_empty());
     let scroll_offset = if has_diff {
         state.stash_diff_scroll as u16
     } else {

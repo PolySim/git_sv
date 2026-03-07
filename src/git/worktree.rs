@@ -37,27 +37,25 @@ pub fn list_worktrees(repo: &Repository) -> Result<Vec<WorktreeInfo>> {
 
     // Worktrees additionnels.
     let wt_names = repo.worktrees()?;
-    for name in wt_names.iter() {
-        if let Some(name) = name {
-            if let Ok(wt) = repo.find_worktree(name) {
-                let path = wt.path().display().to_string();
-                // Tenter d'ouvrir le worktree pour lire sa branche.
-                let branch = if let Ok(wt_repo) = Repository::open(&path) {
-                    wt_repo
-                        .head()
-                        .ok()
-                        .and_then(|h| h.shorthand().map(String::from))
-                } else {
-                    None
-                };
+    for name in wt_names.iter().flatten() {
+        if let Ok(wt) = repo.find_worktree(name) {
+            let path = wt.path().display().to_string();
+            // Tenter d'ouvrir le worktree pour lire sa branche.
+            let branch = if let Ok(wt_repo) = Repository::open(&path) {
+                wt_repo
+                    .head()
+                    .ok()
+                    .and_then(|h| h.shorthand().map(String::from))
+            } else {
+                None
+            };
 
-                worktrees.push(WorktreeInfo {
-                    name: name.to_string(),
-                    path,
-                    branch,
-                    is_main: false,
-                });
-            }
+            worktrees.push(WorktreeInfo {
+                name: name.to_string(),
+                path,
+                branch,
+                is_main: false,
+            });
         }
     }
 

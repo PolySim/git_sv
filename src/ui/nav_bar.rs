@@ -4,16 +4,18 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
 use crate::state::ViewMode;
+use crate::ui::theme::current_theme;
 
 /// Rend la barre de navigation avec les onglets.
 pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_conflicts: usize) {
+    let theme = current_theme();
     let has_conflicts = unresolved_conflicts > 0;
 
     // Label pour l'onglet Conflits (si applicable)
@@ -30,28 +32,31 @@ pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_
     let mut spans: Vec<Span> = vec![Span::raw(" ")];
 
     // Onglets fixes
-    let tabs = vec![
+    let tabs = [
         ("1", "Graph", ViewMode::Graph),
         ("2", "Staging", ViewMode::Staging),
         ("3", "Branches", ViewMode::Branches),
     ];
 
     // Rendre les onglets fixes
-    for (_i, (key, label, mode)) in tabs.iter().enumerate() {
+    for (key, label, mode) in tabs.iter() {
         let is_active = *mode == current_view;
 
         let style = if is_active {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
+                .fg(theme.selection_fg)
+                .bg(theme.selection_bg)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Gray)
+            Style::default().fg(theme.text_secondary)
         };
 
         spans.push(Span::styled(format!(" {} ", key), style));
         spans.push(Span::styled(format!("{} ", label), style));
-        spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            "│",
+            Style::default().fg(theme.border_inactive),
+        ));
     }
 
     // Onglet Conflits (si applicable)
@@ -60,11 +65,11 @@ pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_
 
         let style = if is_active {
             Style::default()
-                .fg(Color::White)
-                .bg(Color::Red)
+                .fg(theme.selection_fg)
+                .bg(theme.error)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Red)
+            Style::default().fg(theme.error)
         };
 
         spans.push(Span::styled(" 4 ", style));
@@ -79,7 +84,7 @@ pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_
     let paragraph = Paragraph::new(line).block(
         Block::default()
             .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(theme.border_inactive)),
     );
 
     frame.render_widget(paragraph, area);
@@ -87,6 +92,7 @@ pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_
 
 /// Rend une version compacte de la barre de navigation (pour les status bar).
 pub fn render_compact(current_view: ViewMode, unresolved_conflicts: usize) -> Line<'static> {
+    let theme = current_theme();
     let has_conflicts = unresolved_conflicts > 0;
 
     let mut tabs: Vec<(&str, ViewMode)> = vec![
@@ -109,22 +115,27 @@ pub fn render_compact(current_view: ViewMode, unresolved_conflicts: usize) -> Li
 
         let style = if is_active {
             if is_conflicts {
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme.error)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.primary)
                     .add_modifier(Modifier::BOLD)
             }
         } else if is_conflicts {
-            Style::default().fg(Color::Red)
+            Style::default().fg(theme.error)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.text_secondary)
         };
 
         spans.push(Span::styled(*label, style));
 
         if i < tabs.len() - 1 {
-            spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(
+                " | ",
+                Style::default().fg(theme.border_inactive),
+            ));
         }
     }
 

@@ -189,16 +189,19 @@ impl AppState {
     }
 
     /// L'état nécessite-t-il un refresh?
+    #[allow(dead_code)]
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
 
     /// Marque l'état comme propre.
+    #[allow(dead_code)]
     pub fn mark_clean(&mut self) {
         self.dirty = false;
     }
 
     /// Alias de mark_clean pour compatibilité.
+    #[allow(dead_code)]
     pub fn clear_dirty(&mut self) {
         self.mark_clean();
     }
@@ -209,6 +212,7 @@ impl AppState {
     }
 
     /// Efface le message flash.
+    #[allow(dead_code)]
     pub fn clear_flash_message(&mut self) {
         self.flash_message = None;
     }
@@ -232,6 +236,7 @@ impl AppState {
     // ═══════════════════════════════════════════════════
 
     /// Retourne l'index du commit sélectionné.
+    #[allow(dead_code)]
     pub fn selected_index(&self) -> usize {
         self.graph_view.selected_index()
     }
@@ -242,26 +247,31 @@ impl AppState {
     }
 
     /// Retourne les lignes du graphe.
+    #[allow(dead_code)]
     pub fn graph_rows(&self) -> &[crate::git::graph::GraphRow] {
         &self.graph_view.rows.items
     }
 
     /// Retourne le nombre de commits dans le graphe.
+    #[allow(dead_code)]
     pub fn graph_len(&self) -> usize {
         self.graph_view.len()
     }
 
     /// Le graphe est-il vide ?
+    #[allow(dead_code)]
     pub fn graph_is_empty(&self) -> bool {
         self.graph_view.is_empty()
     }
 
     /// Retourne l'index visuel pour ratatui.
+    #[allow(dead_code)]
     pub fn visual_index(&self) -> usize {
         self.graph_view.visual_index()
     }
 
     /// Retourne une référence mutable vers l'état de la liste ratatui.
+    #[allow(dead_code)]
     pub fn list_state_mut(&mut self) -> &mut ratatui::widgets::ListState {
         &mut self.graph_view.list_state
     }
@@ -287,6 +297,7 @@ impl AppState {
     }
 
     /// Sélectionne un fichier par son index.
+    #[allow(dead_code)]
     pub fn select_file(&mut self, index: usize) {
         self.graph_view.select_file(index);
     }

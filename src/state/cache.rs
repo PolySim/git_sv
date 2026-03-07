@@ -9,9 +9,10 @@ use std::num::NonZeroUsize;
 use crate::git::diff::FileDiff;
 
 /// État d'un diff chargé paresseusement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum LazyDiff {
     /// Non chargé encore.
+    #[default]
     NotLoaded,
     /// En cours de chargement.
     Loading,
@@ -79,16 +80,11 @@ impl LazyDiff {
     }
 }
 
-impl Default for LazyDiff {
-    fn default() -> Self {
-        Self::NotLoaded
-    }
-}
-
 /// État d'un blame chargé paresseusement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum LazyBlame {
     /// Non chargé encore.
+    #[default]
     NotLoaded,
     /// En cours de chargement.
     Loading,
@@ -156,12 +152,6 @@ impl LazyBlame {
     }
 }
 
-impl Default for LazyBlame {
-    fn default() -> Self {
-        Self::NotLoaded
-    }
-}
-
 /// Clé de cache pour un diff.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiffCacheKey {
@@ -201,8 +191,7 @@ pub struct DiffCache {
 impl DiffCache {
     /// Crée un nouveau cache avec la capacité donnée.
     pub fn new(capacity: usize) -> Self {
-        // SAFETY: 1 est toujours non-zero, donc new_unchecked est sûr
-        const DEFAULT_CAPACITY: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(1) };
+        const DEFAULT_CAPACITY: NonZeroUsize = NonZeroUsize::new(1).unwrap();
         let cap = NonZeroUsize::new(capacity).unwrap_or(DEFAULT_CAPACITY);
         Self {
             cache: LruCache::new(cap),

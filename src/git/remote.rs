@@ -91,10 +91,8 @@ fn parse_ssh_config() -> HashMap<String, SshHostConfig> {
             }
         }
         // Parser User
-        else if line.to_lowercase().starts_with("user ") {
-            if current_host.is_some() {
-                current_config.user = Some(line[5..].trim().to_string());
-            }
+        else if line.to_lowercase().starts_with("user ") && current_host.is_some() {
+            current_config.user = Some(line[5..].trim().to_string());
         }
     }
 
@@ -128,22 +126,19 @@ fn expand_tilde(path: &str) -> PathBuf {
 /// Extrait le hostname d'une URL SSH (ex: "git@github-pro:user/repo.git" -> "github-pro")
 fn extract_host_from_url(url: &str) -> Option<String> {
     // Format SSH: git@hostname:user/repo.git
-    if url.starts_with("git@") {
-        let without_prefix = &url[4..];
+    if let Some(without_prefix) = url.strip_prefix("git@") {
         if let Some(colon_pos) = without_prefix.find(':') {
             return Some(without_prefix[..colon_pos].to_string());
         }
     }
     // Format HTTPS: https://hostname/user/repo.git
-    else if url.starts_with("https://") {
-        let without_prefix = &url[8..];
+    else if let Some(without_prefix) = url.strip_prefix("https://") {
         if let Some(slash_pos) = without_prefix.find('/') {
             return Some(without_prefix[..slash_pos].to_string());
         }
     }
     // Format SSH avec schema: ssh://git@hostname/user/repo.git
-    else if url.starts_with("ssh://") {
-        let without_prefix = &url[6..];
+    else if let Some(without_prefix) = url.strip_prefix("ssh://") {
         if let Some(at_pos) = without_prefix.find('@') {
             let after_at = &without_prefix[at_pos + 1..];
             if let Some(slash_pos) = after_at.find('/') {
@@ -169,7 +164,7 @@ fn resolve_ssh_credentials(
     if let Some(host) = extract_host_from_url(url) {
         // Chercher D'ABORD la config par HostName (priorité aux alias)
         // Ex: URL = github.com, config = Host github-pro HostName github.com
-        for (_alias, config) in &ssh_configs {
+        for config in ssh_configs.values() {
             if let Some(hostname) = &config.hostname {
                 if hostname == &host {
                     if let Some(identity_path) = &config.identity_file {
@@ -292,7 +287,7 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     };
 
     // Si le push échoue, essayer avec git CLI en fallback
-    if let Err(_) = result {
+    if result.is_err() {
         return push_current_branch_cli(repo);
     }
 
@@ -372,18 +367,16 @@ fn push_current_branch_cli_path_with_options(
         } else {
             Ok(format!("Push de '{}' effectué", branch_name))
         }
+    } else if force {
+        Ok(format!(
+            "Force push de '{}' effectué (upstream configuré)",
+            branch_name
+        ))
     } else {
-        if force {
-            Ok(format!(
-                "Force push de '{}' effectué (upstream configuré)",
-                branch_name
-            ))
-        } else {
-            Ok(format!(
-                "Push de '{}' effectué (upstream configuré)",
-                branch_name
-            ))
-        }
+        Ok(format!(
+            "Push de '{}' effectué (upstream configuré)",
+            branch_name
+        ))
     }
 }
 
@@ -646,7 +639,7 @@ pub fn fetch_all(repo: &Repository) -> Result<()> {
 /// Vérifie si le repository a un remote configuré.
 pub fn has_remote(repo: &Repository) -> Result<bool> {
     let remotes = repo.remotes()?;
-    Ok(remotes.len() > 0)
+    Ok(!remotes.is_empty())
 }
 
 /// Récupère le nom du remote par défaut pour la branche courante.
@@ -728,17 +721,15 @@ fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Resul
         } else {
             Ok(format!("Push de '{}' vers {}", branch_name, remote_name))
         }
+    } else if force {
+        Ok(format!(
+            "Force push de '{}' vers {}/{} (upstream configuré)",
+            branch_name, remote_name, branch_name
+        ))
     } else {
-        if force {
-            Ok(format!(
-                "Force push de '{}' vers {}/{} (upstream configuré)",
-                branch_name, remote_name, branch_name
-            ))
-        } else {
-            Ok(format!(
-                "Push de '{}' vers {}/{} (upstream configuré)",
-                branch_name, remote_name, branch_name
-            ))
-        }
+        Ok(format!(
+            "Push de '{}' vers {}/{} (upstream configuré)",
+            branch_name, remote_name, branch_name
+        ))
     }
 }

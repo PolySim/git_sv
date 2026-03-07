@@ -192,6 +192,7 @@ fn render_file_list(
 }
 
 /// Rend le champ de saisie du message de commit.
+#[allow(clippy::too_many_arguments)]
 fn render_commit_input(
     frame: &mut Frame,
     message: &str,
@@ -246,9 +247,7 @@ fn render_commit_input(
         // Calculer la position du curseur en tenant compte des retours à la ligne
         let mut cursor_line = 0u16;
         let mut cursor_col = 0u16;
-        let mut current_pos = 0usize;
-
-        for char in message.chars() {
+        for (current_pos, char) in message.chars().enumerate() {
             if current_pos >= cursor_pos {
                 break;
             }
@@ -258,7 +257,6 @@ fn render_commit_input(
             } else {
                 cursor_col += 1;
             }
-            current_pos += 1;
         }
 
         frame.set_cursor_position((area.x + cursor_col + 1, area.y + cursor_line + 1));

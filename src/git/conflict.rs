@@ -436,7 +436,7 @@ pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
                 .ok_or_else(|| GitSvError::Other("Section de conflit non trouvée".into()))?;
 
             // Sauter toute la section de conflit
-            while let Some(line) = lines.next() {
+            for line in lines.by_ref() {
                 if line.starts_with(">>>>>>>") {
                     break;
                 }
@@ -883,7 +883,7 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                                 conflicts
                                     .filter_map(|c| c.ok())
                                     .find(|c| {
-                                        c.their.as_ref().map_or(false, |t| {
+                                        c.their.as_ref().is_some_and(|t| {
                                             std::str::from_utf8(&t.path).ok() == Some(path)
                                         })
                                     })
@@ -958,7 +958,7 @@ pub fn list_all_merge_files(repo: &Repository) -> Result<Vec<MergeFile>> {
                         conflicts
                             .filter_map(|c| c.ok())
                             .find(|c| {
-                                c.their.as_ref().map_or(false, |t| {
+                                c.their.as_ref().is_some_and(|t| {
                                     std::str::from_utf8(&t.path).ok().map(|s| s.to_string())
                                         == Some(path.clone())
                                 })
@@ -1167,7 +1167,7 @@ pub fn all_sections_resolved(file: &MergeFile) -> bool {
         c.resolution.is_some()
             || c.line_level_resolution
                 .as_ref()
-                .map_or(false, |lr| lr.touched)
+                .is_some_and(|lr| lr.touched)
     })
 }
 

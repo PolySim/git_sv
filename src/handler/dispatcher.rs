@@ -579,10 +579,8 @@ impl ActionDispatcher {
                         ctx.state
                             .set_flash_message(format!("Erreur reset soft: {}", e));
                     } else {
-                        ctx.state.set_flash_message(format!(
-                            "Reset soft vers {} effectué ✓",
-                            format!("{:.7}", oid)
-                        ));
+                        ctx.state
+                            .set_flash_message(format!("Reset soft vers {oid:.7} effectué ✓"));
                         ctx.state.mark_dirty();
                     }
                 }
@@ -596,10 +594,8 @@ impl ActionDispatcher {
                         ctx.state
                             .set_flash_message(format!("Erreur reset hard: {}", e));
                     } else {
-                        ctx.state.set_flash_message(format!(
-                            "Reset hard vers {} effectué ✓",
-                            format!("{:.7}", oid)
-                        ));
+                        ctx.state
+                            .set_flash_message(format!("Reset hard vers {oid:.7} effectué ✓"));
                         ctx.state.mark_dirty();
                     }
                 }
@@ -631,10 +627,8 @@ impl ActionDispatcher {
                     ctx.state.pending_confirmation = None;
                     match crate::git::commit::cherry_pick_with_result(&ctx.state.repo.repo, oid) {
                         Ok(MergeResult::Success) => {
-                            ctx.state.set_flash_message(format!(
-                                "Cherry-pick {} effectué ✓",
-                                format!("{:.7}", oid)
-                            ));
+                            ctx.state
+                                .set_flash_message(format!("Cherry-pick {oid:.7} effectué ✓"));
                             ctx.state.mark_dirty();
                         }
                         Ok(MergeResult::Conflicts(conflicts)) => {
@@ -650,7 +644,7 @@ impl ActionDispatcher {
                                 .unwrap_or_else(|| "HEAD".to_string());
                             ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
                                 conflicts,
-                                format!("cherry-pick {}", format!("{:.7}", oid)),
+                                format!("cherry-pick {oid:.7}"),
                                 current,
                                 format!("{:.7}", oid),
                             ));

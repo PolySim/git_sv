@@ -130,7 +130,7 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
 
     if !state.search_state.results.is_empty() {
         // Naviguer directement vers le premier résultat
-        if let Some(&index) = state.search_state.results.get(0) {
+        if let Some(&index) = state.search_state.results.first() {
             if index < state.graph_view.len() {
                 state.graph_view.select_commit(index);
                 // Rafraîchir les fichiers du commit sélectionné

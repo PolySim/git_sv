@@ -69,7 +69,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     }
 
     // Si le merge picker est actif, gérer ses keybindings
-    if state.merge_picker.as_ref().map_or(false, |p| p.is_active) {
+    if state.merge_picker.as_ref().is_some_and(|p| p.is_active) {
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(AppAction::MergePickerDown),
             KeyCode::Char('k') | KeyCode::Up => Some(AppAction::MergePickerUp),
@@ -80,7 +80,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     }
 
     // Si le reset picker est actif, gérer ses keybindings
-    if state.reset_picker.as_ref().map_or(false, |p| p.is_active) {
+    if state.reset_picker.as_ref().is_some_and(|p| p.is_active) {
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('s') => {
                 Some(AppAction::ResetPickerSelectSoft)
@@ -615,7 +615,7 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Récupérer le panneau actif, le mode de résolution et l'état d'édition
     let conflicts_state = state.conflicts_state.as_ref();
     let panel_focus = conflicts_state.map(|s| s.panel_focus);
-    let is_editing = conflicts_state.map_or(false, |s| s.is_editing);
+    let is_editing = conflicts_state.is_some_and(|s| s.is_editing);
     let resolution_mode =
         conflicts_state.map_or(ConflictResolutionMode::Block, |s| s.resolution_mode);
 
@@ -789,9 +789,9 @@ fn map_conflicts_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
 
         // Navigation entre vues
-        KeyCode::Char('1') => return Some(AppAction::SwitchView(ViewMode::Graph)),
-        KeyCode::Char('2') => return Some(AppAction::SwitchView(ViewMode::Staging)),
-        KeyCode::Char('3') => return Some(AppAction::SwitchView(ViewMode::Branches)),
+        KeyCode::Char('1') => Some(AppAction::SwitchView(ViewMode::Graph)),
+        KeyCode::Char('2') => Some(AppAction::SwitchView(ViewMode::Staging)),
+        KeyCode::Char('3') => Some(AppAction::SwitchView(ViewMode::Branches)),
         _ => None,
     }
 }
@@ -845,11 +845,7 @@ fn handle_mouse_click(
         ClickableZone::BranchPanel => handle_branch_panel_click(state, &hit),
         ClickableZone::NavBar => {
             // Clic sur un tab de navigation
-            if let Some(view_mode) = calculate_nav_tab(hit.relative_x) {
-                Some(AppAction::SwitchView(view_mode))
-            } else {
-                None
-            }
+            calculate_nav_tab(hit.relative_x).map(AppAction::SwitchView)
         }
         ClickableZone::Graph => {
             // Clic dans le graphe: sélectionner un commit et mettre le focus sur Graph
@@ -1019,10 +1015,9 @@ fn handle_staging_mouse_click(
         return Some(AppAction::Staging(StagingAction::FocusDiff));
     }
 
-    if hit.rect == layout.commit_message {
-        if state.staging_state.focus != StagingFocus::CommitMessage {
-            return Some(AppAction::Staging(StagingAction::StartCommitMessage));
-        }
+    if hit.rect == layout.commit_message && state.staging_state.focus != StagingFocus::CommitMessage
+    {
+        return Some(AppAction::Staging(StagingAction::StartCommitMessage));
     }
 
     None

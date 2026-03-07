@@ -240,7 +240,7 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
         // On ne supprime que par la droite pour maintenir l'alignement des colonnes internes.
         while active_columns
             .last()
-            .map_or(false, |s| s.expected_oid.is_none())
+            .is_some_and(|s| s.expected_oid.is_none())
         {
             active_columns.pop();
         }
@@ -394,19 +394,19 @@ fn build_connection_row(
             });
 
             // Lignes horizontales entre from_col et to_col
-            for col in (from_col + 1)..to_col {
-                if let Some(cell) = cells[col].as_ref() {
-                    if cell.edge_type == EdgeType::Vertical {
+            for slot in cells.iter_mut().take(to_col).skip(from_col + 1) {
+                if let Some(existing_cell) = slot.as_ref() {
+                    if existing_cell.edge_type == EdgeType::Vertical {
                         // Croisement avec une ligne verticale existante.
-                        let existing_color = cell.color_index;
-                        cells[col] = Some(GraphCell {
+                        let existing_color = existing_cell.color_index;
+                        *slot = Some(GraphCell {
                             edge_type: EdgeType::Cross,
                             color_index: existing_color,
                         });
                         continue;
                     }
                 }
-                cells[col] = Some(GraphCell {
+                *slot = Some(GraphCell {
                     edge_type: EdgeType::Horizontal,
                     color_index: color,
                 });
@@ -425,19 +425,19 @@ fn build_connection_row(
             });
 
             // Lignes horizontales entre to_col et from_col
-            for col in (to_col + 1)..from_col {
-                if let Some(cell) = cells[col].as_ref() {
-                    if cell.edge_type == EdgeType::Vertical {
+            for slot in cells.iter_mut().take(from_col).skip(to_col + 1) {
+                if let Some(existing_cell) = slot.as_ref() {
+                    if existing_cell.edge_type == EdgeType::Vertical {
                         // Croisement avec une ligne verticale existante.
-                        let existing_color = cell.color_index;
-                        cells[col] = Some(GraphCell {
+                        let existing_color = existing_cell.color_index;
+                        *slot = Some(GraphCell {
                             edge_type: EdgeType::Cross,
                             color_index: existing_color,
                         });
                         continue;
                     }
                 }
-                cells[col] = Some(GraphCell {
+                *slot = Some(GraphCell {
                     edge_type: EdgeType::Horizontal,
                     color_index: color,
                 });

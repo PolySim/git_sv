@@ -4,11 +4,13 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
 };
+
+use crate::ui::theme::current_theme;
 
 /// Un raccourci clavier à afficher.
 pub struct KeyBinding {
@@ -45,6 +47,7 @@ impl<'a> HelpBar<'a> {
 
     /// Rend la barre d'aide.
     pub fn render(self, frame: &mut Frame, area: Rect) {
+        let theme = current_theme();
         let mut spans = Vec::new();
 
         for (i, binding) in self.bindings.iter().enumerate() {
@@ -54,7 +57,7 @@ impl<'a> HelpBar<'a> {
 
             spans.push(Span::styled(
                 binding.key,
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(theme.warning),
             ));
             spans.push(Span::raw(": "));
             spans.push(Span::raw(binding.description));

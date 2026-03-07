@@ -3,6 +3,8 @@
 //! Ce module contient toutes les définitions de touches utilisées dans l'application
 //! pour éviter la divergence entre la documentation et le code.
 
+#![allow(dead_code)]
+
 /// Navigation dans le graphe de commits.
 pub mod navigation {
     /// Commit suivant.

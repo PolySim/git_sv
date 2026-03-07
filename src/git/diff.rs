@@ -270,8 +270,7 @@ fn find_and_extract_file_diff(
     // Trouver le delta correspondant au fichier.
     for (idx, delta) in diff.deltas().enumerate() {
         let (path, old_path) = diff_paths(&delta);
-        let matches_requested_path =
-            path == file_path || old_path.as_deref().map_or(false, |old| old == file_path);
+        let matches_requested_path = path == file_path || (old_path.as_deref() == Some(file_path));
 
         if !matches_requested_path {
             continue;

@@ -87,10 +87,10 @@ pub struct BranchesViewState {
 impl BranchesViewState {
     /// Crée un nouvel état branches.
     pub fn new() -> Self {
-        let mut state = Self::default();
-        // Par défaut, sélectionner la première branche locale si disponible
-        state.selected_branch = Some(SelectedBranch::Local(0));
-        state
+        Self {
+            selected_branch: Some(SelectedBranch::Local(0)),
+            ..Self::default()
+        }
     }
 
     /// Branche actuellement sélectionnée (retourne la référence et le type).
@@ -202,7 +202,7 @@ impl BranchesViewState {
         // revenir sur une branche locale
         if !self.show_remote {
             if let Some(SelectedBranch::Remote(_)) = self.selected_branch {
-                if self.local_branches.len() > 0 {
+                if !self.local_branches.is_empty() {
                     self.selected_branch = Some(SelectedBranch::Local(0));
                 } else {
                     self.selected_branch = None;

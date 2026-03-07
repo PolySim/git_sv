@@ -13,6 +13,7 @@ use crate::state::GraphFilter;
 use crate::ui::theme::current_theme;
 
 /// Rend la status bar en haut de l'écran.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     current_branch: &Option<String>,

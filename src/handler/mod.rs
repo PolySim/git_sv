@@ -16,7 +16,7 @@ pub mod staging;
 pub mod traits;
 
 // Re-exports des handlers et dispatcher
-pub use background::{BackgroundResult, BackgroundRunner, PullBackgroundResult};
+pub use background::{BackgroundResult, BackgroundRunner};
 pub use dispatcher::ActionDispatcher;
 
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -209,15 +209,15 @@ impl EventHandler {
         self.state.loading_spinner = None;
 
         match result {
-            BackgroundResult::PushComplete(Ok(msg)) => {
+            BackgroundResult::Push(Ok(msg)) => {
                 self.state.set_flash_message(msg);
                 self.state.mark_dirty();
             }
-            BackgroundResult::PushComplete(Err(err)) => {
+            BackgroundResult::Push(Err(err)) => {
                 self.state
                     .set_flash_message(format!("Erreur push : {}", err));
             }
-            BackgroundResult::PullComplete(pull_result) => {
+            BackgroundResult::Pull(pull_result) => {
                 match pull_result {
                     PullBackgroundResult::UpToDate => {
                         self.state.set_flash_message("Déjà à jour ✓".to_string());
@@ -231,7 +231,7 @@ impl EventHandler {
                         self.state.set_flash_message("Pull réussi ✓".to_string());
                         self.state.mark_dirty();
                     }
-                    PullBackgroundResult::Conflicts(_) => {
+                    PullBackgroundResult::Conflicts => {
                         // Détecter les fichiers en conflit dans le thread principal
                         match crate::git::conflict::list_conflict_files(&self.state.repo.repo) {
                             Ok(files) => {
@@ -270,11 +270,11 @@ impl EventHandler {
                     }
                 }
             }
-            BackgroundResult::FetchComplete(Ok(msg)) => {
+            BackgroundResult::Fetch(Ok(msg)) => {
                 self.state.set_flash_message(msg);
                 self.state.mark_dirty();
             }
-            BackgroundResult::FetchComplete(Err(err)) => {
+            BackgroundResult::Fetch(Err(err)) => {
                 self.state
                     .set_flash_message(format!("Erreur fetch : {}", err));
             }

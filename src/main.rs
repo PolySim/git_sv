@@ -115,10 +115,12 @@ fn main() -> anyhow::Result<()> {
             until,
         }) => {
             // Mode non-interactif : affiche le log avec filtres
-            let mut filter = GraphFilter::default();
-            filter.author = author;
-            filter.message = message;
-            filter.path = path_filter;
+            let mut filter = GraphFilter {
+                author,
+                message,
+                path: path_filter,
+                ..GraphFilter::default()
+            };
 
             // Parse les dates si fournies
             if let Some(since_str) = since {

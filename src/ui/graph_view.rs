@@ -16,6 +16,7 @@ use crate::utils::format_relative_time;
 const COL_SPACING: usize = 2;
 
 /// Rend le graphe de commits dans la zone donnée.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     graph: &[GraphRow],
@@ -409,11 +410,11 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
                 let needs_horizontal_right = col + 1 < num_cols
                     && connection.cells[col + 1]
                         .as_ref()
-                        .map_or(false, |c| c.edge_type == EdgeType::Horizontal);
+                        .is_some_and(|c| c.edge_type == EdgeType::Horizontal);
                 let needs_horizontal_left = col > 0
                     && connection.cells[col - 1]
                         .as_ref()
-                        .map_or(false, |c| c.edge_type == EdgeType::Horizontal);
+                        .is_some_and(|c| c.edge_type == EdgeType::Horizontal);
 
                 if needs_horizontal_right || needs_horizontal_left {
                     spans.push(Span::styled("─", Style::default().fg(color)));
@@ -428,7 +429,7 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
                     .cells
                     .get(col - 1)
                     .and_then(|c| c.as_ref())
-                    .map_or(false, |c| {
+                    .is_some_and(|c| {
                         matches!(
                             c.edge_type,
                             EdgeType::Horizontal | EdgeType::MergeFromRight | EdgeType::Cross
@@ -440,7 +441,7 @@ fn build_connection_line(connection: &crate::git::graph::ConnectionRow) -> Line<
                     .cells
                     .get(col + 1)
                     .and_then(|c| c.as_ref())
-                    .map_or(false, |c| {
+                    .is_some_and(|c| {
                         matches!(
                             c.edge_type,
                             EdgeType::Horizontal

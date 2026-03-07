@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 /// Formate un timestamp unix en date relative ("il y a 2h", "hier", etc.)
 pub fn format_relative_time(timestamp: i64) -> String {
-    let datetime = DateTime::<Utc>::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now());
+    let datetime = DateTime::<Utc>::from_timestamp(timestamp, 0).unwrap_or_else(Utc::now);
     let now = Utc::now();
     let diff = now.signed_duration_since(datetime);
 
@@ -51,12 +51,10 @@ fn format_duration(diff: Duration) -> String {
         } else {
             format!("il y a {} mois", months)
         }
+    } else if years == 1 {
+        "il y a 1 an".to_string()
     } else {
-        if years == 1 {
-            "il y a 1 an".to_string()
-        } else {
-            format!("il y a {} ans", years)
-        }
+        format!("il y a {} ans", years)
     }
 }
 

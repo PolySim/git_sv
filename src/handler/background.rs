@@ -16,8 +16,8 @@ pub enum PullBackgroundResult {
     FastForward,
     /// Merge réussi
     Success,
-    /// Conflits détectés (liste des fichiers en conflit)
-    Conflicts(Vec<String>),
+    /// Conflits détectés.
+    Conflicts,
     /// Erreur (message d'erreur)
     Error(String),
 }
@@ -26,11 +26,11 @@ pub enum PullBackgroundResult {
 #[derive(Debug)]
 pub enum BackgroundResult {
     /// Push terminé (message de succès ou erreur)
-    PushComplete(Result<String, String>),
+    Push(Result<String, String>),
     /// Pull terminé (résultat détaillé)
-    PullComplete(PullBackgroundResult),
+    Pull(PullBackgroundResult),
     /// Fetch terminé (message de succès ou erreur)
-    FetchComplete(Result<String, String>),
+    Fetch(Result<String, String>),
 }
 
 /// Gestionnaire des opérations en arrière-plan.
@@ -57,9 +57,7 @@ impl BackgroundRunner {
             } else {
                 crate::git::remote::push_current_branch_cli_path(&repo_path)
             };
-            let _ = tx.send(BackgroundResult::PushComplete(
-                result.map_err(|e| e.to_string()),
-            ));
+            let _ = tx.send(BackgroundResult::Push(result.map_err(|e| e.to_string())));
         });
     }
 
@@ -79,7 +77,7 @@ impl BackgroundRunner {
                         } else {
                             PullBackgroundResult::Success
                         };
-                    let _ = tx.send(BackgroundResult::PullComplete(result));
+                    let _ = tx.send(BackgroundResult::Pull(result));
                 }
                 Err(e) => {
                     let err_str = e.to_string();
@@ -90,13 +88,10 @@ impl BackgroundRunner {
                         || err_str.contains("CONFLICT")
                     {
                         // Signaler qu'il y a des conflits - la détection détaillée se fera dans le thread principal
-                        let _ = tx.send(BackgroundResult::PullComplete(
-                            PullBackgroundResult::Conflicts(Vec::new()),
-                        ));
+                        let _ = tx.send(BackgroundResult::Pull(PullBackgroundResult::Conflicts));
                     } else {
-                        let _ = tx.send(BackgroundResult::PullComplete(
-                            PullBackgroundResult::Error(err_str),
-                        ));
+                        let _ =
+                            tx.send(BackgroundResult::Pull(PullBackgroundResult::Error(err_str)));
                     }
                 }
             }
@@ -109,7 +104,7 @@ impl BackgroundRunner {
         thread::spawn(move || {
             // Utiliser la version CLI car git2::Repository n'est pas Send
             let result = crate::git::remote::fetch_all_cli_path(&repo_path);
-            let _ = tx.send(BackgroundResult::FetchComplete(
+            let _ = tx.send(BackgroundResult::Fetch(
                 result
                     .map(|_| "Fetch réussi ✓".to_string())
                     .map_err(|e| e.to_string()),
@@ -119,10 +114,7 @@ impl BackgroundRunner {
 
     /// Vérifie si un résultat est disponible (non bloquant).
     pub fn try_recv(&self) -> Option<BackgroundResult> {
-        match self.receiver.try_recv() {
-            Ok(result) => Some(result),
-            Err(_) => None,
-        }
+        self.receiver.try_recv().ok()
     }
 }
 
@@ -142,7 +134,7 @@ mod tests {
         let up_to_date = PullBackgroundResult::UpToDate;
         let fast_forward = PullBackgroundResult::FastForward;
         let success = PullBackgroundResult::Success;
-        let conflicts = PullBackgroundResult::Conflicts(vec!["file.txt".to_string()]);
+        let conflicts = PullBackgroundResult::Conflicts;
         let error = PullBackgroundResult::Error("test error".to_string());
 
         // Vérifier le debug format
@@ -162,17 +154,16 @@ mod tests {
 
     #[test]
     fn test_background_result_pull_complete() {
-        let result = BackgroundResult::PullComplete(PullBackgroundResult::UpToDate);
+        let result = BackgroundResult::Pull(PullBackgroundResult::UpToDate);
         assert!(matches!(
             result,
-            BackgroundResult::PullComplete(PullBackgroundResult::UpToDate)
+            BackgroundResult::Pull(PullBackgroundResult::UpToDate)
         ));
 
-        let result = BackgroundResult::PullComplete(PullBackgroundResult::Conflicts(vec![]));
-        if let BackgroundResult::PullComplete(PullBackgroundResult::Conflicts(files)) = result {
-            assert!(files.is_empty());
-        } else {
-            panic!("Expected Conflicts variant");
-        }
+        let result = BackgroundResult::Pull(PullBackgroundResult::Conflicts);
+        assert!(matches!(
+            result,
+            BackgroundResult::Pull(PullBackgroundResult::Conflicts)
+        ));
     }
 }

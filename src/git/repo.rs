@@ -119,11 +119,9 @@ impl GitRepo {
         let mut revwalk = self.repo.revwalk().ok()?;
 
         // Pousser toutes les refs
-        for reference in self.repo.references().ok()? {
-            if let Ok(reference) = reference {
-                if let Some(oid) = reference.target() {
-                    revwalk.push(oid).ok()?;
-                }
+        for reference in self.repo.references().ok()?.flatten() {
+            if let Some(oid) = reference.target() {
+                revwalk.push(oid).ok()?;
             }
         }
 
