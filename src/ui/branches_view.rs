@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
+use crate::state::SelectedBranch;
 use crate::ui::common::centered_rect;
 use crate::utils::time::format_relative_time;
 
@@ -189,21 +190,18 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
     let mut list_state = ListState::default();
     let local_count = state.local_branches.len();
-    let remote_count = state.remote_branches.len();
-    let show_remote = state.show_remote;
 
-    let visual_index = if show_remote && remote_count > 0 {
-        if local_count > 0 {
-            if state.branch_selected() < local_count {
-                state.branch_selected() + 1
-            } else {
-                state.branch_selected() + 3
-            }
-        } else {
-            state.branch_selected() + 1
+    // Calculer l'index visuel basé sur la sélection explicite
+    let visual_index = match state.selected_branch {
+        Some(SelectedBranch::Local(idx)) => {
+            // Header "Local" + index dans les branches locales
+            idx + 1
         }
-    } else {
-        state.branch_selected() + 1
+        Some(SelectedBranch::Remote(idx)) => {
+            // Header "Local" + branches locales + ligne vide + header "Remote" + index
+            local_count + idx + 3
+        }
+        None => 0,
     };
     list_state.select(Some(visual_index));
     frame.render_stateful_widget(list, area, &mut list_state);
@@ -211,111 +209,111 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
 /// Rend le détail d'une branche.
 fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let local_count = state.local_branches.len();
-    let is_remote = state.show_remote
-        && !state.remote_branches.is_empty()
-        && state.branch_selected() >= local_count;
+    let content = match state.selected_branch {
+        Some(SelectedBranch::Remote(idx)) => {
+            if let Some(branch) = state.remote_branches.get(idx) {
+                let mut lines = vec![
+                    Line::from(vec![
+                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(&branch.name),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled("distante", Style::default().fg(Color::DarkGray)),
+                    ]),
+                ];
 
-    let content = if is_remote {
-        if let Some(branch) = state
-            .remote_branches
-            .get(state.branch_selected() - local_count)
-        {
-            let mut lines = vec![
-                Line::from(vec![
-                    Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(&branch.name),
-                ]),
-                Line::from(vec![
-                    Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled("distante", Style::default().fg(Color::DarkGray)),
-                ]),
-            ];
+                // Afficher la date du dernier commit si disponible
+                if let Some(date) = branch.last_commit_date {
+                    let timestamp_secs = date
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    lines.push(Line::from(vec![
+                        Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            format_relative_time(timestamp_secs),
+                            Style::default().fg(Color::Cyan),
+                        ),
+                    ]));
+                }
 
-            // Afficher la date du dernier commit si disponible
-            if let Some(date) = branch.last_commit_date {
-                let timestamp_secs = date
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                lines.push(Line::from(vec![
-                    Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(
-                        format_relative_time(timestamp_secs),
-                        Style::default().fg(Color::Cyan),
-                    ),
-                ]));
+                if let Some(ref msg) = branch.last_commit_message {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![Span::styled(
+                        "Dernier commit:",
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )]));
+                    lines.push(Line::from(msg.as_str()));
+                }
+
+                lines
+            } else {
+                vec![Line::from("Aucune branche distante sélectionnée")]
             }
+        }
+        Some(SelectedBranch::Local(idx)) => {
+            if let Some(branch) = state.local_branches.get(idx) {
+                let mut lines = vec![
+                    Line::from(vec![
+                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(&branch.name),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("HEAD: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            if branch.is_head { "oui" } else { "non" },
+                            if branch.is_head {
+                                Style::default().fg(Color::Green)
+                            } else {
+                                Style::default()
+                            },
+                        ),
+                    ]),
+                ];
 
-            if let Some(ref msg) = branch.last_commit_message {
-                lines.push(Line::from(""));
-                lines.push(Line::from(vec![Span::styled(
-                    "Dernier commit:",
-                    Style::default().add_modifier(Modifier::BOLD),
-                )]));
-                lines.push(Line::from(msg.as_str()));
+                if let (Some(ahead), Some(behind)) = (branch.ahead, branch.behind) {
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            "Ahead/Behind: ",
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(format!("{} / {}", ahead, behind)),
+                    ]));
+                }
+
+                // Afficher la date du dernier commit si disponible
+                if let Some(date) = branch.last_commit_date {
+                    let timestamp_secs = date
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    lines.push(Line::from(vec![
+                        Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            format_relative_time(timestamp_secs),
+                            Style::default().fg(Color::Cyan),
+                        ),
+                    ]));
+                }
+
+                if let Some(ref msg) = branch.last_commit_message {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![Span::styled(
+                        "Dernier commit:",
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )]));
+                    lines.push(Line::from(msg.as_str()));
+                }
+
+                lines
+            } else {
+                vec![Line::from("Aucune branche locale sélectionnée")]
             }
-
-            lines
-        } else {
-            vec![Line::from("Aucune branche distante sélectionnée")]
         }
-    } else if let Some(branch) = state.local_branches.get(state.branch_selected()) {
-        let mut lines = vec![
-            Line::from(vec![
-                Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(&branch.name),
-            ]),
-            Line::from(vec![
-                Span::styled("HEAD: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(
-                    if branch.is_head { "oui" } else { "non" },
-                    if branch.is_head {
-                        Style::default().fg(Color::Green)
-                    } else {
-                        Style::default()
-                    },
-                ),
-            ]),
-        ];
-
-        if let (Some(ahead), Some(behind)) = (branch.ahead, branch.behind) {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    "Ahead/Behind: ",
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!("{} / {}", ahead, behind)),
-            ]));
+        None => {
+            vec![Line::from("Aucune branche sélectionnée")]
         }
-
-        // Afficher la date du dernier commit si disponible
-        if let Some(date) = branch.last_commit_date {
-            let timestamp_secs = date
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-            lines.push(Line::from(vec![
-                Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(
-                    format_relative_time(timestamp_secs),
-                    Style::default().fg(Color::Cyan),
-                ),
-            ]));
-        }
-
-        if let Some(ref msg) = branch.last_commit_message {
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![Span::styled(
-                "Dernier commit:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]));
-            lines.push(Line::from(msg.as_str()));
-        }
-
-        lines
-    } else {
-        vec![Line::from("Aucune branche sélectionnée")]
     };
 
     // Déterminer si on a un diff à scroller

@@ -12,7 +12,7 @@ mod search;
 mod staging;
 
 pub use blame::BlameState;
-pub use branches::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
+pub use branches::{BranchesFocus, BranchesSection, BranchesViewState, InputAction, SelectedBranch};
 pub use conflicts::{ConflictPanelFocus, ConflictsState};
 pub use graph::GraphViewState;
 pub use merge_picker::MergePickerState;

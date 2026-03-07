@@ -59,23 +59,30 @@ fn handle_list(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_checkout(state: &mut AppState) -> Result<()> {
-    let branch_name = if state.view_mode == ViewMode::Branches {
+    let branch_info = if state.view_mode == ViewMode::Branches {
         // Lire depuis le nouvel état BranchesViewState
-        state
-            .branches_view_state
-            .selected_branch()
-            .map(|b| b.name.clone())
+        state.branches_view_state.selected_branch_info()
     } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
         // Legacy: panel overlay dans la vue Graph
         state
             .branches
             .get(state.branch_selected)
-            .map(|b| b.name.clone())
+            .map(|b| (b, crate::state::SelectedBranch::Local(state.branch_selected)))
     } else {
         None
     };
 
-    if let Some(branch_name) = branch_name {
+    if let Some((branch, selected)) = branch_info {
+        // Interdire le checkout sur une branche distante
+        if selected.is_remote() {
+            state.set_flash_message(
+                "Checkout impossible sur une branche distante. Créez d'abord une branche locale."
+                    .to_string(),
+            );
+            return Ok(());
+        }
+
+        let branch_name = branch.name.clone();
         match crate::git::branch::checkout_branch(&state.repo.repo, &branch_name) {
             Ok(_) => {
                 // Fermer le panel si applicable
@@ -104,32 +111,51 @@ fn handle_create(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_delete(state: &mut AppState) -> Result<()> {
+    use crate::state::SelectedBranch;
     use crate::ui::confirm_dialog::ConfirmAction;
 
-    let selected_branch = if state.view_mode == ViewMode::Branches {
+    let selected_info = if state.view_mode == ViewMode::Branches {
         // Lire depuis le nouvel état BranchesViewState
-        state.branches_view_state.selected_branch()
+        state.branches_view_state.selected_branch_info()
     } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
         // Legacy: panel overlay
-        state.branches.get(state.branch_selected)
+        state
+            .branches
+            .get(state.branch_selected)
+            .map(|b| (b, SelectedBranch::Local(state.branch_selected)))
     } else {
         None
     };
 
-    if let Some(branch) = selected_branch {
+    if let Some((branch, selected)) = selected_info {
+        // Interdire la suppression des branches distantes
+        if selected.is_remote() {
+            state.set_flash_message("Suppression impossible sur une branche distante.".to_string());
+            return Ok(());
+        }
+
         // Empêcher la suppression de la branche courante
         if branch.is_head {
             state.set_flash_message("Impossible de supprimer la branche courante".to_string());
             return Ok(());
         }
-        state.pending_confirmation = Some(ConfirmAction::BranchDelete(branch.name.clone()));
+        let branch_name = branch.name.clone();
+        state.pending_confirmation = Some(ConfirmAction::BranchDelete(branch_name));
     }
     Ok(())
 }
 
 fn handle_rename(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
-        if let Some(branch) = state.branches_view_state.selected_branch() {
+        // Vérifier si une branche est sélectionnée et si elle est locale
+        if let Some((branch, selected)) = state.branches_view_state.selected_branch_info() {
+            if selected.is_remote() {
+                state.set_flash_message(
+                    "Renommage impossible sur une branche distante.".to_string(),
+                );
+                return Ok(());
+            }
+
             let current_name = branch.name.clone();
             state.branches_view_state.focus = crate::state::BranchesFocus::Input;
             state.branches_view_state.input_action = Some(crate::state::InputAction::RenameBranch);
@@ -141,7 +167,7 @@ fn handle_rename(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_toggle_remote(state: &mut AppState) -> Result<()> {
-    state.branches_view_state.show_remote = !state.branches_view_state.show_remote;
+    state.branches_view_state.toggle_remote();
     Ok(())
 }
 
