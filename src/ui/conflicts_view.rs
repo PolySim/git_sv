@@ -26,6 +26,72 @@ pub struct ConflictsHelpOverlayRenderContext {
     pub area: Rect,
 }
 
+fn panel_title_style(is_focused: bool) -> Style {
+    let theme = current_theme();
+
+    if is_focused {
+        Style::default()
+            .fg(theme.warning)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+            .fg(theme.text_normal)
+            .add_modifier(Modifier::BOLD)
+    }
+}
+
+fn panel_border_style(is_focused: bool, border_color: ratatui::style::Color) -> Style {
+    let theme = current_theme();
+    Style::default().fg(if is_focused {
+        border_color
+    } else {
+        theme.border_inactive
+    })
+}
+
+fn render_empty_panel(
+    frame: &mut Frame,
+    block: Block<'static>,
+    message: &'static str,
+    style: Style,
+    area: Rect,
+) {
+    let empty = Paragraph::new(message).block(block).style(style);
+    frame.render_widget(empty, area);
+}
+
+fn conflict_separator(width: u16) -> Line<'static> {
+    let theme = current_theme();
+    Line::from(vec![Span::styled(
+        "─".repeat(width.saturating_sub(2) as usize),
+        Style::default().fg(theme.text_secondary),
+    )])
+}
+
+fn conflict_section_title(idx: usize, total: usize, is_selected: bool) -> Line<'static> {
+    let theme = current_theme();
+    Line::from(vec![Span::styled(
+        format!("#{}/{}", idx + 1, total),
+        Style::default()
+            .fg(if is_selected {
+                theme.warning
+            } else {
+                theme.text_secondary
+            })
+            .add_modifier(Modifier::BOLD),
+    )])
+}
+
+fn push_context_lines(lines: &mut Vec<Line<'static>>, context_lines: &[String]) {
+    let theme = current_theme();
+    lines.extend(context_lines.iter().map(|line| {
+        Line::from(vec![Span::styled(
+            format!("  {}", line),
+            Style::default().fg(theme.text_secondary),
+        )])
+    }));
+}
+
 /// Rend la vue de résolution de conflits.
 pub fn render(frame: &mut Frame, ctx: ConflictsRenderContext<'_>) {
     let ConflictsRenderContext {
@@ -166,30 +232,21 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
 fn render_files_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let theme = current_theme();
     let is_focused = state.panel_focus == ConflictPanelFocus::FileList;
-    let title_style = if is_focused {
-        Style::default()
-            .fg(theme.warning)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-            .fg(theme.text_normal)
-            .add_modifier(Modifier::BOLD)
-    };
+    let title_style = panel_title_style(is_focused);
 
     let block = Block::default()
         .title(Span::styled("Fichiers en conflit", title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if is_focused {
-            theme.warning
-        } else {
-            theme.border_inactive
-        }));
+        .border_style(panel_border_style(is_focused, theme.warning));
 
     if state.all_files.is_empty() {
-        let empty = Paragraph::new("Aucun fichier en conflit")
-            .block(block)
-            .style(Style::default().fg(theme.text_secondary));
-        frame.render_widget(empty, area);
+        render_empty_panel(
+            frame,
+            block,
+            "Aucun fichier en conflit",
+            Style::default().fg(theme.text_secondary),
+            area,
+        );
         return;
     }
 
@@ -258,15 +315,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_focused = state.panel_focus == ConflictPanelFocus::OursPanel;
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
-    let title_style = if is_focused {
-        Style::default()
-            .fg(theme.warning)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-            .fg(theme.text_normal)
-            .add_modifier(Modifier::BOLD)
-    };
+    let title_style = panel_title_style(is_focused);
 
     // En mode Fichier ou Ligne, ajouter une indication dans le titre
     let title_text = if is_file_mode {
@@ -292,21 +341,27 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let block = Block::default()
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(panel_border_style(is_focused, border_color));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
-        let empty = Paragraph::new("Sélectionnez un fichier")
-            .block(block)
-            .style(Style::default().fg(theme.text_secondary));
-        frame.render_widget(empty, area);
+        render_empty_panel(
+            frame,
+            block,
+            "Sélectionnez un fichier",
+            Style::default().fg(theme.text_secondary),
+            area,
+        );
         return;
     };
 
     if current_file.conflicts.is_empty() {
-        let empty = Paragraph::new("Aucun conflit")
-            .block(block)
-            .style(Style::default().fg(theme.success));
-        frame.render_widget(empty, area);
+        render_empty_panel(
+            frame,
+            block,
+            "Aucun conflit",
+            Style::default().fg(theme.success),
+            area,
+        );
         return;
     }
 
@@ -323,34 +378,20 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
         // Séparateur entre sections
         if idx > 0 {
-            lines.push(Line::from(vec![Span::styled(
-                "─".repeat(area.width as usize - 2),
-                Style::default().fg(theme.text_secondary),
-            )]));
+            lines.push(conflict_separator(area.width));
         }
 
         // Titre de la section (en mode Fichier, pas de numérotation de section)
         if !is_file_mode {
-            let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
-            lines.push(Line::from(vec![Span::styled(
-                section_title,
-                Style::default()
-                    .fg(if is_selected {
-                        theme.warning
-                    } else {
-                        theme.text_secondary
-                    })
-                    .add_modifier(Modifier::BOLD),
-            )]));
+            lines.push(conflict_section_title(
+                idx,
+                current_file.conflicts.len(),
+                is_selected,
+            ));
         }
 
         // Lignes de contexte avant
-        for line in &section.context_before {
-            lines.push(Line::from(vec![Span::styled(
-                format!("  {}", line),
-                Style::default().fg(theme.text_secondary),
-            )]));
-        }
+        push_context_lines(&mut lines, &section.context_before);
 
         // Contenu ours avec highlight si sélectionné
         // En mode Ligne, afficher les indicateurs [x] ou [ ]
@@ -412,12 +453,7 @@ fn render_ours_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         }
 
         // Lignes de contexte après
-        for line in &section.context_after {
-            lines.push(Line::from(vec![Span::styled(
-                format!("  {}", line),
-                Style::default().fg(theme.text_secondary),
-            )]));
-        }
+        push_context_lines(&mut lines, &section.context_after);
     }
 
     let paragraph = Paragraph::new(lines)
@@ -436,15 +472,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let is_focused = state.panel_focus == ConflictPanelFocus::TheirsPanel;
     let is_file_mode = state.resolution_mode == ConflictResolutionMode::File;
     let is_line_mode = state.resolution_mode == ConflictResolutionMode::Line;
-    let title_style = if is_focused {
-        Style::default()
-            .fg(theme.warning)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-            .fg(theme.text_normal)
-            .add_modifier(Modifier::BOLD)
-    };
+    let title_style = panel_title_style(is_focused);
 
     // En mode Fichier ou Ligne, ajouter une indication dans le titre
     let title_text = if is_file_mode {
@@ -470,21 +498,27 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let block = Block::default()
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(panel_border_style(is_focused, border_color));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
-        let empty = Paragraph::new("Sélectionnez un fichier")
-            .block(block)
-            .style(Style::default().fg(theme.text_secondary));
-        frame.render_widget(empty, area);
+        render_empty_panel(
+            frame,
+            block,
+            "Sélectionnez un fichier",
+            Style::default().fg(theme.text_secondary),
+            area,
+        );
         return;
     };
 
     if current_file.conflicts.is_empty() {
-        let empty = Paragraph::new("Aucun conflit")
-            .block(block)
-            .style(Style::default().fg(theme.success));
-        frame.render_widget(empty, area);
+        render_empty_panel(
+            frame,
+            block,
+            "Aucun conflit",
+            Style::default().fg(theme.success),
+            area,
+        );
         return;
     }
 
@@ -501,34 +535,20 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
 
         // Séparateur entre sections
         if idx > 0 {
-            lines.push(Line::from(vec![Span::styled(
-                "─".repeat(area.width as usize - 2),
-                Style::default().fg(theme.text_secondary),
-            )]));
+            lines.push(conflict_separator(area.width));
         }
 
         // Titre de la section (en mode Fichier, pas de numérotation de section)
         if !is_file_mode {
-            let section_title = format!("#{}/{}", idx + 1, current_file.conflicts.len());
-            lines.push(Line::from(vec![Span::styled(
-                section_title,
-                Style::default()
-                    .fg(if is_selected {
-                        theme.warning
-                    } else {
-                        theme.text_secondary
-                    })
-                    .add_modifier(Modifier::BOLD),
-            )]));
+            lines.push(conflict_section_title(
+                idx,
+                current_file.conflicts.len(),
+                is_selected,
+            ));
         }
 
         // Lignes de contexte avant
-        for line in &section.context_before {
-            lines.push(Line::from(vec![Span::styled(
-                format!("  {}", line),
-                Style::default().fg(theme.text_secondary),
-            )]));
-        }
+        push_context_lines(&mut lines, &section.context_before);
 
         // Contenu theirs avec highlight si sélectionné
         // En mode Ligne, afficher les indicateurs [x] ou [ ]
@@ -588,12 +608,7 @@ fn render_theirs_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
         }
 
         // Lignes de contexte après
-        for line in &section.context_after {
-            lines.push(Line::from(vec![Span::styled(
-                format!("  {}", line),
-                Style::default().fg(theme.text_secondary),
-            )]));
-        }
+        push_context_lines(&mut lines, &section.context_after);
     }
 
     let paragraph = Paragraph::new(lines)
@@ -684,19 +699,23 @@ fn render_result_panel(frame: &mut Frame, state: &ConflictsState, area: Rect) {
     let block = Block::default()
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if state.is_editing {
-            theme.secondary
-        } else if is_focused {
-            theme.warning
-        } else {
-            theme.border_inactive
-        }));
+        .border_style(panel_border_style(
+            state.is_editing || is_focused,
+            if state.is_editing {
+                theme.secondary
+            } else {
+                theme.warning
+            },
+        ));
 
     let Some(current_file) = state.all_files.get(state.file_selected) else {
-        let empty = Paragraph::new("Sélectionnez un fichier")
-            .block(block)
-            .style(Style::default().fg(theme.text_secondary));
-        frame.render_widget(empty, area);
+        render_empty_panel(
+            frame,
+            block,
+            "Sélectionnez un fichier",
+            Style::default().fg(theme.text_secondary),
+            area,
+        );
         return;
     };
 

@@ -21,6 +21,271 @@ pub struct BranchesRenderContext<'a> {
     pub flash_message: Option<&'a str>,
 }
 
+fn detail_scroll_offset(state: &BranchesViewState) -> u16 {
+    state
+        .stash_file_diff
+        .as_ref()
+        .filter(|d| !d.is_empty())
+        .map(|_| state.stash_diff_scroll as u16)
+        .unwrap_or(0)
+}
+
+fn render_detail_panel(
+    frame: &mut Frame,
+    content: Vec<Line<'static>>,
+    scroll_offset: u16,
+    area: Rect,
+) {
+    let paragraph = Paragraph::new(content)
+        .block(Block::default().title(" Détail ").borders(Borders::ALL))
+        .scroll((scroll_offset, 0));
+    frame.render_widget(paragraph, area);
+}
+
+fn render_selection_list<'a>(
+    frame: &mut Frame,
+    title: &str,
+    items: Vec<ListItem<'a>>,
+    selected: usize,
+    area: Rect,
+) {
+    let theme = current_theme();
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.border_active)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(theme.selection_bg)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(selected));
+    frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn append_last_commit_lines(
+    lines: &mut Vec<Line<'static>>,
+    last_commit_date: Option<std::time::SystemTime>,
+    last_commit_message: Option<&str>,
+) {
+    let theme = current_theme();
+
+    if let Some(date) = last_commit_date {
+        let timestamp_secs = date
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        lines.push(Line::from(vec![
+            Span::styled("Modifiee: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format_relative_time(timestamp_secs),
+                Style::default().fg(theme.primary),
+            ),
+        ]));
+    }
+
+    if let Some(msg) = last_commit_message {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            "Dernier commit:",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]));
+        lines.push(Line::from(msg.to_string()));
+    }
+}
+
+fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
+    let theme = current_theme();
+
+    match state.selected_branch {
+        Some(SelectedBranch::Remote(idx)) => {
+            if let Some(branch) = state.remote_branches.get(idx) {
+                let mut lines = vec![
+                    Line::from(vec![
+                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(branch.name.clone()),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled("distante", Style::default().fg(theme.text_secondary)),
+                    ]),
+                ];
+
+                append_last_commit_lines(
+                    &mut lines,
+                    branch.last_commit_date,
+                    branch.last_commit_message.as_deref(),
+                );
+                lines
+            } else {
+                vec![Line::from("Aucune branche distante selectionnee")]
+            }
+        }
+        Some(SelectedBranch::Local(idx)) => {
+            if let Some(branch) = state.local_branches.get(idx) {
+                let mut lines = vec![
+                    Line::from(vec![
+                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(branch.name.clone()),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("HEAD: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            if branch.is_head { "oui" } else { "non" },
+                            if branch.is_head {
+                                Style::default().fg(theme.success)
+                            } else {
+                                Style::default()
+                            },
+                        ),
+                    ]),
+                ];
+
+                if let (Some(ahead), Some(behind)) = (branch.ahead, branch.behind) {
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            "Ahead/Behind: ",
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(format!("{} / {}", ahead, behind)),
+                    ]));
+                }
+
+                append_last_commit_lines(
+                    &mut lines,
+                    branch.last_commit_date,
+                    branch.last_commit_message.as_deref(),
+                );
+                lines
+            } else {
+                vec![Line::from("Aucune branche locale selectionnee")]
+            }
+        }
+        None => vec![Line::from("Aucune branche selectionnee")],
+    }
+}
+
+fn build_worktree_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
+    let theme = current_theme();
+
+    if let Some(worktree) = state.worktrees.get(state.worktree_selected()) {
+        vec![
+            Line::from(vec![
+                Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(worktree.name.clone()),
+            ]),
+            Line::from(vec![
+                Span::styled("Chemin: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(worktree.path.clone()),
+            ]),
+            Line::from(vec![
+                Span::styled("Principal: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    if worktree.is_main { "oui" } else { "non" },
+                    if worktree.is_main {
+                        Style::default().fg(theme.success)
+                    } else {
+                        Style::default()
+                    },
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(worktree.branch.as_deref().unwrap_or("N/A").to_string()),
+            ]),
+        ]
+    } else {
+        vec![Line::from("Aucun worktree selectionne")]
+    }
+}
+
+fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
+    let theme = current_theme();
+
+    let Some(stash) = state.stashes.get(state.stash_selected()) else {
+        return vec![Line::from("Aucun stash selectionne")];
+    };
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(stash.message.clone()),
+        ]),
+        Line::from(vec![
+            Span::styled("Index: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(format!("stash@{{{}}}", stash.index)),
+        ]),
+    ];
+
+    if let Some(branch) = stash.branch.as_deref() {
+        lines.push(Line::from(vec![
+            Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(branch.to_string()),
+        ]));
+    }
+
+    if !stash.files.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            "Fichiers modifies:",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]));
+
+        for (i, file) in stash.files.iter().enumerate() {
+            let status_color = match file.status_char() {
+                'A' => theme.success,
+                'M' => theme.warning,
+                'D' => theme.error,
+                'R' => theme.primary,
+                _ => Color::Reset,
+            };
+            let is_selected = i == state.stash_file_selected;
+            let prefix = if is_selected { "→ " } else { "  " };
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{}{} ", prefix, file.status_char()),
+                    Style::default()
+                        .fg(status_color)
+                        .add_modifier(if is_selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ),
+                Span::raw(file.path.clone()),
+            ]));
+        }
+
+        if let Some(diff_lines) = state.stash_file_diff.as_ref().filter(|d| !d.is_empty()) {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![Span::styled(
+                "Diff:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]));
+
+            lines.extend(diff_lines.iter().map(|line| {
+                let styled_line = if line.starts_with('+') {
+                    Span::styled(line.clone(), Style::default().fg(theme.success))
+                } else if line.starts_with('-') {
+                    Span::styled(line.clone(), Style::default().fg(theme.error))
+                } else if line.starts_with('@') {
+                    Span::styled(line.clone(), Style::default().fg(theme.primary))
+                } else {
+                    Span::raw(line.clone())
+                };
+                Line::from(styled_line)
+            }));
+        }
+    }
+
+    lines
+}
+
 /// Rend la vue complète branches/worktrees/stashes.
 pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
     let BranchesRenderContext {
@@ -157,20 +422,6 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         }
     }
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .title(" Branches ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_active)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(theme.selection_bg)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    let mut list_state = ListState::default();
     let local_count = state.local_branches.len();
 
     // Calculer l'index visuel basé sur la sélection explicite
@@ -185,135 +436,17 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         }
         None => 0,
     };
-    list_state.select(Some(visual_index));
-    frame.render_stateful_widget(list, area, &mut list_state);
+    render_selection_list(frame, " Branches ", items, visual_index, area);
 }
 
 /// Rend le détail d'une branche.
 fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let theme = current_theme();
-    let content = match state.selected_branch {
-        Some(SelectedBranch::Remote(idx)) => {
-            if let Some(branch) = state.remote_branches.get(idx) {
-                let mut lines = vec![
-                    Line::from(vec![
-                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::raw(&branch.name),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled("distante", Style::default().fg(theme.text_secondary)),
-                    ]),
-                ];
-
-                // Afficher la date du dernier commit si disponible
-                if let Some(date) = branch.last_commit_date {
-                    let timestamp_secs = date
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0);
-                    lines.push(Line::from(vec![
-                        Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled(
-                            format_relative_time(timestamp_secs),
-                            Style::default().fg(theme.primary),
-                        ),
-                    ]));
-                }
-
-                if let Some(ref msg) = branch.last_commit_message {
-                    lines.push(Line::from(""));
-                    lines.push(Line::from(vec![Span::styled(
-                        "Dernier commit:",
-                        Style::default().add_modifier(Modifier::BOLD),
-                    )]));
-                    lines.push(Line::from(msg.as_str()));
-                }
-
-                lines
-            } else {
-                vec![Line::from("Aucune branche distante sélectionnée")]
-            }
-        }
-        Some(SelectedBranch::Local(idx)) => {
-            if let Some(branch) = state.local_branches.get(idx) {
-                let mut lines = vec![
-                    Line::from(vec![
-                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::raw(&branch.name),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("HEAD: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled(
-                            if branch.is_head { "oui" } else { "non" },
-                            if branch.is_head {
-                                Style::default().fg(theme.success)
-                            } else {
-                                Style::default()
-                            },
-                        ),
-                    ]),
-                ];
-
-                if let (Some(ahead), Some(behind)) = (branch.ahead, branch.behind) {
-                    lines.push(Line::from(vec![
-                        Span::styled(
-                            "Ahead/Behind: ",
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw(format!("{} / {}", ahead, behind)),
-                    ]));
-                }
-
-                // Afficher la date du dernier commit si disponible
-                if let Some(date) = branch.last_commit_date {
-                    let timestamp_secs = date
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0);
-                    lines.push(Line::from(vec![
-                        Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled(
-                            format_relative_time(timestamp_secs),
-                            Style::default().fg(theme.primary),
-                        ),
-                    ]));
-                }
-
-                if let Some(ref msg) = branch.last_commit_message {
-                    lines.push(Line::from(""));
-                    lines.push(Line::from(vec![Span::styled(
-                        "Dernier commit:",
-                        Style::default().add_modifier(Modifier::BOLD),
-                    )]));
-                    lines.push(Line::from(msg.as_str()));
-                }
-
-                lines
-            } else {
-                vec![Line::from("Aucune branche locale sélectionnée")]
-            }
-        }
-        None => {
-            vec![Line::from("Aucune branche sélectionnée")]
-        }
-    };
-
-    // Déterminer si on a un diff à scroller
-    let has_diff = state
-        .stash_file_diff
-        .as_ref()
-        .is_some_and(|d| !d.is_empty());
-    let scroll_offset = if has_diff {
-        state.stash_diff_scroll as u16
-    } else {
-        0
-    };
-
-    let paragraph = Paragraph::new(content)
-        .block(Block::default().title(" Détail ").borders(Borders::ALL))
-        .scroll((scroll_offset, 0));
-    frame.render_widget(paragraph, area);
+    render_detail_panel(
+        frame,
+        build_branch_detail_content(state),
+        detail_scroll_offset(state),
+        area,
+    );
 }
 
 /// Rend la liste des worktrees.
@@ -340,72 +473,17 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
         .map(ListItem::new)
         .collect();
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .title(" Worktrees ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_active)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(theme.selection_bg)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(state.worktree_selected()));
-    frame.render_stateful_widget(list, area, &mut list_state);
+    render_selection_list(frame, " Worktrees ", items, state.worktree_selected(), area);
 }
 
 /// Rend le détail d'un worktree.
 fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let theme = current_theme();
-    let content = if let Some(worktree) = state.worktrees.get(state.worktree_selected()) {
-        vec![
-            Line::from(vec![
-                Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(&worktree.name),
-            ]),
-            Line::from(vec![
-                Span::styled("Chemin: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(&worktree.path),
-            ]),
-            Line::from(vec![
-                Span::styled("Principal: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::styled(
-                    if worktree.is_main { "oui" } else { "non" },
-                    if worktree.is_main {
-                        Style::default().fg(theme.success)
-                    } else {
-                        Style::default()
-                    },
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(worktree.branch.as_deref().unwrap_or("N/A")),
-            ]),
-        ]
-    } else {
-        vec![Line::from("Aucun worktree sélectionné")]
-    };
-
-    // Déterminer si on a un diff à scroller
-    let has_diff = state
-        .stash_file_diff
-        .as_ref()
-        .is_some_and(|d| !d.is_empty());
-    let scroll_offset = if has_diff {
-        state.stash_diff_scroll as u16
-    } else {
-        0
-    };
-
-    let paragraph = Paragraph::new(content)
-        .block(Block::default().title(" Détail ").borders(Borders::ALL))
-        .scroll((scroll_offset, 0));
-    frame.render_widget(paragraph, area);
+    render_detail_panel(
+        frame,
+        build_worktree_detail_content(state),
+        detail_scroll_offset(state),
+        area,
+    );
 }
 
 /// Rend la liste des stashes.
@@ -426,129 +504,17 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
         })
         .collect();
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .title(" Stashes ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_active)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(theme.selection_bg)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(state.stash_selected()));
-    frame.render_stateful_widget(list, area, &mut list_state);
+    render_selection_list(frame, " Stashes ", items, state.stash_selected(), area);
 }
 
 /// Rend le détail d'un stash.
 fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
-    let theme = current_theme();
-    let content = if let Some(stash) = state.stashes.get(state.stash_selected()) {
-        let mut lines = vec![
-            Line::from(vec![
-                Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(&stash.message),
-            ]),
-            Line::from(vec![
-                Span::styled("Index: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(format!("stash@{{{}}}", stash.index)),
-            ]),
-        ];
-
-        if let Some(ref branch) = stash.branch {
-            lines.push(Line::from(vec![
-                Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(branch),
-            ]));
-        }
-
-        if !stash.files.is_empty() {
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![Span::styled(
-                "Fichiers modifiés:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]));
-
-            for (i, file) in stash.files.iter().enumerate() {
-                let status_color = match file.status_char() {
-                    'A' => theme.success,
-                    'M' => theme.warning,
-                    'D' => theme.error,
-                    'R' => theme.primary,
-                    _ => Color::Reset,
-                };
-                let is_selected = i == state.stash_file_selected;
-                let prefix = if is_selected { "→ " } else { "  " };
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("{}{} ", prefix, file.status_char()),
-                        Style::default()
-                            .fg(status_color)
-                            .add_modifier(if is_selected {
-                                Modifier::BOLD
-                            } else {
-                                Modifier::empty()
-                            }),
-                    ),
-                    Span::raw(&file.path),
-                ]));
-            }
-
-            // Afficher le diff du fichier sélectionné
-            if let Some(ref diff_lines) = state.stash_file_diff {
-                if !diff_lines.is_empty() {
-                    lines.push(Line::from(""));
-                    lines.push(Line::from(vec![Span::styled(
-                        "Diff:",
-                        Style::default().add_modifier(Modifier::BOLD),
-                    )]));
-
-                    // Construire toutes les lignes du diff avec coloration
-                    let mut diff_content: Vec<Line> = diff_lines
-                        .iter()
-                        .map(|line| {
-                            let styled_line = if line.starts_with("+") {
-                                Span::styled(line, Style::default().fg(theme.success))
-                            } else if line.starts_with("-") {
-                                Span::styled(line, Style::default().fg(theme.error))
-                            } else if line.starts_with("@") {
-                                Span::styled(line, Style::default().fg(theme.primary))
-                            } else {
-                                Span::raw(line)
-                            };
-                            Line::from(styled_line)
-                        })
-                        .collect();
-
-                    lines.append(&mut diff_content);
-                }
-            }
-        }
-
-        lines
-    } else {
-        vec![Line::from("Aucun stash sélectionné")]
-    };
-
-    // Déterminer si on a un diff à scroller
-    let has_diff = state
-        .stash_file_diff
-        .as_ref()
-        .is_some_and(|d| !d.is_empty());
-    let scroll_offset = if has_diff {
-        state.stash_diff_scroll as u16
-    } else {
-        0
-    };
-
-    let paragraph = Paragraph::new(content)
-        .block(Block::default().title(" Détail ").borders(Borders::ALL))
-        .scroll((scroll_offset, 0));
-    frame.render_widget(paragraph, area);
+    render_detail_panel(
+        frame,
+        build_stash_detail_content(state),
+        detail_scroll_offset(state),
+        area,
+    );
 }
 
 /// Rend la barre d'aide de la vue branches.

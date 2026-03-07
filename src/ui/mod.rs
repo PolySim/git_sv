@@ -35,6 +35,92 @@ mod tests;
 use crate::state::{AppState, FocusPanel, ViewMode};
 use ratatui::Frame;
 
+fn render_conflicts(frame: &mut Frame, state: &mut AppState) {
+    let flash_msg = state.current_flash_message().map(|s| s.to_string());
+    let current_branch = state.current_branch.clone();
+    let repo_path = state.repo_path.clone();
+
+    if let Some(ref mut conflicts_state) = state.conflicts_state {
+        conflicts_view::render(
+            frame,
+            conflicts_view::ConflictsRenderContext {
+                state: conflicts_state,
+                current_branch: current_branch.as_deref(),
+                repo_path: &repo_path,
+                flash_message: flash_msg.as_deref(),
+            },
+        );
+    }
+}
+
+fn render_conflicts_help_overlay(frame: &mut Frame) {
+    conflicts_view::render_help_overlay(
+        frame,
+        conflicts_view::ConflictsHelpOverlayRenderContext { area: frame.area() },
+    );
+}
+
+fn render_global_overlays(frame: &mut Frame, state: &AppState) {
+    if let Some(ref picker) = state.merge_picker {
+        if picker.is_active {
+            merge_picker::render(
+                frame,
+                merge_picker::MergePickerRenderContext {
+                    state: picker,
+                    current_branch: state.current_branch.as_deref(),
+                    area: frame.area(),
+                },
+            );
+        }
+    }
+
+    if let Some(ref picker) = state.reset_picker {
+        if picker.is_active {
+            reset_picker::render(
+                frame,
+                reset_picker::ResetPickerRenderContext {
+                    state: picker,
+                    area: frame.area(),
+                },
+            );
+        }
+    }
+
+    if let Some(ref action) = state.pending_confirmation {
+        confirm_dialog::render(
+            frame,
+            confirm_dialog::ConfirmDialogRenderContext {
+                action,
+                area: frame.area(),
+            },
+        );
+    }
+}
+
+fn render_graph_overlays(frame: &mut Frame, state: &AppState) {
+    if state.show_branch_panel {
+        branch_panel::render(
+            frame,
+            branch_panel::BranchPanelRenderContext {
+                branches: &state.branches,
+                branch_selected: state.branch_selected,
+                area: frame.area(),
+            },
+        );
+    }
+
+    if state.filter_popup.is_open {
+        filter_popup::render(
+            frame,
+            filter_popup::FilterPopupRenderContext {
+                popup_state: &state.filter_popup,
+                current_filter: &state.graph_filter,
+                area: frame.area(),
+            },
+        );
+    }
+}
+
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, state: &mut AppState) {
     state.screen_area = frame.area();
@@ -83,51 +169,14 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     );
                 }
                 Some(ViewMode::Conflicts) => {
-                    // Extraire les valeurs nécessaires avant l'emprunt mutable
-                    let flash_msg = state.current_flash_message().map(|s| s.to_string());
-                    let current_branch = state.current_branch.clone();
-                    let repo_path = state.repo_path.clone();
-
-                    if let Some(ref mut conflicts_state) = state.conflicts_state {
-                        conflicts_view::render(
-                            frame,
-                            conflicts_view::ConflictsRenderContext {
-                                state: conflicts_state,
-                                current_branch: current_branch.as_deref(),
-                                repo_path: &repo_path,
-                                flash_message: flash_msg.as_deref(),
-                            },
-                        );
-                    }
-                    conflicts_view::render_help_overlay(
-                        frame,
-                        conflicts_view::ConflictsHelpOverlayRenderContext { area: frame.area() },
-                    );
+                    render_conflicts(frame, state);
+                    render_conflicts_help_overlay(frame);
                     return; // L'overlay de conflits est spécifique
                 }
                 _ => {
                     if state.conflicts_state.is_some() {
-                        let flash_msg = state.current_flash_message().map(|s| s.to_string());
-                        let current_branch = state.current_branch.clone();
-                        let repo_path = state.repo_path.clone();
-
-                        if let Some(ref mut conflicts_state) = state.conflicts_state {
-                            conflicts_view::render(
-                                frame,
-                                conflicts_view::ConflictsRenderContext {
-                                    state: conflicts_state,
-                                    current_branch: current_branch.as_deref(),
-                                    repo_path: &repo_path,
-                                    flash_message: flash_msg.as_deref(),
-                                },
-                            );
-                        }
-                        conflicts_view::render_help_overlay(
-                            frame,
-                            conflicts_view::ConflictsHelpOverlayRenderContext {
-                                area: frame.area(),
-                            },
-                        );
+                        render_conflicts(frame, state);
+                        render_conflicts_help_overlay(frame);
                         return;
                     }
 
@@ -156,62 +205,11 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             }
         }
         ViewMode::Conflicts => {
-            // Extraire les valeurs nécessaires avant l'emprunt mutable
-            let flash_msg = state.current_flash_message().map(|s| s.to_string());
-            let current_branch = state.current_branch.clone();
-            let repo_path = state.repo_path.clone();
-
-            if let Some(ref mut conflicts_state) = state.conflicts_state {
-                conflicts_view::render(
-                    frame,
-                    conflicts_view::ConflictsRenderContext {
-                        state: conflicts_state,
-                        current_branch: current_branch.as_deref(),
-                        repo_path: &repo_path,
-                        flash_message: flash_msg.as_deref(),
-                    },
-                );
-            }
+            render_conflicts(frame, state);
         }
     }
 
-    // Rendre le merge picker si actif
-    if let Some(ref picker) = state.merge_picker {
-        if picker.is_active {
-            merge_picker::render(
-                frame,
-                merge_picker::MergePickerRenderContext {
-                    state: picker,
-                    current_branch: state.current_branch.as_deref(),
-                    area: frame.area(),
-                },
-            );
-        }
-    }
-
-    // Rendre le reset picker si actif
-    if let Some(ref picker) = state.reset_picker {
-        if picker.is_active {
-            reset_picker::render(
-                frame,
-                reset_picker::ResetPickerRenderContext {
-                    state: picker,
-                    area: frame.area(),
-                },
-            );
-        }
-    }
-
-    // Rendre le dialogue de confirmation si actif
-    if let Some(ref action) = state.pending_confirmation {
-        confirm_dialog::render(
-            frame,
-            confirm_dialog::ConfirmDialogRenderContext {
-                action,
-                area: frame.area(),
-            },
-        );
-    }
+    render_global_overlays(frame, state);
 }
 
 /// Rend la vue Graph (vue principale).
@@ -412,27 +410,5 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         );
     }
 
-    // Panneau de branches (si actif).
-    if state.show_branch_panel {
-        branch_panel::render(
-            frame,
-            branch_panel::BranchPanelRenderContext {
-                branches: &state.branches,
-                branch_selected: state.branch_selected,
-                area: frame.area(),
-            },
-        );
-    }
-
-    // Popup de filtre (si ouvert).
-    if state.filter_popup.is_open {
-        filter_popup::render(
-            frame,
-            filter_popup::FilterPopupRenderContext {
-                popup_state: &state.filter_popup,
-                current_filter: &state.graph_filter,
-                area: frame.area(),
-            },
-        );
-    }
+    render_graph_overlays(frame, state);
 }
