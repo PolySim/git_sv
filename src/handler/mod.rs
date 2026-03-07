@@ -16,7 +16,7 @@ pub mod staging;
 pub mod traits;
 
 // Re-exports des handlers et dispatcher
-pub use background::{BackgroundResult, BackgroundRunner};
+pub use background::{BackgroundResult, BackgroundRunner, PullBackgroundResult};
 pub use dispatcher::ActionDispatcher;
 
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -202,6 +202,9 @@ impl EventHandler {
 
     /// Traite le résultat d'une opération en arrière-plan.
     fn handle_background_result(&mut self, result: BackgroundResult) -> Result<()> {
+        use crate::handler::background::PullBackgroundResult;
+        use crate::state::ConflictsState;
+
         // Désactiver le spinner
         self.state.loading_spinner = None;
 
@@ -214,13 +217,58 @@ impl EventHandler {
                 self.state
                     .set_flash_message(format!("Erreur push : {}", err));
             }
-            BackgroundResult::PullComplete(Ok(msg)) => {
-                self.state.set_flash_message(msg);
-                self.state.mark_dirty();
-            }
-            BackgroundResult::PullComplete(Err(err)) => {
-                self.state
-                    .set_flash_message(format!("Erreur pull : {}", err));
+            BackgroundResult::PullComplete(pull_result) => {
+                match pull_result {
+                    PullBackgroundResult::UpToDate => {
+                        self.state.set_flash_message("Déjà à jour ✓".to_string());
+                    }
+                    PullBackgroundResult::FastForward => {
+                        self.state
+                            .set_flash_message("Pull (fast-forward) réussi ✓".to_string());
+                        self.state.mark_dirty();
+                    }
+                    PullBackgroundResult::Success => {
+                        self.state.set_flash_message("Pull réussi ✓".to_string());
+                        self.state.mark_dirty();
+                    }
+                    PullBackgroundResult::Conflicts(_) => {
+                        // Détecter les fichiers en conflit dans le thread principal
+                        match crate::git::conflict::list_conflict_files(&self.state.repo.repo) {
+                            Ok(files) => {
+                                let ours_name = crate::git::conflict::get_current_branch_name(
+                                    &self.state.repo.repo,
+                                );
+                                let theirs_name = format!(
+                                    "origin/{}",
+                                    self.state
+                                        .current_branch
+                                        .clone()
+                                        .unwrap_or_else(|| "HEAD".to_string())
+                                );
+                                self.state.conflicts_state = Some(ConflictsState::new(
+                                    files,
+                                    "Pull depuis origin".to_string(),
+                                    ours_name,
+                                    theirs_name,
+                                ));
+                                self.state.view_mode = ViewMode::Conflicts;
+                                self.state.set_flash_message(
+                                    "Conflits lors du pull - résolution requise".to_string(),
+                                );
+                            }
+                            Err(e) => {
+                                self.state.set_flash_message(format!(
+                                    "Erreur détection conflits : {}",
+                                    e
+                                ));
+                            }
+                        }
+                    }
+                    PullBackgroundResult::Error(err) => {
+                        self.state
+                            .set_flash_message(format!("Erreur pull : {}", err));
+                    }
+                }
             }
             BackgroundResult::FetchComplete(Ok(msg)) => {
                 self.state.set_flash_message(msg);
