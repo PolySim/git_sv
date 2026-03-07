@@ -2,6 +2,7 @@
 
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
+use crate::git::stash::StashPushOutcome;
 use crate::state::action::StagingAction;
 use crate::state::cache::DiffCacheKey;
 use crate::state::{AppState, StagingFocus, ViewMode};
@@ -224,19 +225,66 @@ fn handle_focus_diff(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-// NOTE: Ces fonctions sont des stubs car la fonctionnalité de stash individuel
-// n'est pas nativement supportée par git2. Pour l'implémenter, il faudrait:
-// 1. Créer un stash à partir du fichier sélectionné uniquement
-// 2. Stash tous les fichiers unstaged sans affecter les fichiers staged
-// Cela nécessite une manipulation complexe de l'index qui n'est pas prioritaire
-// pour le MVP. La fonctionnalité existe via `git stash push <path>` en CLI.
-#[allow(dead_code)]
-fn handle_stash_selected_file(_state: &mut AppState) -> Result<()> {
+fn handle_stash_selected_file(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::Staging {
+        return Ok(());
+    }
+
+    let Some(file) = state
+        .staging_state
+        .unstaged_files()
+        .get(state.staging_state.unstaged_selected())
+    else {
+        state.set_flash_message("Aucun fichier non stage selectionne".to_string());
+        return Ok(());
+    };
+
+    let path = file.path.clone();
+
+    if file.status.contains(git2::Status::WT_NEW) && !file.is_staged() {
+        state.set_flash_message(
+            "Stash fichier indisponible pour un fichier non suivi, utilisez Ctrl+S".to_string(),
+        );
+        return Ok(());
+    }
+
+    let message = format!("git_sv: stash partiel {}", path);
+
+    match crate::git::stash::stash_file(&state.repo_path, &path, Some(&message))? {
+        StashPushOutcome::Created => {
+            state.set_flash_message(format!("Stash cree pour {} (index conserve) ✓", path));
+            state.mark_dirty();
+            refresh_staging(state)?;
+        }
+        StashPushOutcome::NoChanges => {
+            state.set_flash_message(format!(
+                "Aucun changement non stage a stasher pour {}",
+                path
+            ));
+        }
+    }
+
     Ok(())
 }
 
-#[allow(dead_code)]
-fn handle_stash_unstaged_files(_state: &mut AppState) -> Result<()> {
+fn handle_stash_unstaged_files(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::Staging {
+        return Ok(());
+    }
+
+    let message = "git_sv: stash des changements non stages";
+
+    match crate::git::stash::stash_unstaged_files(&state.repo_path, Some(message))? {
+        StashPushOutcome::Created => {
+            state.set_flash_message("Stash des changements non stages cree (index conserve) ✓");
+            state.mark_dirty();
+            refresh_staging(state)?;
+        }
+        StashPushOutcome::NoChanges => {
+            state.set_flash_message("Aucun changement non stage a stasher");
+        }
+    }
+
     Ok(())
 }
 
@@ -336,7 +384,6 @@ pub fn load_staging_diff(state: &mut AppState) {
 mod tests {
     use super::*;
     use crate::git::repo::GitRepo;
-    use crate::git::repo::StatusEntry;
     use tempfile::TempDir;
 
     /// Setup un repo temporaire pour les tests.
@@ -693,5 +740,52 @@ mod tests {
         // L'état devrait être réinitialisé
         assert!(!state.staging_state.is_committing);
         assert!(state.staging_state.commit_message.is_empty());
+    }
+
+    #[test]
+    fn test_stash_selected_file_updates_flash_and_staging_state() {
+        let (dir, repo) = setup_test_repo();
+        create_test_file(&dir, "tracked.txt", "base\n");
+        {
+            let repo_ref = &repo.repo;
+            let mut index = repo_ref.index().unwrap();
+            index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+            index.write().unwrap();
+            let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+            let tree_oid = index.write_tree().unwrap();
+            let tree = repo_ref.find_tree(tree_oid).unwrap();
+            let head = repo_ref.head().unwrap();
+            let parent = repo_ref.find_commit(head.target().unwrap()).unwrap();
+            repo_ref
+                .commit(Some("HEAD"), &sig, &sig, "Add tracked", &tree, &[&parent])
+                .unwrap();
+        }
+
+        create_test_file(&dir, "tracked.txt", "base\nstaged\n");
+        {
+            let repo_ref = &repo.repo;
+            let mut index = repo_ref.index().unwrap();
+            index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+            index.write().unwrap();
+        }
+        create_test_file(&dir, "tracked.txt", "base\nstaged\nunstaged\n");
+
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        refresh_staging(&mut state).unwrap();
+
+        let mut handler = StagingHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+        handler
+            .handle(&mut ctx, StagingAction::StashSelectedFile)
+            .unwrap();
+
+        drop(ctx);
+        assert_eq!(state.staging_state.unstaged_files().len(), 0);
+        assert_eq!(state.staging_state.staged_files().len(), 1);
+        assert_eq!(
+            state.current_flash_message(),
+            Some("Stash cree pour tracked.txt (index conserve) ✓")
+        );
     }
 }

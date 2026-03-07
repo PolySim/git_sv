@@ -278,7 +278,7 @@ fn render_staging_help(
     let help_text = match focus {
         StagingFocus::Unstaged => {
             let amend_text = if is_merging { "" } else { "  A:amend" };
-            format!("j/k:nav  Espace:diff  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
+            format!("j/k:nav  Espace:diff  s/Enter:stage  S:stash fichier  Ctrl+S:stash non stages  a:stage all  d:discard  Tab:→Staged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
         }
         StagingFocus::Staged => {
             let amend_text = if is_merging { "" } else { "  A:amend" };

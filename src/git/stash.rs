@@ -42,6 +42,13 @@ pub struct StashEntry {
     pub oid: Oid,
 }
 
+/// Résultat d'une création de stash via la CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StashPushOutcome {
+    Created,
+    NoChanges,
+}
+
 impl Default for StashEntry {
     fn default() -> Self {
         Self {
@@ -207,51 +214,60 @@ pub fn drop_stash(repo: &mut Repository, index: usize) -> Result<()> {
     Ok(())
 }
 
-/// Stash un fichier spécifique en utilisant git CLI.
-/// Utilise `git stash push -- <file>` car libgit2 ne supporte pas nativement cette fonctionnalité.
-pub fn stash_file(repo_path: &str, file_path: &str, message: Option<&str>) -> Result<()> {
+/// Exécute `git stash push` via la CLI et interprète le résultat.
+fn run_stash_push_command(repo_path: &str, args: &[&str]) -> Result<StashPushOutcome> {
     let mut cmd = Command::new("git");
     cmd.arg("stash").arg("push");
-    if let Some(msg) = message {
-        cmd.arg("-m").arg(msg);
-    }
-    cmd.arg("--").arg(file_path);
+    cmd.args(args);
     cmd.current_dir(repo_path);
 
     let output = cmd.output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined_output = format!("{}\n{}", stdout, stderr).to_lowercase();
+
+    if combined_output.contains("no local changes to save") {
+        return Ok(StashPushOutcome::NoChanges);
+    }
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(crate::error::GitSvError::OperationFailed {
-            operation: "stash_file",
-            details: format!("git stash failed: {}", stderr),
+            operation: "stash_push",
+            details: format!("git stash failed: {}", stderr.trim()),
         });
     }
 
-    Ok(())
+    Ok(StashPushOutcome::Created)
 }
 
-/// Stash tous les fichiers non staged (working directory) en utilisant git CLI.
-pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<()> {
-    let mut cmd = Command::new("git");
-    cmd.arg("stash").arg("push");
+/// Stash les changements non stagés d'un fichier spécifique en conservant l'index.
+///
+/// Utilise la CLI Git car libgit2 ne supporte pas ce workflow fin.
+pub fn stash_file(
+    repo_path: &str,
+    file_path: &str,
+    message: Option<&str>,
+) -> Result<StashPushOutcome> {
+    let mut args = vec!["--keep-index", "--include-untracked"];
     if let Some(msg) = message {
-        cmd.arg("-m").arg(msg);
+        args.push("-m");
+        args.push(msg);
     }
-    cmd.arg("--").arg("-u"); // Only include unstaged files
-    cmd.current_dir(repo_path);
+    args.push("--");
+    args.push(file_path);
 
-    let output = cmd.output()?;
+    run_stash_push_command(repo_path, &args)
+}
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(crate::error::GitSvError::OperationFailed {
-            operation: "stash_unstaged_files",
-            details: format!("git stash failed: {}", stderr),
-        });
+/// Stash tous les changements non stagés en conservant l'index.
+pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<StashPushOutcome> {
+    let mut args = vec!["--keep-index", "--include-untracked"];
+    if let Some(msg) = message {
+        args.push("-m");
+        args.push(msg);
     }
 
-    Ok(())
+    run_stash_push_command(repo_path, &args)
 }
 
 #[cfg(test)]
@@ -391,5 +407,143 @@ mod tests {
         // Vérifier qu'il n'existe plus
         let stashes = list_stashes(&mut repo).unwrap();
         assert!(stashes.is_empty());
+    }
+
+    #[test]
+    fn test_stash_file_keeps_staged_part_for_same_path() {
+        let (_temp_dir, mut repo) = create_test_repo();
+
+        commit_file(&repo, "tracked.txt", "ligne 1\n", "Initial commit");
+
+        create_file(&repo, "tracked.txt", "ligne 1\nversion staged\n");
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+        index.write().unwrap();
+
+        create_file(
+            &repo,
+            "tracked.txt",
+            "ligne 1\nversion staged\nversion unstaged\n",
+        );
+
+        let outcome = stash_file(
+            repo.workdir().unwrap().to_str().unwrap(),
+            "tracked.txt",
+            Some("stash fichier"),
+        )
+        .unwrap();
+
+        assert_eq!(outcome, StashPushOutcome::Created);
+
+        let tracked_status = {
+            let statuses = repo.statuses(None).unwrap();
+            statuses
+                .iter()
+                .find(|entry| entry.path() == Some("tracked.txt"))
+                .map(|entry| entry.status())
+                .expect("tracked.txt devrait encore apparaitre dans le status")
+        };
+
+        assert!(tracked_status.contains(git2::Status::INDEX_MODIFIED));
+        assert!(!tracked_status.contains(git2::Status::WT_MODIFIED));
+
+        let content = std::fs::read_to_string(repo.workdir().unwrap().join("tracked.txt")).unwrap();
+        assert_eq!(content, "ligne 1\nversion staged\n");
+
+        let stashes = list_stashes(&mut repo).unwrap();
+        assert_eq!(stashes.len(), 1);
+        assert!(stashes[0].message.contains("stash fichier"));
+    }
+
+    #[test]
+    fn test_stash_file_limits_stash_to_selected_path() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "selected.txt", "selected base\n", "Initial commit");
+        commit_file(&repo, "other.txt", "other base\n", "Add other");
+
+        create_file(&repo, "selected.txt", "selected modified\n");
+        create_file(&repo, "other.txt", "other modified\n");
+
+        let outcome = stash_file(
+            repo.workdir().unwrap().to_str().unwrap(),
+            "selected.txt",
+            Some("stash selected"),
+        )
+        .unwrap();
+
+        assert_eq!(outcome, StashPushOutcome::Created);
+        assert!(repo.workdir().unwrap().join("other.txt").exists());
+
+        let (selected_present, other_status) = {
+            let statuses = repo.statuses(None).unwrap();
+            let selected_present = statuses
+                .iter()
+                .any(|entry| entry.path() == Some("selected.txt"));
+            let other_status = statuses
+                .iter()
+                .find(|entry| entry.path() == Some("other.txt"))
+                .map(|entry| entry.status())
+                .expect("other.txt devrait rester dans le working tree");
+            (selected_present, other_status)
+        };
+
+        assert!(!selected_present);
+        assert!(other_status.contains(git2::Status::WT_MODIFIED));
+        assert_eq!(
+            std::fs::read_to_string(repo.workdir().unwrap().join("selected.txt")).unwrap(),
+            "selected base\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.workdir().unwrap().join("other.txt")).unwrap(),
+            "other modified\n"
+        );
+    }
+
+    #[test]
+    fn test_stash_unstaged_files_preserves_index_and_stashes_untracked() {
+        let (_temp_dir, mut repo) = create_test_repo();
+
+        commit_file(&repo, "tracked.txt", "base\n", "Initial commit");
+
+        create_file(&repo, "tracked.txt", "base\npartie staged\n");
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+        index.write().unwrap();
+
+        create_file(
+            &repo,
+            "tracked.txt",
+            "base\npartie staged\npartie unstaged\n",
+        );
+        create_file(&repo, "extra.txt", "extra\n");
+
+        let outcome = stash_unstaged_files(
+            repo.workdir().unwrap().to_str().unwrap(),
+            Some("stash unstaged"),
+        )
+        .unwrap();
+
+        assert_eq!(outcome, StashPushOutcome::Created);
+
+        let tracked_status = {
+            let statuses = repo.statuses(None).unwrap();
+            statuses
+                .iter()
+                .find(|entry| entry.path() == Some("tracked.txt"))
+                .map(|entry| entry.status())
+                .expect("tracked.txt devrait rester stage")
+        };
+
+        assert!(tracked_status.contains(git2::Status::INDEX_MODIFIED));
+        assert!(!tracked_status.contains(git2::Status::WT_MODIFIED));
+        assert!(!repo.workdir().unwrap().join("extra.txt").exists());
+
+        let content = std::fs::read_to_string(repo.workdir().unwrap().join("tracked.txt")).unwrap();
+        assert_eq!(content, "base\npartie staged\n");
+
+        let stashes = list_stashes(&mut repo).unwrap();
+        assert_eq!(stashes.len(), 1);
+        assert!(stashes[0].message.contains("stash unstaged"));
     }
 }
