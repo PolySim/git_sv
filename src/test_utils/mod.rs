@@ -8,3 +8,6 @@ pub mod test_state;
 
 #[cfg(test)]
 pub mod assertions;
+
+#[cfg(test)]
+pub mod ui_driver;

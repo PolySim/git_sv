@@ -385,6 +385,11 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn map_key_for_test(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    map_key(key, state)
+}
+
 /// Mappe les touches pour la vue branches.
 ///
 /// # Priorités

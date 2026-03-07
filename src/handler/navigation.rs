@@ -354,26 +354,16 @@ fn handle_staging_navigation(state: &mut AppState, direction: i32) {
 fn handle_branches_navigation(state: &mut AppState, direction: i32) {
     match state.branches_view_state.section {
         BranchesSection::Branches => {
-            let local_count = state.branches_view_state.local_branches.len();
-            let remote_count = state.branches_view_state.remote_branches.len();
-            let show_remote = state.branches_view_state.show_remote;
+            let has_local = !state.branches_view_state.local_branches.is_empty();
+            let has_remote = state.branches_view_state.show_remote
+                && !state.branches_view_state.remote_branches.is_empty();
 
-            let max = if show_remote && remote_count > 0 {
-                local_count + remote_count
-            } else {
-                local_count
-            };
-
-            if max > 0 {
-                let new_idx = if direction > 0 {
-                    (state.branches_view_state.branch_selected() + 1).min(max - 1)
+            if has_local || has_remote {
+                if direction > 0 {
+                    state.branches_view_state.select_next();
                 } else {
-                    state
-                        .branches_view_state
-                        .branch_selected()
-                        .saturating_sub(1)
-                };
-                state.branches_view_state.set_branch_selected(new_idx);
+                    state.branches_view_state.select_prev();
+                }
             }
         }
         BranchesSection::Worktrees => {
