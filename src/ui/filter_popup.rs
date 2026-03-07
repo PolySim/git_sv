@@ -12,13 +12,28 @@ use ratatui::{
 use crate::state::{FilterField, FilterPopupState, GraphFilter};
 use crate::ui::theme::current_theme;
 
-/// Rend le popup de filtre si ouvert.
-pub fn render(
-    frame: &mut Frame,
-    popup_state: &FilterPopupState,
-    current_filter: &GraphFilter,
+pub struct FilterPopupRenderContext<'a> {
+    pub popup_state: &'a FilterPopupState,
+    pub current_filter: &'a GraphFilter,
+    pub area: Rect,
+}
+
+struct FilterFieldRenderContext<'a> {
+    label: &'a str,
+    value: &'a str,
+    is_selected: bool,
     area: Rect,
-) {
+    theme: &'a crate::ui::theme::Theme,
+}
+
+/// Rend le popup de filtre si ouvert.
+pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
+    let FilterPopupRenderContext {
+        popup_state,
+        current_filter,
+        area,
+    } = ctx;
+
     if !popup_state.is_open {
         return;
     }
@@ -79,47 +94,57 @@ pub fn render(
     // Champs de filtre
     render_filter_field(
         frame,
-        "Auteur",
-        &popup_state.author_input,
-        popup_state.selected_field == FilterField::Author,
-        chunks[2],
-        theme,
+        FilterFieldRenderContext {
+            label: "Auteur",
+            value: &popup_state.author_input,
+            is_selected: popup_state.selected_field == FilterField::Author,
+            area: chunks[2],
+            theme,
+        },
     );
 
     render_filter_field(
         frame,
-        "Date début (YYYY-MM-DD)",
-        &popup_state.date_from_input,
-        popup_state.selected_field == FilterField::DateFrom,
-        chunks[3],
-        theme,
+        FilterFieldRenderContext {
+            label: "Date début (YYYY-MM-DD)",
+            value: &popup_state.date_from_input,
+            is_selected: popup_state.selected_field == FilterField::DateFrom,
+            area: chunks[3],
+            theme,
+        },
     );
 
     render_filter_field(
         frame,
-        "Date fin (YYYY-MM-DD)",
-        &popup_state.date_to_input,
-        popup_state.selected_field == FilterField::DateTo,
-        chunks[4],
-        theme,
+        FilterFieldRenderContext {
+            label: "Date fin (YYYY-MM-DD)",
+            value: &popup_state.date_to_input,
+            is_selected: popup_state.selected_field == FilterField::DateTo,
+            area: chunks[4],
+            theme,
+        },
     );
 
     render_filter_field(
         frame,
-        "Chemin",
-        &popup_state.path_input,
-        popup_state.selected_field == FilterField::Path,
-        chunks[5],
-        theme,
+        FilterFieldRenderContext {
+            label: "Chemin",
+            value: &popup_state.path_input,
+            is_selected: popup_state.selected_field == FilterField::Path,
+            area: chunks[5],
+            theme,
+        },
     );
 
     render_filter_field(
         frame,
-        "Message contient",
-        &popup_state.message_input,
-        popup_state.selected_field == FilterField::Message,
-        chunks[6],
-        theme,
+        FilterFieldRenderContext {
+            label: "Message contient",
+            value: &popup_state.message_input,
+            is_selected: popup_state.selected_field == FilterField::Message,
+            area: chunks[6],
+            theme,
+        },
     );
 
     // Aide en bas
@@ -132,14 +157,15 @@ pub fn render(
 }
 
 /// Rend un champ de filtre individuel.
-fn render_filter_field(
-    frame: &mut Frame,
-    label: &str,
-    value: &str,
-    is_selected: bool,
-    area: Rect,
-    theme: &crate::ui::theme::Theme,
-) {
+fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
+    let FilterFieldRenderContext {
+        label,
+        value,
+        is_selected,
+        area,
+        theme,
+    } = ctx;
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Length(1)])
@@ -200,9 +226,11 @@ mod tests {
         let output = render_to_string(100, 30, |frame| {
             render(
                 frame,
-                &popup_state,
-                &GraphFilter::new(),
-                Rect::new(0, 0, 100, 30),
+                FilterPopupRenderContext {
+                    popup_state: &popup_state,
+                    current_filter: &GraphFilter::new(),
+                    area: Rect::new(0, 0, 100, 30),
+                },
             );
         });
 

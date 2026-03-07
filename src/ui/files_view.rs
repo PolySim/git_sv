@@ -13,26 +13,37 @@ use crate::git::diff::{DiffFile, DiffStatus};
 use crate::git::repo::StatusEntry;
 use crate::ui::theme::{current_theme, Theme};
 
+/// Contexte de rendu du panneau de fichiers.
+pub struct FilesRenderContext<'a> {
+    pub commit_files: &'a [DiffFile],
+    pub status_entries: &'a [StatusEntry],
+    pub selected_commit_hash: Option<&'a str>,
+    pub mode: BottomLeftMode,
+    pub area: Rect,
+    pub is_focused: bool,
+    pub file_selected_index: usize,
+}
+
 /// Rend le panneau de fichiers dans la zone donnée.
 ///
 /// Affiche soit les fichiers du commit sélectionné, soit le status du working directory
 /// selon le mode actif.
-#[allow(clippy::too_many_arguments)]
-pub fn render(
-    frame: &mut Frame,
-    commit_files: &[DiffFile],
-    status_entries: &[StatusEntry],
-    selected_commit_hash: Option<String>,
-    mode: BottomLeftMode,
-    area: Rect,
-    is_focused: bool,
-    file_selected_index: usize,
-) {
+pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
+    let FilesRenderContext {
+        commit_files,
+        status_entries,
+        selected_commit_hash,
+        mode,
+        area,
+        is_focused,
+        file_selected_index,
+    } = ctx;
+
     let theme = current_theme();
     let (items, title) = match mode {
         BottomLeftMode::Files => {
             let items = build_commit_file_items(commit_files, theme);
-            let hash = selected_commit_hash.unwrap_or_else(|| "???".to_string());
+            let hash = selected_commit_hash.unwrap_or("???");
             let title = format!(" Fichiers — {} ", hash);
             (items, title)
         }

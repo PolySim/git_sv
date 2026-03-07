@@ -13,8 +13,20 @@ use ratatui::{
 use crate::state::ViewMode;
 use crate::ui::theme::current_theme;
 
+pub struct NavBarRenderContext {
+    pub current_view: ViewMode,
+    pub area: Rect,
+    pub unresolved_conflicts: usize,
+}
+
 /// Rend la barre de navigation avec les onglets.
-pub fn render(frame: &mut Frame, current_view: ViewMode, area: Rect, unresolved_conflicts: usize) {
+pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
+    let NavBarRenderContext {
+        current_view,
+        area,
+        unresolved_conflicts,
+    } = ctx;
+
     let theme = current_theme();
     let has_conflicts = unresolved_conflicts > 0;
 

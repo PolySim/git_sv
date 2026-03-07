@@ -12,8 +12,14 @@ use crate::ui::common::centered_rect;
 use crate::ui::keybindings;
 use crate::ui::theme::current_theme;
 
+pub struct HelpOverlayRenderContext {
+    pub area: Rect,
+}
+
 /// Rend l'overlay d'aide complet centré sur l'écran.
-pub fn render(frame: &mut Frame, area: Rect) {
+pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
+    let HelpOverlayRenderContext { area } = ctx;
+
     let theme = current_theme();
     // Créer une zone centrale pour le popup (70% largeur, 80% hauteur).
     let popup_area = centered_rect(70, 80, area);

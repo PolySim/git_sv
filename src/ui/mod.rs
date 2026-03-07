@@ -47,11 +47,13 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         ViewMode::Staging => {
             staging_view::render(
                 frame,
-                &state.staging_state,
-                &state.current_branch,
-                &state.repo_path,
-                state.current_flash_message(),
-                state.is_merging,
+                staging_view::StagingRenderContext {
+                    staging_state: &state.staging_state,
+                    current_branch: state.current_branch.as_deref(),
+                    repo_path: &state.repo_path,
+                    flash_message: state.current_flash_message(),
+                    is_merging: state.is_merging,
+                },
             );
         }
         ViewMode::Help => {
@@ -60,20 +62,24 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                 Some(ViewMode::Staging) => {
                     staging_view::render(
                         frame,
-                        &state.staging_state,
-                        &state.current_branch,
-                        &state.repo_path,
-                        state.current_flash_message(),
-                        state.is_merging,
+                        staging_view::StagingRenderContext {
+                            staging_state: &state.staging_state,
+                            current_branch: state.current_branch.as_deref(),
+                            repo_path: &state.repo_path,
+                            flash_message: state.current_flash_message(),
+                            is_merging: state.is_merging,
+                        },
                     );
                 }
                 Some(ViewMode::Branches) => {
                     branches_view::render(
                         frame,
-                        &state.branches_view_state,
-                        &state.current_branch,
-                        &state.repo_path,
-                        state.current_flash_message(),
+                        branches_view::BranchesRenderContext {
+                            state: &state.branches_view_state,
+                            current_branch: state.current_branch.as_deref(),
+                            repo_path: &state.repo_path,
+                            flash_message: state.current_flash_message(),
+                        },
                     );
                 }
                 Some(ViewMode::Conflicts) => {
@@ -85,13 +91,18 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     if let Some(ref mut conflicts_state) = state.conflicts_state {
                         conflicts_view::render(
                             frame,
-                            conflicts_state,
-                            &current_branch,
-                            &repo_path,
-                            flash_msg.as_deref(),
+                            conflicts_view::ConflictsRenderContext {
+                                state: conflicts_state,
+                                current_branch: current_branch.as_deref(),
+                                repo_path: &repo_path,
+                                flash_message: flash_msg.as_deref(),
+                            },
                         );
                     }
-                    conflicts_view::render_help_overlay(frame, frame.area());
+                    conflicts_view::render_help_overlay(
+                        frame,
+                        conflicts_view::ConflictsHelpOverlayRenderContext { area: frame.area() },
+                    );
                     return; // L'overlay de conflits est spécifique
                 }
                 _ => {
@@ -103,28 +114,40 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                         if let Some(ref mut conflicts_state) = state.conflicts_state {
                             conflicts_view::render(
                                 frame,
-                                conflicts_state,
-                                &current_branch,
-                                &repo_path,
-                                flash_msg.as_deref(),
+                                conflicts_view::ConflictsRenderContext {
+                                    state: conflicts_state,
+                                    current_branch: current_branch.as_deref(),
+                                    repo_path: &repo_path,
+                                    flash_message: flash_msg.as_deref(),
+                                },
                             );
                         }
-                        conflicts_view::render_help_overlay(frame, frame.area());
+                        conflicts_view::render_help_overlay(
+                            frame,
+                            conflicts_view::ConflictsHelpOverlayRenderContext {
+                                area: frame.area(),
+                            },
+                        );
                         return;
                     }
 
                     render_graph_view(frame, state);
                 }
             }
-            help_overlay::render(frame, frame.area());
+            help_overlay::render(
+                frame,
+                help_overlay::HelpOverlayRenderContext { area: frame.area() },
+            );
         }
         ViewMode::Branches => {
             branches_view::render(
                 frame,
-                &state.branches_view_state,
-                &state.current_branch,
-                &state.repo_path,
-                state.current_flash_message(),
+                branches_view::BranchesRenderContext {
+                    state: &state.branches_view_state,
+                    current_branch: state.current_branch.as_deref(),
+                    repo_path: &state.repo_path,
+                    flash_message: state.current_flash_message(),
+                },
             );
         }
         ViewMode::Blame => {
@@ -141,10 +164,12 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             if let Some(ref mut conflicts_state) = state.conflicts_state {
                 conflicts_view::render(
                     frame,
-                    conflicts_state,
-                    &current_branch,
-                    &repo_path,
-                    flash_msg.as_deref(),
+                    conflicts_view::ConflictsRenderContext {
+                        state: conflicts_state,
+                        current_branch: current_branch.as_deref(),
+                        repo_path: &repo_path,
+                        flash_message: flash_msg.as_deref(),
+                    },
                 );
             }
         }
@@ -153,20 +178,39 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
     // Rendre le merge picker si actif
     if let Some(ref picker) = state.merge_picker {
         if picker.is_active {
-            merge_picker::render(frame, picker, &state.current_branch, frame.area());
+            merge_picker::render(
+                frame,
+                merge_picker::MergePickerRenderContext {
+                    state: picker,
+                    current_branch: state.current_branch.as_deref(),
+                    area: frame.area(),
+                },
+            );
         }
     }
 
     // Rendre le reset picker si actif
     if let Some(ref picker) = state.reset_picker {
         if picker.is_active {
-            reset_picker::render(frame, picker, &state.current_branch, frame.area());
+            reset_picker::render(
+                frame,
+                reset_picker::ResetPickerRenderContext {
+                    state: picker,
+                    area: frame.area(),
+                },
+            );
         }
     }
 
     // Rendre le dialogue de confirmation si actif
     if let Some(ref action) = state.pending_confirmation {
-        confirm_dialog::render(frame, action, frame.area());
+        confirm_dialog::render(
+            frame,
+            confirm_dialog::ConfirmDialogRenderContext {
+                action,
+                area: frame.area(),
+            },
+        );
     }
 }
 
@@ -192,13 +236,14 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
     // Rendu de la status bar en haut.
     status_bar::render(
         frame,
-        &state.current_branch,
-        &state.repo_path,
-        &state.status_entries,
-        state.current_flash_message(),
-        &state.graph_filter,
-        state.is_merging,
-        layout.status_bar,
+        status_bar::StatusBarRenderContext {
+            current_branch: state.current_branch.as_deref(),
+            status_entries: &state.status_entries,
+            flash_message: state.current_flash_message(),
+            filter: &state.graph_filter,
+            is_merging: state.is_merging,
+            area: layout.status_bar,
+        },
     );
 
     // Rendu de la barre de navigation.
@@ -212,7 +257,14 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
                 .count()
         })
         .unwrap_or(0);
-    nav_bar::render(frame, state.view_mode, layout.nav_bar, unresolved_count);
+    nav_bar::render(
+        frame,
+        nav_bar::NavBarRenderContext {
+            current_view: state.view_mode,
+            area: layout.nav_bar,
+            unresolved_conflicts: unresolved_count,
+        },
+    );
 
     // Rendu du graphe (masqué en mode diff plein écran).
     if !is_diff_fullscreen {
@@ -233,17 +285,19 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
 
         graph_view::render(
             frame,
-            rows,
-            &current_branch,
-            filter_active,
-            selected_index,
-            loaded_count,
-            total_commits,
-            can_load_more,
-            is_loading_more,
-            layout.graph,
-            list_state,
-            is_graph_focused,
+            graph_view::GraphRenderContext {
+                graph: rows,
+                current_branch: current_branch.as_deref(),
+                filter_active,
+                selected_index,
+                loaded_count,
+                total_commits,
+                can_load_more,
+                is_loading_more,
+                area: layout.graph,
+                state: list_state,
+                is_focused: is_graph_focused,
+            },
         );
     }
 
@@ -260,13 +314,15 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
 
         files_view::render(
             frame,
-            &state.graph_view.commit_files,
-            &state.status_entries,
-            selected_hash,
-            state.bottom_left_mode,
-            layout.bottom_left,
-            is_files_focused,
-            file_selected_index,
+            files_view::FilesRenderContext {
+                commit_files: &state.graph_view.commit_files,
+                status_entries: &state.status_entries,
+                selected_commit_hash: selected_hash.as_deref(),
+                mode: state.bottom_left_mode,
+                area: layout.bottom_left,
+                is_focused: is_files_focused,
+                file_selected_index,
+            },
         );
     }
 
@@ -287,13 +343,15 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
 
         let total_lines = diff_view::render(
             frame,
-            state.graph_view.selected_file_diff.as_ref(),
-            diff_scroll_offset,
-            diff_horizontal_offset,
-            diff_area,
-            is_bottom_right_focused,
-            diff_view_mode,
-            true,
+            diff_view::DiffRenderContext {
+                diff: state.graph_view.selected_file_diff.as_ref(),
+                scroll_offset: diff_scroll_offset,
+                horizontal_offset: diff_horizontal_offset,
+                area: diff_area,
+                is_focused: is_bottom_right_focused,
+                view_mode: diff_view_mode,
+                is_fullscreen: true,
+            },
         );
         state.graph_view.diff_total_lines = total_lines;
     } else if is_diff_visible {
@@ -304,50 +362,77 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
 
         let total_lines = diff_view::render(
             frame,
-            state.graph_view.selected_file_diff.as_ref(),
-            diff_scroll_offset,
-            diff_horizontal_offset,
-            layout.bottom_right,
-            is_diff_focused,
-            diff_view_mode,
-            false,
+            diff_view::DiffRenderContext {
+                diff: state.graph_view.selected_file_diff.as_ref(),
+                scroll_offset: diff_scroll_offset,
+                horizontal_offset: diff_horizontal_offset,
+                area: layout.bottom_right,
+                is_focused: is_diff_focused,
+                view_mode: diff_view_mode,
+                is_fullscreen: false,
+            },
         );
         state.graph_view.diff_total_lines = total_lines;
     } else {
         // Mode détail (pas de diff visible)
         let rows = &state.graph_view.rows.items;
 
-        detail_view::render(frame, rows, selected_index, layout.bottom_right, false);
+        detail_view::render(
+            frame,
+            detail_view::DetailRenderContext {
+                graph: rows,
+                selected_index,
+                area: layout.bottom_right,
+                is_focused: false,
+            },
+        );
     }
 
     // Rendu de la barre d'aide.
     help_bar::render(
         frame,
-        selected_index,
-        graph_len,
-        state.bottom_left_mode,
-        state.graph_filter.is_active(),
-        state.is_merging,
-        layout.help_bar,
+        help_bar::HelpBarRenderContext {
+            selected_index,
+            total_commits: graph_len,
+            bottom_left_mode: state.bottom_left_mode,
+            filter_active: state.graph_filter.is_active(),
+            is_merging: state.is_merging,
+            area: layout.help_bar,
+        },
     );
 
     // Rendu de la barre de recherche (si active).
     if let Some(search_area) = layout.search_bar {
-        search_bar::render(frame, &state.search_state, search_area);
+        search_bar::render(
+            frame,
+            search_bar::SearchBarRenderContext {
+                search_state: &state.search_state,
+                area: search_area,
+            },
+        );
     }
 
     // Panneau de branches (si actif).
     if state.show_branch_panel {
-        branch_panel::render(frame, &state.branches, state.branch_selected, frame.area());
+        branch_panel::render(
+            frame,
+            branch_panel::BranchPanelRenderContext {
+                branches: &state.branches,
+                branch_selected: state.branch_selected,
+                area: frame.area(),
+            },
+        );
     }
 
     // Popup de filtre (si ouvert).
     if state.filter_popup.is_open {
         filter_popup::render(
             frame,
-            &state.filter_popup,
-            &state.graph_filter,
-            frame.area(),
+            filter_popup::FilterPopupRenderContext {
+                popup_state: &state.filter_popup,
+                current_filter: &state.graph_filter,
+                area: frame.area(),
+            },
         );
     }
 }

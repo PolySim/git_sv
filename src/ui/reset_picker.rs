@@ -11,8 +11,15 @@ use ratatui::{
     Frame,
 };
 
+pub struct ResetPickerRenderContext<'a> {
+    pub state: &'a ResetPickerState,
+    pub area: Rect,
+}
+
 /// Rend le picker de reset en overlay.
-pub fn render(frame: &mut Frame, state: &ResetPickerState, _branch: &Option<String>, area: Rect) {
+pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
+    let ResetPickerRenderContext { state, area } = ctx;
+
     let theme = current_theme();
     // Calculer la zone centrale pour le popup
     let popup_area = centered_rect(60, 40, area);

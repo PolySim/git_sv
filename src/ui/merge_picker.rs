@@ -12,13 +12,20 @@ use ratatui::{
 
 use crate::state::MergePickerState;
 
+pub struct MergePickerRenderContext<'a> {
+    pub state: &'a MergePickerState,
+    pub current_branch: Option<&'a str>,
+    pub area: Rect,
+}
+
 /// Rend le sélecteur de branche pour le merge.
-pub fn render(
-    frame: &mut Frame,
-    state: &MergePickerState,
-    current_branch: &Option<String>,
-    area: Rect,
-) {
+pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
+    let MergePickerRenderContext {
+        state,
+        current_branch,
+        area,
+    } = ctx;
+
     let theme = current_theme();
     // Calculer la zone centrale pour le popup
     let popup_area = centered_rect(50, 60, area);
@@ -27,7 +34,7 @@ pub fn render(
     frame.render_widget(Clear, popup_area);
 
     // Construire le titre avec la branche courante
-    let current_branch_name = current_branch.as_deref().unwrap_or("???");
+    let current_branch_name = current_branch.unwrap_or("???");
     let title = format!(" Merger dans '{}' ", current_branch_name);
 
     // Construire la liste des branches

@@ -14,8 +14,15 @@ use crate::git::search::SearchType;
 use crate::state::SearchState;
 use crate::ui::theme::current_theme;
 
+pub struct SearchBarRenderContext<'a> {
+    pub search_state: &'a SearchState,
+    pub area: Rect,
+}
+
 /// Rend la barre de recherche quand la recherche est active.
-pub fn render(frame: &mut Frame, search_state: &SearchState, area: Rect) {
+pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
+    let SearchBarRenderContext { search_state, area } = ctx;
+
     if !search_state.is_active {
         return;
     }

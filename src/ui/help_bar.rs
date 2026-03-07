@@ -11,16 +11,26 @@ use ratatui::{
 use crate::app::BottomLeftMode;
 use crate::ui::theme::current_theme;
 
+pub struct HelpBarRenderContext {
+    pub selected_index: usize,
+    pub total_commits: usize,
+    pub bottom_left_mode: BottomLeftMode,
+    pub filter_active: bool,
+    pub is_merging: bool,
+    pub area: Rect,
+}
+
 /// Rend la barre d'aide persistante en bas de l'écran.
-pub fn render(
-    frame: &mut Frame,
-    selected_index: usize,
-    total_commits: usize,
-    bottom_left_mode: BottomLeftMode,
-    filter_active: bool,
-    is_merging: bool,
-    area: Rect,
-) {
+pub fn render(frame: &mut Frame, ctx: HelpBarRenderContext) {
+    let HelpBarRenderContext {
+        selected_index,
+        total_commits,
+        bottom_left_mode,
+        filter_active,
+        is_merging,
+        area,
+    } = ctx;
+
     let theme = current_theme();
 
     // Déterminer les touches à afficher.

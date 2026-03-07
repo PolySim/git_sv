@@ -12,8 +12,20 @@ use crate::git::branch::BranchInfo;
 use crate::ui::common::centered_rect;
 use crate::ui::theme::current_theme;
 
+pub struct BranchPanelRenderContext<'a> {
+    pub branches: &'a [BranchInfo],
+    pub branch_selected: usize,
+    pub area: Rect,
+}
+
 /// Rend le panneau de branches en overlay.
-pub fn render(frame: &mut Frame, branches: &[BranchInfo], branch_selected: usize, area: Rect) {
+pub fn render(frame: &mut Frame, ctx: BranchPanelRenderContext<'_>) {
+    let BranchPanelRenderContext {
+        branches,
+        branch_selected,
+        area,
+    } = ctx;
+
     let theme = current_theme();
 
     // Créer une zone centrale pour le popup (60% largeur, 50% hauteur).

@@ -10,26 +10,38 @@ use ratatui::{
 
 use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
 use crate::state::SelectedBranch;
-use crate::ui::common::centered_rect;
+use crate::ui::common::{centered_rect, StatusBarConfig};
 use crate::ui::theme::current_theme;
 use crate::utils::time::format_relative_time;
 
-/// Rend la vue complète branches/worktrees/stashes.
-pub fn render(
-    frame: &mut Frame,
-    state: &BranchesViewState,
-    current_branch: &Option<String>,
-    repo_path: &str,
-    flash_message: Option<&str>,
-) {
-    let layout = super::branches_layout::build_branches_layout(frame.area());
+pub struct BranchesRenderContext<'a> {
+    pub state: &'a BranchesViewState,
+    pub current_branch: Option<&'a str>,
+    pub repo_path: &'a str,
+    pub flash_message: Option<&'a str>,
+}
 
-    // Status bar.
-    render_branches_status_bar(
-        frame,
+/// Rend la vue complète branches/worktrees/stashes.
+pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
+    let BranchesRenderContext {
+        state,
         current_branch,
         repo_path,
         flash_message,
+    } = ctx;
+
+    let layout = super::branches_layout::build_branches_layout(frame.area());
+
+    // Status bar.
+    crate::ui::common::render_status_bar(
+        frame,
+        StatusBarConfig {
+            view_title: "branches",
+            branch: current_branch,
+            repo_path,
+            flash_message,
+            bg_color: None,
+        },
         layout.status_bar,
     );
 
@@ -59,40 +71,6 @@ pub fn render(
     if state.focus == BranchesFocus::Input {
         render_input_overlay(frame, state, frame.area());
     }
-}
-
-/// Rend la status bar de la vue branches.
-fn render_branches_status_bar(
-    frame: &mut Frame,
-    current_branch: &Option<String>,
-    repo_path: &str,
-    flash_message: Option<&str>,
-    area: Rect,
-) {
-    let theme = current_theme();
-    let branch_name = current_branch.as_deref().unwrap_or("???");
-
-    let content = if let Some(msg) = flash_message {
-        format!(
-            " git_sv · branches · {} · {} · {} ",
-            repo_path, branch_name, msg
-        )
-    } else {
-        format!(" git_sv · branches · {} · {} ", repo_path, branch_name)
-    };
-
-    let line = Line::from(vec![Span::styled(
-        content,
-        Style::default()
-            .fg(theme.status_bar_fg)
-            .bg(theme.status_bar_bg)
-            .add_modifier(Modifier::BOLD),
-    )]);
-
-    frame.render_widget(
-        Paragraph::new(line).style(Style::default().bg(theme.status_bar_bg)),
-        area,
-    );
 }
 
 /// Rend les onglets de la vue branches.

@@ -12,6 +12,11 @@ use ratatui::{
     Frame,
 };
 
+pub struct ConfirmDialogRenderContext<'a> {
+    pub action: &'a ConfirmAction,
+    pub area: Rect,
+}
+
 /// Type d'action nécessitant une confirmation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConfirmAction {
@@ -104,7 +109,9 @@ impl ConfirmAction {
 }
 
 /// Rend un dialogue de confirmation en overlay.
-pub fn render(frame: &mut Frame, action: &ConfirmAction, area: Rect) {
+pub fn render(frame: &mut Frame, ctx: ConfirmDialogRenderContext<'_>) {
+    let ConfirmDialogRenderContext { action, area } = ctx;
+
     let theme = current_theme();
     // Calculer la zone centrale pour le popup
     let popup_area = centered_rect(60, 30, area);

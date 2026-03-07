@@ -14,18 +14,39 @@ use crate::ui::theme::{current_theme, Theme};
 /// Largeur minimale pour le mode side-by-side (en caractères par colonne).
 const MIN_SIDE_BY_SIDE_WIDTH: u16 = 60;
 
-/// Rend le diff d'un fichier avec coloration syntaxique.
-#[allow(clippy::too_many_arguments)]
-pub fn render(
-    frame: &mut Frame,
-    diff: Option<&FileDiff>,
+/// Contexte de rendu du panneau de diff.
+pub struct DiffRenderContext<'a> {
+    pub diff: Option<&'a FileDiff>,
+    pub scroll_offset: usize,
+    pub horizontal_offset: usize,
+    pub area: Rect,
+    pub is_focused: bool,
+    pub view_mode: DiffViewMode,
+    pub is_fullscreen: bool,
+}
+
+struct DiffPanelContext<'a> {
+    diff: Option<&'a FileDiff>,
     scroll_offset: usize,
     horizontal_offset: usize,
     area: Rect,
     is_focused: bool,
-    view_mode: DiffViewMode,
     is_fullscreen: bool,
-) -> usize {
+    theme: &'a Theme,
+}
+
+/// Rend le diff d'un fichier avec coloration syntaxique.
+pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
+    let DiffRenderContext {
+        diff,
+        scroll_offset,
+        horizontal_offset,
+        area,
+        is_focused,
+        view_mode,
+        is_fullscreen,
+    } = ctx;
+
     let theme = current_theme();
     // Déterminer si on peut utiliser le mode side-by-side.
     let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
@@ -35,42 +56,34 @@ pub fn render(
         DiffViewMode::Unified
     };
 
+    let panel_ctx = DiffPanelContext {
+        diff,
+        scroll_offset,
+        horizontal_offset,
+        area,
+        is_focused,
+        is_fullscreen,
+        theme,
+    };
+
     match effective_mode {
-        DiffViewMode::Unified => render_unified(
-            frame,
-            diff,
-            scroll_offset,
-            horizontal_offset,
-            area,
-            is_focused,
-            is_fullscreen,
-            theme,
-        ),
-        DiffViewMode::SideBySide => render_side_by_side(
-            frame,
-            diff,
-            scroll_offset,
-            horizontal_offset,
-            area,
-            is_focused,
-            is_fullscreen,
-            theme,
-        ),
+        DiffViewMode::Unified => render_unified(frame, panel_ctx),
+        DiffViewMode::SideBySide => render_side_by_side(frame, panel_ctx),
     }
 }
 
 /// Rend le diff en mode unifié.
-#[allow(clippy::too_many_arguments)]
-fn render_unified(
-    frame: &mut Frame,
-    diff: Option<&FileDiff>,
-    scroll_offset: usize,
-    horizontal_offset: usize,
-    area: Rect,
-    is_focused: bool,
-    is_fullscreen: bool,
-    theme: &Theme,
-) -> usize {
+fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
+    let DiffPanelContext {
+        diff,
+        scroll_offset,
+        horizontal_offset,
+        area,
+        is_focused,
+        is_fullscreen,
+        theme,
+    } = ctx;
+
     let content = match diff {
         Some(d) => build_diff_lines(d),
         None => vec![Line::from("Sélectionnez un fichier pour voir le diff")],
@@ -126,17 +139,17 @@ fn render_unified(
 }
 
 /// Rend le diff en mode côte à côte.
-#[allow(clippy::too_many_arguments)]
-fn render_side_by_side(
-    frame: &mut Frame,
-    diff: Option<&FileDiff>,
-    scroll_offset: usize,
-    horizontal_offset: usize,
-    area: Rect,
-    is_focused: bool,
-    is_fullscreen: bool,
-    theme: &Theme,
-) -> usize {
+fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
+    let DiffPanelContext {
+        diff,
+        scroll_offset,
+        horizontal_offset,
+        area,
+        is_focused,
+        is_fullscreen,
+        theme,
+    } = ctx;
+
     let border_style = if is_focused {
         Style::default().fg(theme.border_active)
     } else {

@@ -12,14 +12,22 @@ use crate::git::graph::GraphRow;
 use crate::ui::theme::current_theme;
 use crate::utils::format_absolute_time;
 
+pub struct DetailRenderContext<'a> {
+    pub graph: &'a [GraphRow],
+    pub selected_index: usize,
+    pub area: Rect,
+    pub is_focused: bool,
+}
+
 /// Rend le panneau de détail du commit sélectionné.
-pub fn render(
-    frame: &mut Frame,
-    graph: &[GraphRow],
-    selected_index: usize,
-    area: Rect,
-    is_focused: bool,
-) {
+pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
+    let DetailRenderContext {
+        graph,
+        selected_index,
+        area,
+        is_focused,
+    } = ctx;
+
     let theme = current_theme();
 
     let content: Vec<Line<'static>> = if let Some(row) = graph.get(selected_index) {
@@ -180,10 +188,7 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::graph::{
-        CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow, RefInfo, RefType,
-    };
-    use crate::ui::theme::current_theme;
+    use crate::git::graph::{CommitNode, GraphCell, GraphRow, RefInfo, RefType};
     use git2::Oid;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
@@ -240,12 +245,18 @@ mod tests {
         let graph = create_test_graph();
         let backend = TestBackend::new(60, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        let theme = current_theme();
-
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render(frame, &graph, 0, area, true);
+                render(
+                    frame,
+                    DetailRenderContext {
+                        graph: &graph,
+                        selected_index: 0,
+                        area,
+                        is_focused: true,
+                    },
+                );
             })
             .unwrap();
 
@@ -270,7 +281,15 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render(frame, &graph, 1, area, false);
+                render(
+                    frame,
+                    DetailRenderContext {
+                        graph: &graph,
+                        selected_index: 1,
+                        area,
+                        is_focused: false,
+                    },
+                );
             })
             .unwrap();
 
@@ -294,7 +313,15 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render(frame, &graph, 0, area, false);
+                render(
+                    frame,
+                    DetailRenderContext {
+                        graph: &graph,
+                        selected_index: 0,
+                        area,
+                        is_focused: false,
+                    },
+                );
             })
             .unwrap();
 
@@ -317,7 +344,15 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render(frame, &graph, 0, area, false);
+                render(
+                    frame,
+                    DetailRenderContext {
+                        graph: &graph,
+                        selected_index: 0,
+                        area,
+                        is_focused: false,
+                    },
+                );
             })
             .unwrap();
 
@@ -344,7 +379,15 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render(frame, &graph, 0, area, false);
+                render(
+                    frame,
+                    DetailRenderContext {
+                        graph: &graph,
+                        selected_index: 0,
+                        area,
+                        is_focused: false,
+                    },
+                );
             })
             .unwrap();
 

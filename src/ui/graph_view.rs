@@ -15,22 +15,37 @@ use crate::utils::format_relative_time;
 /// Espacement entre les colonnes (en caractères).
 const COL_SPACING: usize = 2;
 
+/// Contexte de rendu du panneau de graphe.
+pub struct GraphRenderContext<'a> {
+    pub graph: &'a [GraphRow],
+    pub current_branch: Option<&'a str>,
+    pub filter_active: bool,
+    pub selected_index: usize,
+    pub loaded_count: usize,
+    pub total_commits: Option<usize>,
+    pub can_load_more: bool,
+    pub is_loading_more: bool,
+    pub area: Rect,
+    pub state: &'a mut ListState,
+    pub is_focused: bool,
+}
+
 /// Rend le graphe de commits dans la zone donnée.
-#[allow(clippy::too_many_arguments)]
-pub fn render(
-    frame: &mut Frame,
-    graph: &[GraphRow],
-    current_branch: &Option<String>,
-    filter_active: bool,
-    selected_index: usize,
-    loaded_count: usize,
-    total_commits: Option<usize>,
-    can_load_more: bool,
-    is_loading_more: bool,
-    area: Rect,
-    state: &mut ListState,
-    is_focused: bool,
-) {
+pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
+    let GraphRenderContext {
+        graph,
+        current_branch,
+        filter_active,
+        selected_index,
+        loaded_count,
+        total_commits,
+        can_load_more,
+        is_loading_more,
+        area,
+        state,
+        is_focused,
+    } = ctx;
+
     let theme = current_theme();
 
     // Calculer la largeur disponible pour le contenu (hors bordures).
@@ -56,7 +71,7 @@ pub fn render(
         )
     };
 
-    let branch_name = current_branch.as_deref().unwrap_or("???");
+    let branch_name = current_branch.unwrap_or("???");
     let title = build_title(
         branch_name,
         loaded_count,
@@ -610,17 +625,19 @@ mod tests {
                 let area = frame.area();
                 render(
                     frame,
-                    &graph,
-                    &Some("main".to_string()),
-                    false,
-                    0,
-                    graph.len(),
-                    Some(graph.len()),
-                    false,
-                    false,
-                    area,
-                    &mut state,
-                    true,
+                    GraphRenderContext {
+                        graph: &graph,
+                        current_branch: Some("main"),
+                        filter_active: false,
+                        selected_index: 0,
+                        loaded_count: graph.len(),
+                        total_commits: Some(graph.len()),
+                        can_load_more: false,
+                        is_loading_more: false,
+                        area,
+                        state: &mut state,
+                        is_focused: true,
+                    },
                 );
             })
             .unwrap();
@@ -646,17 +663,19 @@ mod tests {
                 let area = frame.area();
                 render(
                     frame,
-                    &graph,
-                    &Some("feature".to_string()),
-                    false,
-                    1, // selected_index = 1
-                    graph.len(),
-                    Some(graph.len()),
-                    false,
-                    false,
-                    area,
-                    &mut state,
-                    false,
+                    GraphRenderContext {
+                        graph: &graph,
+                        current_branch: Some("feature"),
+                        filter_active: false,
+                        selected_index: 1,
+                        loaded_count: graph.len(),
+                        total_commits: Some(graph.len()),
+                        can_load_more: false,
+                        is_loading_more: false,
+                        area,
+                        state: &mut state,
+                        is_focused: false,
+                    },
                 );
             })
             .unwrap();

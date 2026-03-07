@@ -10,130 +10,146 @@ use ratatui::{
 
 use crate::app::{StagingFocus, StagingState};
 use crate::git::repo::StatusEntry;
-use crate::ui::theme::current_theme;
+use crate::ui::common::StatusBarConfig;
+use crate::ui::theme::{current_theme, Theme};
+
+pub struct StagingRenderContext<'a> {
+    pub staging_state: &'a StagingState,
+    pub current_branch: Option<&'a str>,
+    pub repo_path: &'a str,
+    pub flash_message: Option<&'a str>,
+    pub is_merging: bool,
+}
+
+struct FileListRenderContext<'a> {
+    title: &'a str,
+    files: &'a [StatusEntry],
+    selected: usize,
+    is_focused: bool,
+    area: Rect,
+    theme: &'a Theme,
+}
+
+struct CommitInputRenderContext<'a> {
+    message: &'a str,
+    cursor_pos: usize,
+    is_focused: bool,
+    has_staged_files: bool,
+    is_amending: bool,
+    area: Rect,
+    theme: &'a Theme,
+}
+
+struct StagingHelpRenderContext<'a> {
+    focus: &'a StagingFocus,
+    is_merging: bool,
+    area: Rect,
+    theme: &'a Theme,
+}
 
 /// Rend la vue complète de staging.
-pub fn render(
-    frame: &mut Frame,
-    staging_state: &StagingState,
-    current_branch: &Option<String>,
-    repo_path: &str,
-    flash_message: Option<&str>,
-    is_merging: bool,
-) {
+pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
+    let StagingRenderContext {
+        staging_state,
+        current_branch,
+        repo_path,
+        flash_message,
+        is_merging,
+    } = ctx;
+
     let theme = current_theme();
     let layout = super::staging_layout::build_staging_layout(frame.area());
 
     // Status bar.
-    render_staging_status_bar(
+    crate::ui::common::render_status_bar(
         frame,
-        current_branch,
-        repo_path,
-        flash_message,
+        StatusBarConfig {
+            view_title: "staging",
+            branch: current_branch,
+            repo_path,
+            flash_message,
+            bg_color: None,
+        },
         layout.status_bar,
-        theme,
     );
 
     // Panneau unstaged.
     render_file_list(
         frame,
-        "Unstaged",
-        staging_state.unstaged_files(),
-        staging_state.unstaged_selected(),
-        staging_state.focus == StagingFocus::Unstaged,
-        layout.unstaged_panel,
-        theme,
+        FileListRenderContext {
+            title: "Unstaged",
+            files: staging_state.unstaged_files(),
+            selected: staging_state.unstaged_selected(),
+            is_focused: staging_state.focus == StagingFocus::Unstaged,
+            area: layout.unstaged_panel,
+            theme,
+        },
     );
 
     // Panneau staged.
     render_file_list(
         frame,
-        "Staged",
-        staging_state.staged_files(),
-        staging_state.staged_selected(),
-        staging_state.focus == StagingFocus::Staged,
-        layout.staged_panel,
-        theme,
+        FileListRenderContext {
+            title: "Staged",
+            files: staging_state.staged_files(),
+            selected: staging_state.staged_selected(),
+            is_focused: staging_state.focus == StagingFocus::Staged,
+            area: layout.staged_panel,
+            theme,
+        },
     );
 
     // Panneau diff.
     super::diff_view::render(
         frame,
-        staging_state.current_diff.as_ref(),
-        staging_state.diff_scroll,
-        staging_state.diff_horizontal_offset,
-        layout.diff_panel,
-        staging_state.focus == StagingFocus::Diff,
-        staging_state.diff_view_mode,
-        false, // is_fullscreen
+        super::diff_view::DiffRenderContext {
+            diff: staging_state.current_diff.as_ref(),
+            scroll_offset: staging_state.diff_scroll,
+            horizontal_offset: staging_state.diff_horizontal_offset,
+            area: layout.diff_panel,
+            is_focused: staging_state.focus == StagingFocus::Diff,
+            view_mode: staging_state.diff_view_mode,
+            is_fullscreen: false,
+        },
     );
 
     // Zone de message commit.
     render_commit_input(
         frame,
-        &staging_state.commit_message,
-        staging_state.cursor_position,
-        staging_state.focus == StagingFocus::CommitMessage,
-        !staging_state.staged_files().is_empty(),
-        staging_state.is_amending,
-        layout.commit_message,
-        theme,
+        CommitInputRenderContext {
+            message: &staging_state.commit_message,
+            cursor_pos: staging_state.cursor_position,
+            is_focused: staging_state.focus == StagingFocus::CommitMessage,
+            has_staged_files: !staging_state.staged_files().is_empty(),
+            is_amending: staging_state.is_amending,
+            area: layout.commit_message,
+            theme,
+        },
     );
 
     // Help bar.
     render_staging_help(
         frame,
-        &staging_state.focus,
-        is_merging,
-        layout.help_bar,
-        theme,
-    );
-}
-
-/// Rend la status bar de la vue staging.
-fn render_staging_status_bar(
-    frame: &mut Frame,
-    current_branch: &Option<String>,
-    repo_path: &str,
-    flash_message: Option<&str>,
-    area: Rect,
-    theme: &crate::ui::theme::Theme,
-) {
-    let branch_name = current_branch.as_deref().unwrap_or("???");
-
-    let content = if let Some(msg) = flash_message {
-        format!(
-            " git_sv · staging · {} · {} · {} ",
-            repo_path, branch_name, msg
-        )
-    } else {
-        format!(" git_sv · staging · {} · {} ", repo_path, branch_name)
-    };
-
-    let line = Line::from(vec![Span::styled(
-        content,
-        Style::default()
-            .fg(theme.status_bar_fg)
-            .bg(theme.status_bar_bg)
-            .add_modifier(Modifier::BOLD),
-    )]);
-
-    frame.render_widget(
-        Paragraph::new(line).style(Style::default().bg(theme.status_bar_bg)),
-        area,
+        StagingHelpRenderContext {
+            focus: &staging_state.focus,
+            is_merging,
+            area: layout.help_bar,
+            theme,
+        },
     );
 }
 
 /// Rend une liste de fichiers (unstaged ou staged).
-fn render_file_list(
-    frame: &mut Frame,
-    title: &str,
-    files: &[StatusEntry],
-    selected: usize,
-    is_focused: bool,
-    area: Rect,
-    theme: &crate::ui::theme::Theme,
-) {
+fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
+    let FileListRenderContext {
+        title,
+        files,
+        selected,
+        is_focused,
+        area,
+        theme,
+    } = ctx;
+
     let items: Vec<ListItem> = files
         .iter()
         .map(|entry| {
@@ -192,17 +208,17 @@ fn render_file_list(
 }
 
 /// Rend le champ de saisie du message de commit.
-#[allow(clippy::too_many_arguments)]
-fn render_commit_input(
-    frame: &mut Frame,
-    message: &str,
-    cursor_pos: usize,
-    is_focused: bool,
-    has_staged_files: bool,
-    is_amending: bool,
-    area: Rect,
-    theme: &crate::ui::theme::Theme,
-) {
+fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
+    let CommitInputRenderContext {
+        message,
+        cursor_pos,
+        is_focused,
+        has_staged_files,
+        is_amending,
+        area,
+        theme,
+    } = ctx;
+
     let border_style = if is_focused {
         Style::default().fg(theme.warning)
     } else {
@@ -264,13 +280,14 @@ fn render_commit_input(
 }
 
 /// Rend la barre d'aide de la vue staging.
-fn render_staging_help(
-    frame: &mut Frame,
-    focus: &StagingFocus,
-    is_merging: bool,
-    area: Rect,
-    theme: &crate::ui::theme::Theme,
-) {
+fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
+    let StagingHelpRenderContext {
+        focus,
+        is_merging,
+        area,
+        theme,
+    } = ctx;
+
     let abort_merge_text = if is_merging { "  A:abort merge" } else { "" };
 
     let help_text = match focus {

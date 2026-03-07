@@ -13,8 +13,15 @@ use ratatui::{
 use crate::git::graph::{GraphRow, RefType};
 use crate::ui::theme;
 
+pub struct GraphLegendRenderContext<'a> {
+    pub graph: &'a [GraphRow],
+    pub area: Rect,
+}
+
 /// Rend une légende compacte des branches actives dans le graphe.
-pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
+pub fn render(frame: &mut Frame, ctx: GraphLegendRenderContext<'_>) {
+    let GraphLegendRenderContext { graph, area } = ctx;
+
     let current_theme = theme::current_theme();
     // Collecter les branches uniques avec leurs couleurs
     let mut branches: Vec<(String, usize)> = Vec::new();
@@ -74,7 +81,9 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
 }
 
 /// Rend une légende minimale (juste les points colorés) pour les espaces réduits.
-pub fn render_compact(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
+pub fn render_compact(frame: &mut Frame, ctx: GraphLegendRenderContext<'_>) {
+    let GraphLegendRenderContext { graph, area } = ctx;
+
     // Collecter les couleurs uniques des 5 premières branches
     let mut colors: Vec<usize> = Vec::new();
     let mut seen_refs = std::collections::HashSet::new();

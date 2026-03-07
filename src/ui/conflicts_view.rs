@@ -15,14 +15,26 @@ use crate::git::conflict::{ConflictResolution, ConflictResolutionMode, ConflictT
 use crate::state::{ConflictPanelFocus, ConflictsState};
 use crate::ui::theme::current_theme;
 
+pub struct ConflictsRenderContext<'a> {
+    pub state: &'a mut ConflictsState,
+    pub current_branch: Option<&'a str>,
+    pub repo_path: &'a str,
+    pub flash_message: Option<&'a str>,
+}
+
+pub struct ConflictsHelpOverlayRenderContext {
+    pub area: Rect,
+}
+
 /// Rend la vue de résolution de conflits.
-pub fn render(
-    frame: &mut Frame,
-    state: &mut ConflictsState,
-    current_branch: &Option<String>,
-    repo_path: &str,
-    flash_message: Option<&str>,
-) {
+pub fn render(frame: &mut Frame, ctx: ConflictsRenderContext<'_>) {
+    let ConflictsRenderContext {
+        state,
+        current_branch,
+        repo_path,
+        flash_message,
+    } = ctx;
+
     let area = frame.area();
 
     // Layout principal avec status bar en haut
@@ -75,12 +87,12 @@ pub fn render(
 /// Construit la status bar.
 fn build_status_bar<'a>(
     state: &'a ConflictsState,
-    current_branch: &'a Option<String>,
+    current_branch: Option<&'a str>,
     repo_path: &'a str,
     flash_message: Option<&'a str>,
 ) -> Paragraph<'a> {
     let theme = current_theme();
-    let branch_str = current_branch.as_deref().unwrap_or("HEAD détachée");
+    let branch_str = current_branch.unwrap_or("HEAD détachée");
     let repo_name = std::path::Path::new(repo_path)
         .file_name()
         .and_then(|n| n.to_str())
@@ -771,7 +783,9 @@ pub fn render_nav_indicator(has_conflicts: bool) -> Line<'static> {
 }
 
 /// Rend l'overlay d'aide pour la vue conflits.
-pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
+pub fn render_help_overlay(frame: &mut Frame, ctx: ConflictsHelpOverlayRenderContext) {
+    let ConflictsHelpOverlayRenderContext { area } = ctx;
+
     let theme = current_theme();
     let popup_area = centered_rect(70, 80, area);
 

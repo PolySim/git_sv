@@ -12,20 +12,29 @@ use crate::git::repo::StatusEntry;
 use crate::state::GraphFilter;
 use crate::ui::theme::current_theme;
 
+/// Contexte de rendu de la barre de statut principale.
+pub struct StatusBarRenderContext<'a> {
+    pub current_branch: Option<&'a str>,
+    pub status_entries: &'a [StatusEntry],
+    pub flash_message: Option<&'a str>,
+    pub filter: &'a GraphFilter,
+    pub is_merging: bool,
+    pub area: Rect,
+}
+
 /// Rend la status bar en haut de l'écran.
-#[allow(clippy::too_many_arguments)]
-pub fn render(
-    frame: &mut Frame,
-    current_branch: &Option<String>,
-    _repo_path: &str,
-    status_entries: &[StatusEntry],
-    flash_message: Option<&str>,
-    filter: &GraphFilter,
-    is_merging: bool,
-    area: Rect,
-) {
+pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
+    let StatusBarRenderContext {
+        current_branch,
+        status_entries,
+        flash_message,
+        filter,
+        is_merging,
+        area,
+    } = ctx;
+
     let theme = current_theme();
-    let branch = current_branch.as_deref().unwrap_or("???");
+    let branch = current_branch.unwrap_or("???");
 
     // Compter les fichiers modifiés/staged/untracked.
     let (modified, staged, untracked) = count_status(status_entries);
