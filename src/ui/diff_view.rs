@@ -2,13 +2,14 @@
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
 use crate::git::diff::{DiffLineType, DiffViewMode, FileDiff};
+use crate::ui::theme::{current_theme, Theme};
 
 /// Largeur minimale pour le mode side-by-side (en caractères par colonne).
 const MIN_SIDE_BY_SIDE_WIDTH: u16 = 60;
@@ -25,6 +26,7 @@ pub fn render(
     view_mode: DiffViewMode,
     is_fullscreen: bool,
 ) -> usize {
+    let theme = current_theme();
     // Déterminer si on peut utiliser le mode side-by-side.
     let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
     let effective_mode = if can_side_by_side {
@@ -42,6 +44,7 @@ pub fn render(
             area,
             is_focused,
             is_fullscreen,
+            theme,
         ),
         DiffViewMode::SideBySide => render_side_by_side(
             frame,
@@ -51,11 +54,13 @@ pub fn render(
             area,
             is_focused,
             is_fullscreen,
+            theme,
         ),
     }
 }
 
 /// Rend le diff en mode unifié.
+#[allow(clippy::too_many_arguments)]
 fn render_unified(
     frame: &mut Frame,
     diff: Option<&FileDiff>,
@@ -64,6 +69,7 @@ fn render_unified(
     area: Rect,
     is_focused: bool,
     is_fullscreen: bool,
+    theme: &Theme,
 ) -> usize {
     let content = match diff {
         Some(d) => build_diff_lines(d),
@@ -75,9 +81,9 @@ fn render_unified(
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     let border_style = if is_focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.border_active)
     } else {
-        Style::default()
+        Style::default().fg(theme.border_inactive)
     };
 
     let title = match diff {
@@ -107,6 +113,7 @@ fn render_unified(
 
     let paragraph = Paragraph::new(content)
         .scroll((scroll_offset as u16, horizontal_offset as u16))
+        .style(Style::default().fg(theme.text_normal).bg(theme.background))
         .block(
             Block::default()
                 .title(title)
@@ -119,6 +126,7 @@ fn render_unified(
 }
 
 /// Rend le diff en mode côte à côte.
+#[allow(clippy::too_many_arguments)]
 fn render_side_by_side(
     frame: &mut Frame,
     diff: Option<&FileDiff>,
@@ -127,11 +135,12 @@ fn render_side_by_side(
     area: Rect,
     is_focused: bool,
     is_fullscreen: bool,
+    theme: &Theme,
 ) -> usize {
     let border_style = if is_focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.border_active)
     } else {
-        Style::default()
+        Style::default().fg(theme.border_inactive)
     };
 
     let title = match diff {
@@ -197,18 +206,23 @@ fn render_side_by_side(
         let total = left_lines.len().max(right_lines.len());
 
         // Colonne ancienne (suppressions + contexte).
-        let left_paragraph =
-            Paragraph::new(left_lines).scroll((scroll_offset as u16, horizontal_offset as u16));
+        let left_paragraph = Paragraph::new(left_lines)
+            .style(Style::default().fg(theme.text_normal).bg(theme.background))
+            .scroll((scroll_offset as u16, horizontal_offset as u16));
         frame.render_widget(left_paragraph, inner_chunks[0]);
 
         // Séparateur vertical.
-        let separator =
-            Paragraph::new(vec![Line::from("│")]).style(Style::default().fg(Color::DarkGray));
+        let separator = Paragraph::new(vec![Line::from("│")]).style(
+            Style::default()
+                .fg(theme.border_inactive)
+                .bg(theme.background),
+        );
         frame.render_widget(separator, inner_chunks[1]);
 
         // Colonne nouvelle (ajouts + contexte).
-        let right_paragraph =
-            Paragraph::new(right_lines).scroll((scroll_offset as u16, horizontal_offset as u16));
+        let right_paragraph = Paragraph::new(right_lines)
+            .style(Style::default().fg(theme.text_normal).bg(theme.background))
+            .scroll((scroll_offset as u16, horizontal_offset as u16));
         frame.render_widget(right_paragraph, inner_chunks[2]);
 
         total
@@ -224,14 +238,15 @@ fn render_side_by_side(
 
 /// Construit les lignes de diff avec coloration (mode unifié).
 fn build_diff_lines(diff: &FileDiff) -> Vec<Line<'static>> {
+    let theme = current_theme();
     diff.lines
         .iter()
         .map(|line| {
             let (prefix, fg_color, bg_color) = match line.line_type {
-                DiffLineType::Addition => ("+", Color::Green, Some(Color::Rgb(0, 40, 0))),
-                DiffLineType::Deletion => ("-", Color::Red, Some(Color::Rgb(40, 0, 0))),
-                DiffLineType::Context => (" ", Color::Reset, None),
-                DiffLineType::HunkHeader => ("", Color::Cyan, None),
+                DiffLineType::Addition => ("+", theme.success, Some(theme.ours_bg)),
+                DiffLineType::Deletion => ("-", theme.error, Some(theme.theirs_bg)),
+                DiffLineType::Context => (" ", theme.text_normal, None),
+                DiffLineType::HunkHeader => ("", theme.info, None),
             };
 
             let mut spans = Vec::new();
@@ -241,7 +256,7 @@ fn build_diff_lines(diff: &FileDiff) -> Vec<Line<'static>> {
                 spans.push(Span::styled(
                     line.content.clone(),
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.info)
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ));
             } else {
@@ -256,7 +271,7 @@ fn build_diff_lines(diff: &FileDiff) -> Vec<Line<'static>> {
                     .unwrap_or_else(|| "    ".to_string());
                 spans.push(Span::styled(
                     format!("{} {} ", old_no, new_no),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.text_secondary),
                 ));
 
                 // Préfixe et contenu avec coloration.
@@ -291,6 +306,7 @@ struct SideBySideLine {
 ///
 /// Retourne (lignes_gauche, lignes_droite) synchronisées.
 fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
+    let theme = current_theme();
     let pairs = align_diff_lines(&diff.lines);
 
     let mut left_lines = Vec::new();
@@ -301,9 +317,9 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
         let left_line = match &pair.left {
             Some(line) => {
                 let (fg_color, bg_color) = match line.line_type {
-                    DiffLineType::Deletion => (Color::Red, Some(Color::Rgb(40, 0, 0))),
-                    DiffLineType::Context => (Color::Reset, None),
-                    _ => (Color::Reset, None),
+                    DiffLineType::Deletion => (theme.error, Some(theme.theirs_bg)),
+                    DiffLineType::Context => (theme.text_normal, None),
+                    _ => (theme.text_normal, None),
                 };
 
                 let lineno = line
@@ -314,7 +330,7 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
                 let mut spans = Vec::new();
                 spans.push(Span::styled(
                     format!("{} ", lineno),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.text_secondary),
                 ));
 
                 let style = Style::default().fg(fg_color);
@@ -329,7 +345,10 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
             }
             None => {
                 // Placeholder pour alignement.
-                Line::from(Span::styled("     ", Style::default().fg(Color::DarkGray)))
+                Line::from(Span::styled(
+                    "     ",
+                    Style::default().fg(theme.text_secondary),
+                ))
             }
         };
         left_lines.push(left_line);
@@ -338,9 +357,9 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
         let right_line = match &pair.right {
             Some(line) => {
                 let (fg_color, bg_color) = match line.line_type {
-                    DiffLineType::Addition => (Color::Green, Some(Color::Rgb(0, 40, 0))),
-                    DiffLineType::Context => (Color::Reset, None),
-                    _ => (Color::Reset, None),
+                    DiffLineType::Addition => (theme.success, Some(theme.ours_bg)),
+                    DiffLineType::Context => (theme.text_normal, None),
+                    _ => (theme.text_normal, None),
                 };
 
                 let lineno = line
@@ -351,7 +370,7 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
                 let mut spans = Vec::new();
                 spans.push(Span::styled(
                     format!("{} ", lineno),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.text_secondary),
                 ));
 
                 let style = Style::default().fg(fg_color);
@@ -366,7 +385,10 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
             }
             None => {
                 // Placeholder pour alignement.
-                Line::from(Span::styled("     ", Style::default().fg(Color::DarkGray)))
+                Line::from(Span::styled(
+                    "     ",
+                    Style::default().fg(theme.text_secondary),
+                ))
             }
         };
         right_lines.push(right_line);

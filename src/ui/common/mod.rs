@@ -3,6 +3,7 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use crate::ui::theme::current_theme;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -28,11 +29,12 @@ pub use popup::Popup;
 pub use rect::{centered_rect, centered_rect_fixed, is_terminal_size_adequate};
 pub use style::{
     border_style, diff_add_style, diff_header_style, diff_remove_style, dim_style, error_style,
-    highlight_style, success_style, title_style, FOCUS_COLOR, INACTIVE_COLOR,
+    highlight_style, success_style, title_style,
 };
 pub use text::{pad_left, pad_right, truncate, truncate_start};
 
 /// Configuration pour une status bar.
+#[derive(Default)]
 pub struct StatusBarConfig<'a> {
     /// Titre de la vue (ex: "graph", "staging", "branches")
     pub view_title: &'a str,
@@ -42,20 +44,8 @@ pub struct StatusBarConfig<'a> {
     pub repo_path: &'a str,
     /// Message flash optionnel
     pub flash_message: Option<&'a str>,
-    /// Couleur de fond (défaut: Cyan)
+    /// Couleur de fond optionnelle.
     pub bg_color: Option<Color>,
-}
-
-impl<'a> Default for StatusBarConfig<'a> {
-    fn default() -> Self {
-        Self {
-            view_title: "",
-            branch: None,
-            repo_path: "",
-            flash_message: None,
-            bg_color: Some(Color::Cyan),
-        }
-    }
 }
 
 /// Rend une status bar standardisée.
@@ -63,8 +53,9 @@ impl<'a> Default for StatusBarConfig<'a> {
 /// Cette fonction remplace les multiples implémentations de status bar
 /// dans staging_view et branches_view.
 pub fn render_status_bar(frame: &mut Frame, config: StatusBarConfig<'_>, area: Rect) {
+    let theme = current_theme();
     let branch_name = config.branch.unwrap_or("???");
-    let bg = config.bg_color.unwrap_or(Color::Cyan);
+    let bg = config.bg_color.unwrap_or(theme.status_bar_bg);
 
     let content = if let Some(msg) = config.flash_message {
         format!(
@@ -81,7 +72,7 @@ pub fn render_status_bar(frame: &mut Frame, config: StatusBarConfig<'_>, area: R
     let line = Line::from(vec![Span::styled(
         content,
         Style::default()
-            .fg(Color::Black)
+            .fg(theme.status_bar_fg)
             .bg(bg)
             .add_modifier(Modifier::BOLD),
     )]);

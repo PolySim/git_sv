@@ -1,9 +1,10 @@
 //! Widget de sélection de branche pour le merge.
 
 use crate::ui::common::centered_rect;
+use crate::ui::theme::current_theme;
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
@@ -18,6 +19,7 @@ pub fn render(
     current_branch: &Option<String>,
     area: Rect,
 ) {
+    let theme = current_theme();
     // Calculer la zone centrale pour le popup
     let popup_area = centered_rect(50, 60, area);
 
@@ -45,12 +47,12 @@ pub fn render(
                 .title(title)
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_style(Style::default().fg(theme.warning)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
-                .fg(Color::White)
+                .bg(theme.selection_bg)
+                .fg(theme.selection_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -67,6 +69,7 @@ pub fn render(
 
 /// Rend la barre d'aide du merge picker.
 fn render_help_bar(frame: &mut Frame, popup_area: Rect) {
+    let theme = current_theme();
     // Calculer la zone pour la barre d'aide (en dessous du popup)
     let help_area = Rect {
         x: popup_area.x,
@@ -79,7 +82,7 @@ fn render_help_bar(frame: &mut Frame, popup_area: Rect) {
 
     let line = Line::from(vec![Span::styled(
         help_text,
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.text_secondary),
     )]);
 
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), help_area);

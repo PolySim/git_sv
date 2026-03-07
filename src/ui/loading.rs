@@ -4,9 +4,10 @@
 #![allow(dead_code)]
 
 use crate::ui::common::centered_rect;
+use crate::ui::theme::current_theme;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -69,6 +70,7 @@ impl LoadingSpinner {
 /// Rend un overlay de chargement avec spinner.
 pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rect) {
     use ratatui::widgets::Clear;
+    let theme = current_theme();
 
     // Zone centrale pour le spinner
     let popup_area = centered_rect(40, 20, area);
@@ -85,11 +87,14 @@ pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rec
             Span::styled(
                 spinner_char,
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" "),
-            Span::styled(spinner.message.clone(), Style::default()),
+            Span::styled(
+                spinner.message.clone(),
+                Style::default().fg(theme.text_normal),
+            ),
         ]),
     ];
 
@@ -98,8 +103,9 @@ pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rec
             Block::default()
                 .title(" Chargement ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.primary)),
         )
+        .style(Style::default().bg(theme.background).fg(theme.text_normal))
         .alignment(ratatui::layout::Alignment::Center);
 
     frame.render_widget(paragraph, popup_area);
@@ -107,15 +113,19 @@ pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rec
 
 /// Rend un spinner inline (pour les status bar).
 pub fn render_inline(spinner: &mut LoadingSpinner) -> Line<'_> {
+    let theme = current_theme();
     let spinner_char = spinner.current_char();
     Line::from(vec![
         Span::styled(
             spinner_char,
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.primary)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
-        Span::styled(spinner.message.clone(), Style::default()),
+        Span::styled(
+            spinner.message.clone(),
+            Style::default().fg(theme.text_normal),
+        ),
     ])
 }

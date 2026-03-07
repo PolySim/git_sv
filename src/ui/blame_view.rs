@@ -2,11 +2,12 @@
 
 use crate::git::blame::FileBlame;
 use crate::state::BlameState;
+use crate::ui::theme::current_theme;
 use crate::utils::time::format_relative_time;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
 };
@@ -24,6 +25,7 @@ impl<'a> BlameView<'a> {
 
 impl Widget for BlameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let theme = current_theme();
         // Layout principal : titre + contenu
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -40,7 +42,7 @@ impl Widget for BlameView<'_> {
         let title_block = Block::default()
             .borders(Borders::ALL)
             .title(title)
-            .style(Style::default().fg(Color::Cyan));
+            .style(Style::default().fg(theme.primary).bg(theme.background));
         title_block.render(chunks[0], buf);
 
         // Contenu du blame
@@ -49,7 +51,11 @@ impl Widget for BlameView<'_> {
         } else {
             // Afficher un message de chargement
             let msg = Paragraph::new("Chargement du blame...")
-                .style(Style::default().fg(Color::Gray))
+                .style(
+                    Style::default()
+                        .fg(theme.text_secondary)
+                        .bg(theme.background),
+                )
                 .block(Block::default().borders(Borders::ALL));
             msg.render(chunks[1], buf);
         }
@@ -58,6 +64,7 @@ impl Widget for BlameView<'_> {
 
 /// Affiche le contenu annoté du fichier.
 fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: &mut Buffer) {
+    let theme = current_theme();
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Lignes annotées (↑↓: naviguer, Enter: aller au commit, Esc: fermer) ");
@@ -90,15 +97,15 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         // Style de la ligne (sélectionnée ou non)
         let is_selected = line_idx == selected_line;
         let bg_color = if is_selected {
-            Color::DarkGray
+            theme.selection_bg
         } else {
-            Color::Reset
+            theme.background
         };
 
         // Hash du commit (coloré)
         let hash_span = Span::styled(
             format!("{:width$} ", blame_line.short_hash, width = hash_width),
-            Style::default().fg(Color::Yellow).bg(bg_color),
+            Style::default().fg(theme.commit_hash).bg(bg_color),
         );
 
         // Auteur (tronqué si nécessaire - safe UTF-8)
@@ -114,7 +121,7 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         };
         let author_span = Span::styled(
             format!("{} ", author),
-            Style::default().fg(Color::Cyan).bg(bg_color),
+            Style::default().fg(theme.primary).bg(bg_color),
         );
 
         // Date relative du commit
@@ -137,7 +144,7 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         let time_span = Span::styled(
             format!(" {} ", time_display),
             Style::default()
-                .fg(Color::Gray)
+                .fg(theme.text_secondary)
                 .bg(bg_color)
                 .add_modifier(Modifier::DIM),
         );
@@ -150,13 +157,16 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
                 width = max_line_num_width
             ),
             Style::default()
-                .fg(Color::Gray)
+                .fg(theme.text_secondary)
                 .bg(bg_color)
                 .add_modifier(Modifier::DIM),
         );
 
         // Contenu de la ligne
-        let content_span = Span::styled(&blame_line.content, Style::default().bg(bg_color));
+        let content_span = Span::styled(
+            &blame_line.content,
+            Style::default().fg(theme.text_normal).bg(bg_color),
+        );
 
         // Construire la ligne complète
         let line = Line::from(vec![

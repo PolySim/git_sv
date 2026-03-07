@@ -4,7 +4,7 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -15,6 +15,7 @@ use crate::ui::theme;
 
 /// Rend une légende compacte des branches actives dans le graphe.
 pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
+    let current_theme = theme::current_theme();
     // Collecter les branches uniques avec leurs couleurs
     let mut branches: Vec<(String, usize)> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -43,7 +44,7 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
     let mut spans: Vec<Span> = vec![Span::styled(
         "Branches: ",
         Style::default()
-            .fg(Color::Gray)
+            .fg(current_theme.text_secondary)
             .add_modifier(Modifier::BOLD),
     )];
 
@@ -66,7 +67,7 @@ pub fn render(frame: &mut Frame, graph: &[GraphRow], area: Rect) {
     let paragraph = Paragraph::new(line).block(
         Block::default()
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(current_theme.border_inactive)),
     );
 
     frame.render_widget(paragraph, area);

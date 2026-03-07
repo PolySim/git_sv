@@ -311,7 +311,7 @@ fn build_commit_line(
                 RefType::Head => {
                     // HEAD : format explicite et lisible pour la branche courante.
                     let bracket = format!("HEAD->{} ", ref_info.name);
-                    let style = sel_style(Color::Green).add_modifier(Modifier::BOLD);
+                    let style = sel_style(theme.success).add_modifier(Modifier::BOLD);
                     (bracket, style)
                 }
                 RefType::LocalBranch => {
@@ -325,13 +325,13 @@ fn build_commit_line(
                 RefType::RemoteBranch => {
                     // Remote : style plus discret, pas de REVERSED
                     let bracket = format!("⟨{}⟩ ", ref_info.name);
-                    let style = sel_style(Color::DarkGray).add_modifier(Modifier::DIM);
+                    let style = sel_style(theme.text_secondary).add_modifier(Modifier::DIM);
                     (bracket, style)
                 }
                 RefType::Tag => {
                     // Tag : jaune, pas de REVERSED
                     let bracket = format!("({}) ", ref_info.name);
-                    let style = sel_style(Color::Yellow).add_modifier(Modifier::BOLD);
+                    let style = sel_style(theme.warning).add_modifier(Modifier::BOLD);
                     (bracket, style)
                 }
             };

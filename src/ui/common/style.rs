@@ -2,15 +2,9 @@
 
 #![allow(dead_code)]
 
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 
 use crate::ui::theme::current_theme;
-
-/// Couleur de bordure quand un panel a le focus.
-pub const FOCUS_COLOR: Color = Color::Cyan;
-
-/// Couleur de bordure inactive.
-pub const INACTIVE_COLOR: Color = Color::Gray;
 
 /// Retourne le style de bordure selon l'état de focus.
 pub fn border_style(is_focused: bool) -> Style {
