@@ -16,6 +16,8 @@ pub struct CommitInfo {
     pub email: String,
     pub timestamp: i64,
     pub parents: Vec<Oid>,
+    /// Chemins des fichiers modifiés par ce commit (optionnel, chargé à la demande).
+    pub changed_paths: Option<Vec<String>>,
 }
 
 impl CommitInfo {
@@ -34,7 +36,23 @@ impl CommitInfo {
             email,
             timestamp,
             parents,
+            changed_paths: None,
         }
+    }
+
+    /// Charge les chemins modifiés pour ce commit depuis le repository.
+    pub fn load_changed_paths(&mut self, repo: &Repository) -> crate::error::Result<()> {
+        let files = super::diff::commit_diff(repo, self.oid)?;
+        self.changed_paths = Some(files.into_iter().map(|f| f.path).collect());
+        Ok(())
+    }
+
+    /// Retourne les chemins modifiés, en les chargeant si nécessaire.
+    pub fn changed_paths(&mut self, repo: &Repository) -> crate::error::Result<&[String]> {
+        if self.changed_paths.is_none() {
+            self.load_changed_paths(repo)?;
+        }
+        Ok(self.changed_paths.as_ref().unwrap().as_slice())
     }
 
     /// Retourne le hash court (7 caractères).

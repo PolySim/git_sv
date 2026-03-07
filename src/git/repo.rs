@@ -91,8 +91,25 @@ impl GitRepo {
         filter: &crate::state::GraphFilter,
     ) -> Result<Vec<GraphRow>> {
         // Récupérer plus de commits que demandé car le filtrage peut réduire la liste
-        let fetch_count = max_count * 3;
-        let commits = self.log_all_branches(fetch_count)?;
+        // Augmenter le facteur si un filtre par chemin est actif (plus sélectif)
+        let fetch_count = if filter.path.is_some() {
+            max_count * 5
+        } else {
+            max_count * 3
+        };
+
+        let mut commits = self.log_all_branches(fetch_count)?;
+
+        // Si un filtre par chemin est actif, charger les chemins modifiés pour chaque commit
+        if filter.path.is_some() {
+            for commit in &mut commits {
+                if commit.changed_paths.is_none() {
+                    if let Err(e) = commit.load_changed_paths(&self.repo) {
+                        eprintln!("Erreur chargement chemins pour {}: {}", commit.oid, e);
+                    }
+                }
+            }
+        }
 
         // Appliquer le filtre
         let filtered_commits = filter.filter_commits(&commits);

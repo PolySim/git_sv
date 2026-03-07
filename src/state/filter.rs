@@ -94,9 +94,26 @@ impl GraphFilter {
             }
         }
 
-        // Note: Le filtre par chemin nécessite des informations supplémentaires
-        // sur les fichiers modifiés par le commit, ce qui n'est pas dans CommitInfo.
-        // Ce filtre sera appliqué lors de la récupération des commits.
+        // Filtre par chemin
+        if let Some(ref path_filter) = self.path {
+            if let Some(ref changed_paths) = commit.changed_paths {
+                let filter_lower = path_filter.to_lowercase();
+                let matches_path = changed_paths.iter().any(|path| {
+                    let path_lower = path.to_lowercase();
+                    // Correspondance exacte, préfixe (dossier), ou sous-chaîne
+                    path_lower == filter_lower
+                        || path_lower.starts_with(&format!("{}/", filter_lower))
+                        || path_lower.contains(&filter_lower)
+                });
+                if !matches_path {
+                    return false;
+                }
+            } else {
+                // Si les chemins ne sont pas chargés, on ne peut pas filtrer
+                // Cela ne devrait pas arriver car build_graph_filtered les charge
+                return false;
+            }
+        }
 
         true
     }
@@ -257,6 +274,15 @@ mod tests {
     use git2::Oid;
 
     fn create_test_commit(author: &str, message: &str, timestamp: i64) -> CommitInfo {
+        create_test_commit_with_paths(author, message, timestamp, None)
+    }
+
+    fn create_test_commit_with_paths(
+        author: &str,
+        message: &str,
+        timestamp: i64,
+        paths: Option<Vec<&str>>,
+    ) -> CommitInfo {
         CommitInfo {
             oid: Oid::zero(),
             message: message.to_string(),
@@ -264,6 +290,7 @@ mod tests {
             email: "test@example.com".to_string(),
             timestamp,
             parents: Vec::new(),
+            changed_paths: paths.map(|p| p.into_iter().map(|s| s.to_string()).collect()),
         }
     }
 
@@ -387,5 +414,134 @@ mod tests {
         assert_eq!(filter.message, Some("fix".to_string()));
         assert!(filter.date_from.is_some());
         assert!(filter.date_to.is_none());
+    }
+
+    #[test]
+    fn test_filter_by_path_exact_match() {
+        let commits = vec![
+            create_test_commit_with_paths("Alice", "Fix login", 1000, Some(vec!["src/auth.rs"])),
+            create_test_commit_with_paths("Bob", "Update config", 2000, Some(vec!["config.toml"])),
+            create_test_commit_with_paths(
+                "Charlie",
+                "Add test",
+                3000,
+                Some(vec!["tests/auth_test.rs"]),
+            ),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.path = Some("config.toml".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].author, "Bob");
+    }
+
+    #[test]
+    fn test_filter_by_path_directory_prefix() {
+        let commits = vec![
+            create_test_commit_with_paths("Alice", "Fix login", 1000, Some(vec!["src/auth.rs"])),
+            create_test_commit_with_paths("Bob", "Update main", 2000, Some(vec!["src/main.rs"])),
+            create_test_commit_with_paths(
+                "Charlie",
+                "Add test",
+                3000,
+                Some(vec!["tests/auth_test.rs"]),
+            ),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.path = Some("src".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().any(|c| c.author == "Alice"));
+        assert!(filtered.iter().any(|c| c.author == "Bob"));
+    }
+
+    #[test]
+    fn test_filter_by_path_substring() {
+        let commits = vec![
+            create_test_commit_with_paths(
+                "Alice",
+                "Fix login",
+                1000,
+                Some(vec!["src/authentication.rs"]),
+            ),
+            create_test_commit_with_paths("Bob", "Update auth", 2000, Some(vec!["src/auth.rs"])),
+            create_test_commit_with_paths(
+                "Charlie",
+                "Add test",
+                3000,
+                Some(vec!["tests/auth_test.rs"]),
+            ),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.path = Some("auth".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        assert_eq!(filtered.len(), 3);
+    }
+
+    #[test]
+    fn test_filter_by_path_case_insensitive() {
+        let commits = vec![
+            create_test_commit_with_paths("Alice", "Fix login", 1000, Some(vec!["src/Auth.rs"])),
+            create_test_commit_with_paths("Bob", "Update AUTH", 2000, Some(vec!["src/auth.rs"])),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.path = Some("AUTH".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_filter_by_path_no_paths_loaded() {
+        let commits = vec![
+            create_test_commit("Alice", "Fix login", 1000),
+            create_test_commit("Bob", "Update config", 2000),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.path = Some("src".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        // Les commits sans chemins chargés ne passent pas le filtre
+        assert_eq!(filtered.len(), 0);
+    }
+
+    #[test]
+    fn test_filter_by_path_empty_result() {
+        let commits = vec![
+            create_test_commit_with_paths("Alice", "Fix login", 1000, Some(vec!["src/auth.rs"])),
+            create_test_commit_with_paths("Bob", "Update config", 2000, Some(vec!["config.toml"])),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.path = Some("nonexistent".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        assert_eq!(filtered.len(), 0);
+    }
+
+    #[test]
+    fn test_filter_combined_with_path() {
+        let commits = vec![
+            create_test_commit_with_paths("Alice", "Fix auth bug", 1000, Some(vec!["src/auth.rs"])),
+            create_test_commit_with_paths("Alice", "Add feature", 2000, Some(vec!["src/main.rs"])),
+            create_test_commit_with_paths("Bob", "Fix auth bug", 3000, Some(vec!["src/auth.rs"])),
+        ];
+
+        let mut filter = GraphFilter::new();
+        filter.author = Some("alice".to_string());
+        filter.path = Some("auth".to_string());
+
+        let filtered = filter.filter_commits(&commits);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].author, "Alice");
+        assert!(filtered[0].message.contains("auth"));
     }
 }
