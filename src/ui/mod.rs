@@ -1,7 +1,6 @@
 //! Point d'entrée du rendu UI : dispatche vers les vues selon le `ViewMode`.
 
 pub mod blame_view;
-pub mod keybindings;
 pub mod branch_panel;
 pub mod branches_layout;
 pub mod branches_view;
@@ -17,6 +16,7 @@ pub mod graph_view;
 pub mod help_bar;
 pub mod help_overlay;
 pub mod input;
+pub mod keybindings;
 pub mod layout;
 pub mod loading;
 pub mod merge_picker;
@@ -204,13 +204,22 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         // Emprunter les rows de manière séparée
         let rows = &state.graph_view.rows.items;
 
+        // Extraire les infos de pagination
+        let loaded_count = state.graph_view.loaded_count;
+        let total_commits = state.graph_view.total_commits;
+        let can_load_more = state.graph_view.can_load_more;
+        let is_loading_more = state.graph_view.is_loading_more;
+
         graph_view::render(
             frame,
             rows,
             &current_branch,
             filter_active,
             selected_index,
-            graph_len,
+            loaded_count,
+            total_commits,
+            can_load_more,
+            is_loading_more,
             layout.graph,
             list_state,
             is_graph_focused,

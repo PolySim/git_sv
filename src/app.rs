@@ -27,9 +27,14 @@ impl App {
         // Construire le graphe initial et l'assigner via l'API unifiée
         let initial_graph = state
             .repo
-            .build_graph(crate::state::MAX_COMMITS)
+            .build_graph(crate::state::INITIAL_COMMIT_COUNT)
             .unwrap_or_default();
+        let graph_len = initial_graph.len();
         state.replace_graph(initial_graph);
+
+        // Initialiser l'état de pagination
+        let total = state.repo.estimate_total_commits();
+        state.graph_view.update_pagination_state(graph_len, total);
 
         // Charger les fichiers du commit sélectionné
         state.refresh_commit_files();

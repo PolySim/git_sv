@@ -361,6 +361,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         // Abort merge (uniquement si un merge est en cours)
         KeyCode::Char('A') if state.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
 
+        // Charger plus d'historique (pagination)
+        KeyCode::Char('L') => Some(AppAction::LoadMoreHistory),
+
         // Aide
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
 

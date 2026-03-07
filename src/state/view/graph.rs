@@ -19,6 +19,7 @@ const ITEMS_PER_COMMIT: usize = 2;
 /// - La sélection du fichier dans le commit
 /// - Les offsets de scroll associés
 /// - Le diff du fichier sélectionné
+/// - La pagination de l'historique
 #[derive(Debug, Clone)]
 pub struct GraphViewState {
     /// Lignes du graph avec sélection.
@@ -41,6 +42,14 @@ pub struct GraphViewState {
     pub diff_fullscreen: bool,
     /// Mode d'affichage du diff (unifié ou côte à côte).
     pub diff_view_mode: DiffViewMode,
+    /// Nombre de commits actuellement chargés.
+    pub loaded_count: usize,
+    /// Nombre total estimé de commits dans le repo (si connu).
+    pub total_commits: Option<usize>,
+    /// Indique si plus d'historique peut être chargé.
+    pub can_load_more: bool,
+    /// Indique si un chargement est en cours.
+    pub is_loading_more: bool,
 }
 
 impl Default for GraphViewState {
@@ -59,6 +68,10 @@ impl Default for GraphViewState {
             diff_total_lines: 0,
             diff_fullscreen: false,
             diff_view_mode: DiffViewMode::default(),
+            loaded_count: 0,
+            total_commits: None,
+            can_load_more: true,
+            is_loading_more: false,
         }
     }
 }
@@ -307,6 +320,80 @@ impl GraphViewState {
         } else if self.rows.selected_index() >= self.rows.len() {
             self.rows.select(self.rows.len() - 1);
         }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // Pagination de l'historique
+    // ═══════════════════════════════════════════════════
+
+    /// Met à jour l'état de pagination après un chargement.
+    pub fn update_pagination_state(&mut self, loaded_count: usize, total_commits: Option<usize>) {
+        self.loaded_count = loaded_count;
+        self.total_commits = total_commits;
+
+        // Déterminer si on peut charger plus
+        if let Some(total) = total_commits {
+            self.can_load_more =
+                loaded_count < total && loaded_count < crate::state::MAX_TOTAL_COMMITS;
+        } else {
+            // Si on ne connaît pas le total, on suppose qu'on peut charger plus
+            // tant qu'on n'a pas atteint la limite de sécurité
+            self.can_load_more = loaded_count < crate::state::MAX_TOTAL_COMMITS;
+        }
+    }
+
+    /// Ajoute des commits au graphe existant (pour le chargement progressif).
+    ///
+    /// Cette méthode étend le graphe actuel avec de nouveaux commits,
+    /// en préservant la sélection de l'utilisateur.
+    pub fn append_commits(&mut self, additional_rows: Vec<GraphRow>) {
+        if additional_rows.is_empty() {
+            // Plus rien à charger
+            self.can_load_more = false;
+            return;
+        }
+
+        // Sauvegarder l'OID du commit actuellement sélectionné
+        let current_oid = self.selected_commit().map(|node| node.oid);
+        let current_index = self.selected_index();
+
+        // Étendre le graphe avec les nouveaux commits
+        self.rows.items.extend(additional_rows);
+
+        // Restaurer la sélection (l'index devrait être le même car on ajoute à la fin)
+        if let Some(oid) = current_oid {
+            if let Some(new_index) = self.rows.items.iter().position(|row| row.node.oid == oid) {
+                self.rows.select(new_index);
+            } else {
+                // Le commit n'a pas été trouvé, utiliser l'ancien index
+                self.rows
+                    .select(current_index.min(self.rows.len().saturating_sub(1)));
+            }
+        }
+
+        // Mettre à jour le compteur
+        self.loaded_count = self.rows.len();
+        self.sync_list_state();
+    }
+
+    /// Marque le début d'un chargement de commits supplémentaires.
+    pub fn start_loading_more(&mut self) {
+        self.is_loading_more = true;
+    }
+
+    /// Marque la fin d'un chargement de commits supplémentaires.
+    pub fn finish_loading_more(&mut self) {
+        self.is_loading_more = false;
+    }
+
+    /// Retourne le nombre de commits à charger pour la prochaine page.
+    pub fn next_batch_size(&self) -> usize {
+        crate::state::COMMIT_BATCH_SIZE
+    }
+
+    /// Retourne le nombre total de commits à charger (actuel + prochain lot).
+    pub fn target_count_for_next_load(&self) -> usize {
+        (self.loaded_count + self.next_batch_size()).min(crate::state::MAX_TOTAL_COMMITS)
     }
 }
 

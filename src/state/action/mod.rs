@@ -101,6 +101,9 @@ pub enum AppAction {
     /// Diff: Basculer le mode plein écran du diff.
     ToggleDiffFullscreen,
 
+    /// Charger plus d'historique (pagination).
+    LoadMoreHistory,
+
     /// Aucune action (événement ignoré)
     None,
 }

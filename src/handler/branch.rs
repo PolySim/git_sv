@@ -64,10 +64,12 @@ fn handle_checkout(state: &mut AppState) -> Result<()> {
         state.branches_view_state.selected_branch_info()
     } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
         // Legacy: panel overlay dans la vue Graph
-        state
-            .branches
-            .get(state.branch_selected)
-            .map(|b| (b, crate::state::SelectedBranch::Local(state.branch_selected)))
+        state.branches.get(state.branch_selected).map(|b| {
+            (
+                b,
+                crate::state::SelectedBranch::Local(state.branch_selected),
+            )
+        })
     } else {
         None
     };

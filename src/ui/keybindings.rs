@@ -68,6 +68,8 @@ pub mod git_actions {
     pub const RESET: &str = "R";
     /// Annuler le merge (si en cours).
     pub const ABORT_MERGE: &str = "A";
+    /// Charger plus d'historique.
+    pub const LOAD_MORE: &str = "L";
 }
 
 /// Recherche et filtres.

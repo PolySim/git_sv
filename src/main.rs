@@ -100,13 +100,16 @@ fn main() -> anyhow::Result<()> {
     let repo = GitRepo::open(&cli.path)?;
 
     let format = OutputFormat::from_str(&cli.format).unwrap_or(OutputFormat::Human);
-    let options = CliOptions { format, path: cli.path };
+    let options = CliOptions {
+        format,
+        path: cli.path,
+    };
 
     match cli.command {
-        Some(Commands::Log { 
-            max_count, 
-            author, 
-            message, 
+        Some(Commands::Log {
+            max_count,
+            author,
+            message,
             path_filter,
             since,
             until,
@@ -116,7 +119,7 @@ fn main() -> anyhow::Result<()> {
             filter.author = author;
             filter.message = message;
             filter.path = path_filter;
-            
+
             // Parse les dates si fournies
             if let Some(since_str) = since {
                 filter.date_from = parse_date(&since_str);
@@ -124,7 +127,7 @@ fn main() -> anyhow::Result<()> {
             if let Some(until_str) = until {
                 filter.date_to = parse_date(&until_str);
             }
-            
+
             cli::log_filtered(&repo, max_count, &filter, &options)?;
         }
         Some(Commands::Branches) => {

@@ -96,12 +96,8 @@ impl BranchesViewState {
     /// Branche actuellement sélectionnée (retourne la référence et le type).
     pub fn selected_branch_info(&self) -> Option<(&BranchInfo, SelectedBranch)> {
         self.selected_branch.and_then(|selected| match selected {
-            SelectedBranch::Local(idx) => {
-                self.local_branches.get(idx).map(|b| (b, selected))
-            }
-            SelectedBranch::Remote(idx) => {
-                self.remote_branches.get(idx).map(|b| (b, selected))
-            }
+            SelectedBranch::Local(idx) => self.local_branches.get(idx).map(|b| (b, selected)),
+            SelectedBranch::Remote(idx) => self.remote_branches.get(idx).map(|b| (b, selected)),
         })
     }
 
@@ -112,9 +108,7 @@ impl BranchesViewState {
 
     /// Retourne true si une branche distante est sélectionnée.
     pub fn is_remote_selected(&self) -> bool {
-        self.selected_branch
-            .map(|s| s.is_remote())
-            .unwrap_or(false)
+        self.selected_branch.map(|s| s.is_remote()).unwrap_or(false)
     }
 
     /// Déplace la sélection vers le haut.
@@ -142,9 +136,7 @@ impl BranchesViewState {
                     Some(SelectedBranch::Local(0))
                 }
             }
-            Some(SelectedBranch::Local(idx)) => {
-                Some(SelectedBranch::Local(idx.saturating_sub(1)))
-            }
+            Some(SelectedBranch::Local(idx)) => Some(SelectedBranch::Local(idx.saturating_sub(1))),
             Some(SelectedBranch::Remote(0)) => {
                 // Début des remotes, remonter aux locales
                 if local_count > 0 {
@@ -320,9 +312,9 @@ mod tests {
     #[test]
     fn test_select_next_to_remote() {
         let mut state = BranchesViewState::new();
-        state.local_branches.set_items(vec![
-            create_test_branch("main", true),
-        ]);
+        state
+            .local_branches
+            .set_items(vec![create_test_branch("main", true)]);
         state.remote_branches.set_items(vec![
             create_test_remote_branch("origin/main"),
             create_test_remote_branch("origin/feature"),
@@ -338,12 +330,12 @@ mod tests {
     #[test]
     fn test_select_next_wraps_to_beginning() {
         let mut state = BranchesViewState::new();
-        state.local_branches.set_items(vec![
-            create_test_branch("main", true),
-        ]);
-        state.remote_branches.set_items(vec![
-            create_test_remote_branch("origin/main"),
-        ]);
+        state
+            .local_branches
+            .set_items(vec![create_test_branch("main", true)]);
+        state
+            .remote_branches
+            .set_items(vec![create_test_remote_branch("origin/main")]);
         state.show_remote = true;
         state.selected_branch = Some(SelectedBranch::Remote(0));
 
@@ -369,12 +361,12 @@ mod tests {
     #[test]
     fn test_select_prev_to_remote() {
         let mut state = BranchesViewState::new();
-        state.local_branches.set_items(vec![
-            create_test_branch("main", true),
-        ]);
-        state.remote_branches.set_items(vec![
-            create_test_remote_branch("origin/main"),
-        ]);
+        state
+            .local_branches
+            .set_items(vec![create_test_branch("main", true)]);
+        state
+            .remote_branches
+            .set_items(vec![create_test_remote_branch("origin/main")]);
         state.show_remote = true;
         state.selected_branch = Some(SelectedBranch::Local(0));
 
@@ -390,9 +382,9 @@ mod tests {
             create_test_branch("main", true),
             create_test_branch("feature", false),
         ]);
-        state.remote_branches.set_items(vec![
-            create_test_remote_branch("origin/main"),
-        ]);
+        state
+            .remote_branches
+            .set_items(vec![create_test_remote_branch("origin/main")]);
         state.show_remote = true;
         state.selected_branch = Some(SelectedBranch::Remote(0));
 
@@ -405,9 +397,9 @@ mod tests {
     #[test]
     fn test_toggle_remote_when_no_local() {
         let mut state = BranchesViewState::new();
-        state.remote_branches.set_items(vec![
-            create_test_remote_branch("origin/main"),
-        ]);
+        state
+            .remote_branches
+            .set_items(vec![create_test_remote_branch("origin/main")]);
         state.show_remote = true;
         state.selected_branch = Some(SelectedBranch::Remote(0));
 
@@ -432,9 +424,9 @@ mod tests {
     #[test]
     fn test_selected_branch_info() {
         let mut state = BranchesViewState::new();
-        state.local_branches.set_items(vec![
-            create_test_branch("main", true),
-        ]);
+        state
+            .local_branches
+            .set_items(vec![create_test_branch("main", true)]);
         state.selected_branch = Some(SelectedBranch::Local(0));
 
         let (branch, selected) = state.selected_branch_info().unwrap();
@@ -450,9 +442,9 @@ mod tests {
             create_test_branch("main", true),
             create_test_branch("feature", false),
         ]);
-        state.remote_branches.set_items(vec![
-            create_test_remote_branch("origin/main"),
-        ]);
+        state
+            .remote_branches
+            .set_items(vec![create_test_remote_branch("origin/main")]);
         state.show_remote = true;
         state.selected_branch = Some(SelectedBranch::Local(0));
 

@@ -53,6 +53,22 @@ impl GitRepo {
 
     /// Retourne la liste des commits depuis toutes les branches.
     pub fn log_all_branches(&self, max_count: usize) -> Result<Vec<CommitInfo>> {
+        self.log_all_branches_offset(0, max_count)
+    }
+
+    /// Retourne la liste des commits depuis toutes les branches avec offset.
+    ///
+    /// Cette méthode permet le chargement progressif en chargeant les commits
+    /// à partir d'un offset donné.
+    ///
+    /// # Arguments
+    /// * `skip` - Nombre de commits à sauter (offset)
+    /// * `max_count` - Nombre maximum de commits à retourner
+    pub fn log_all_branches_offset(
+        &self,
+        skip: usize,
+        max_count: usize,
+    ) -> Result<Vec<CommitInfo>> {
         let mut revwalk = self.repo.revwalk()?;
 
         // Pousser toutes les refs locales (branches, tags)
@@ -67,7 +83,10 @@ impl GitRepo {
 
         let mut commits = Vec::new();
         for (i, oid) in revwalk.enumerate() {
-            if i >= max_count {
+            if i < skip {
+                continue;
+            }
+            if i >= skip + max_count {
                 break;
             }
             let oid = oid?;
@@ -79,9 +98,44 @@ impl GitRepo {
 
     /// Construit le graphe de commits pour l'affichage.
     pub fn build_graph(&self, max_count: usize) -> Result<Vec<GraphRow>> {
-        let commits = self.log_all_branches(max_count)?;
+        self.build_graph_offset(0, max_count)
+    }
+
+    /// Construit le graphe de commits à partir d'un offset.
+    ///
+    /// Cette méthode permet le chargement progressif en chargeant les commits
+    /// à partir d'un offset donné.
+    pub fn build_graph_offset(&self, skip: usize, max_count: usize) -> Result<Vec<GraphRow>> {
+        let commits = self.log_all_branches_offset(skip, max_count)?;
         let graph = super::graph::build_graph(&self.repo, &commits)?;
         Ok(graph)
+    }
+
+    /// Estime le nombre total de commits dans le repository.
+    ///
+    /// Retourne None si l'estimation échoue.
+    pub fn estimate_total_commits(&self) -> Option<usize> {
+        // Utiliser une limite élevée pour obtenir une estimation
+        let mut revwalk = self.repo.revwalk().ok()?;
+
+        // Pousser toutes les refs
+        for reference in self.repo.references().ok()? {
+            if let Ok(reference) = reference {
+                if let Some(oid) = reference.target() {
+                    revwalk.push(oid).ok()?;
+                }
+            }
+        }
+
+        revwalk
+            .set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)
+            .ok()?;
+
+        // Compter les commits (avec une limite de sécurité)
+        let max_to_count = crate::state::MAX_TOTAL_COMMITS;
+        let count = revwalk.take(max_to_count).count();
+
+        Some(count)
     }
 
     /// Construit le graphe de commits avec filtrage.
@@ -123,7 +177,11 @@ impl GitRepo {
     }
 
     /// Retourne le log filtré des commits.
-    pub fn log_filtered(&self, max_count: usize, filter: &crate::state::GraphFilter) -> Result<Vec<CommitInfo>> {
+    pub fn log_filtered(
+        &self,
+        max_count: usize,
+        filter: &crate::state::GraphFilter,
+    ) -> Result<Vec<CommitInfo>> {
         let fetch_count = max_count * 2;
         let mut commits = self.log_all_branches(fetch_count)?;
 
@@ -149,7 +207,7 @@ impl GitRepo {
     pub fn search_commits(&self, query: &str, max_count: usize) -> Result<Vec<CommitInfo>> {
         let query_lower = query.to_lowercase();
         let commits = self.log_all_branches(max_count * 3)?;
-        
+
         let filtered: Vec<CommitInfo> = commits
             .into_iter()
             .filter(|c| {
@@ -159,7 +217,7 @@ impl GitRepo {
             })
             .take(max_count)
             .collect();
-        
+
         Ok(filtered)
     }
 

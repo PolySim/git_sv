@@ -3,7 +3,7 @@
 //! Fournit des commandes utilitaires pour scripts et usages rapides
 //! sans lancer la TUI complète.
 
-use crate::git::{GitRepo, branch::BranchInfo, commit::CommitInfo};
+use crate::git::{branch::BranchInfo, commit::CommitInfo, GitRepo};
 use crate::state::GraphFilter;
 use anyhow::Result;
 use serde::Serialize;
@@ -108,12 +108,7 @@ pub fn status(repo: &GitRepo, options: &CliOptions) -> Result<()> {
 }
 
 /// Recherche des commits.
-pub fn search(
-    repo: &GitRepo,
-    query: &str,
-    max_count: usize,
-    options: &CliOptions,
-) -> Result<()> {
+pub fn search(repo: &GitRepo, query: &str, max_count: usize, options: &CliOptions) -> Result<()> {
     let commits = repo.search_commits(query, max_count)?;
 
     match options.format {
@@ -154,11 +149,7 @@ fn print_log_human(commits: &[CommitInfo]) -> Result<()> {
             &commit.oid.to_string()[..7],
             commit.message.lines().next().unwrap_or(""),
         )?;
-        writeln!(
-            handle,
-            "  \x1b[90m{} | {}\x1b[0m",
-            commit.author, date
-        )?;
+        writeln!(handle, "  \x1b[90m{} | {}\x1b[0m", commit.author, date)?;
         writeln!(handle)?;
     }
 
@@ -172,11 +163,7 @@ fn print_branches_human(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<(
     // Branche courante
     let current_branch = local.iter().find(|b| b.is_head);
     if let Some(branch) = current_branch {
-        writeln!(
-            handle,
-            "\x1b[32m* {}\x1b[0m",
-            branch.name
-        )?;
+        writeln!(handle, "\x1b[32m* {}\x1b[0m", branch.name)?;
     }
 
     // Autres branches locales

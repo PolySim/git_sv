@@ -22,7 +22,10 @@ pub fn render(
     current_branch: &Option<String>,
     filter_active: bool,
     selected_index: usize,
-    total_commits: usize,
+    loaded_count: usize,
+    total_commits: Option<usize>,
+    can_load_more: bool,
+    is_loading_more: bool,
     area: Rect,
     state: &mut ListState,
     is_focused: bool,
@@ -53,17 +56,13 @@ pub fn render(
     };
 
     let branch_name = current_branch.as_deref().unwrap_or("???");
-    let title = if graph.len() < total_commits {
-        // Afficher le compteur filtré
-        format!(
-            " Graphe — {} ({} / {}) ",
-            branch_name,
-            graph.len(),
-            total_commits
-        )
-    } else {
-        format!(" Graphe — {} ", branch_name)
-    };
+    let title = build_title(
+        branch_name,
+        loaded_count,
+        total_commits,
+        can_load_more,
+        is_loading_more,
+    );
 
     let border_style = if is_focused {
         Style::default().fg(theme.border_active)
@@ -97,6 +96,39 @@ fn build_empty_state_line(filter_active: bool) -> Line<'static> {
             .fg(theme.text_secondary)
             .add_modifier(Modifier::ITALIC),
     ))
+}
+
+/// Construit le titre du panneau avec les informations de pagination.
+fn build_title(
+    branch_name: &str,
+    loaded_count: usize,
+    total_commits: Option<usize>,
+    can_load_more: bool,
+    is_loading_more: bool,
+) -> String {
+    if is_loading_more {
+        return format!(" Graphe — {} (chargement...) ", branch_name);
+    }
+
+    match total_commits {
+        Some(total) if total > 0 => {
+            if loaded_count >= total {
+                format!(" Graphe — {} ({} commits) ", branch_name, loaded_count)
+            } else {
+                format!(
+                    " Graphe — {} ({} / {} commits) ",
+                    branch_name, loaded_count, total
+                )
+            }
+        }
+        _ => {
+            if can_load_more {
+                format!(" Graphe — {} ({}+) ", branch_name, loaded_count)
+            } else {
+                format!(" Graphe — {} ({} commits) ", branch_name, loaded_count)
+            }
+        }
+    }
 }
 
 /// Construit les items de la liste avec le graphe enrichi.
@@ -576,6 +608,9 @@ mod tests {
                     false,
                     0,
                     graph.len(),
+                    Some(graph.len()),
+                    false,
+                    false,
                     area,
                     &mut state,
                     true,
@@ -609,6 +644,9 @@ mod tests {
                     false,
                     1, // selected_index = 1
                     graph.len(),
+                    Some(graph.len()),
+                    false,
+                    false,
                     area,
                     &mut state,
                     false,

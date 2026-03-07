@@ -58,7 +58,10 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line(&keybindings::global::VIEW_GRAPH, "Vue Graph"),
         key_line(&keybindings::global::VIEW_STAGING, "Vue Staging"),
         key_line(&keybindings::global::VIEW_BRANCHES, "Vue Branches"),
-        key_line(&keybindings::global::VIEW_CONFLICTS, "Vue Conflits (si actifs)"),
+        key_line(
+            &keybindings::global::VIEW_CONFLICTS,
+            "Vue Conflits (si actifs)",
+        ),
         Line::from(""),
         // ── Actions Git ──
         section_header("Actions Git"),
@@ -86,7 +89,10 @@ fn build_help_content() -> Vec<Line<'static>> {
         // ── Interface ──
         section_header("Interface"),
         separator(),
-        key_line(&keybindings::diff::TOGGLE_VIEW, "Toggle diff (unified/split)"),
+        key_line(
+            &keybindings::diff::TOGGLE_VIEW,
+            "Toggle diff (unified/split)",
+        ),
         key_line(&keybindings::global::REFRESH, "Rafraîchir"),
         key_line(&keybindings::global::COPY, "Copier dans le clipboard"),
         key_line_multi(&keybindings::global::QUIT, "Quitter"),

@@ -15,8 +15,12 @@ use crate::git::branch::BranchInfo;
 use crate::git::repo::{GitRepo, StatusEntry};
 use std::time::{Duration, Instant};
 
-/// Nombre maximum de commits à charger.
-pub const MAX_COMMITS: usize = 200;
+/// Nombre initial de commits à charger (affichage rapide au démarrage).
+pub const INITIAL_COMMIT_COUNT: usize = 200;
+/// Nombre de commits supplémentaires à charger à chaque "charger plus".
+pub const COMMIT_BATCH_SIZE: usize = 200;
+/// Nombre maximum total de commits (limite de sécurité).
+pub const MAX_TOTAL_COMMITS: usize = 10000;
 /// Capacité du cache LRU pour les diffs (nombre d'entrées).
 const DIFF_CACHE_CAPACITY: usize = 50;
 
