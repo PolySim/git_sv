@@ -445,6 +445,7 @@ impl ActionDispatcher {
 
     /// Gère la confirmation d'une action destructive.
     fn handle_confirm_action(&self, ctx: &mut HandlerContext) -> Result<()> {
+        use crate::git::conflict::MergeResult;
         use crate::ui::confirm_dialog::ConfirmAction;
 
         if let Some(confirm_action) = ctx.state.pending_confirmation.clone() {
@@ -534,8 +535,106 @@ impl ActionDispatcher {
                         ctx.state.mark_dirty();
                     }
                 }
-                _ => {
+                ConfirmAction::WorktreeRemove(name) => {
                     ctx.state.pending_confirmation = None;
+                    if let Err(e) =
+                        crate::git::worktree::remove_worktree(&ctx.state.repo.repo, &name)
+                    {
+                        ctx.state
+                            .set_flash_message(format!("Erreur suppression worktree: {}", e));
+                    } else {
+                        ctx.state
+                            .set_flash_message(format!("Worktree '{}' supprimé ✓", name));
+                        ctx.state.mark_dirty();
+                    }
+                }
+                ConfirmAction::CherryPick(oid) => {
+                    ctx.state.pending_confirmation = None;
+                    match crate::git::commit::cherry_pick_with_result(&ctx.state.repo.repo, oid) {
+                        Ok(MergeResult::Success) => {
+                            ctx.state.set_flash_message(format!(
+                                "Cherry-pick {} effectué ✓",
+                                format!("{:.7}", oid)
+                            ));
+                            ctx.state.mark_dirty();
+                        }
+                        Ok(MergeResult::Conflicts(conflicts)) => {
+                            ctx.state.set_flash_message(format!(
+                                "Conflits lors du cherry-pick ({} fichiers)",
+                                conflicts.len()
+                            ));
+                            // Activer la vue conflits
+                            let current = ctx
+                                .state
+                                .current_branch
+                                .clone()
+                                .unwrap_or_else(|| "HEAD".to_string());
+                            ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
+                                conflicts,
+                                format!("cherry-pick {}", format!("{:.7}", oid)),
+                                current,
+                                format!("{:.7}", oid),
+                            ));
+                            ctx.state.view_mode = ViewMode::Conflicts;
+                        }
+                        Ok(_) => {
+                            // UpToDate ou FastForward - ne devrait pas arriver en cherry-pick
+                            ctx.state
+                                .set_flash_message("Cherry-pick effectué ✓".to_string());
+                            ctx.state.mark_dirty();
+                        }
+                        Err(e) => {
+                            ctx.state
+                                .set_flash_message(format!("Erreur cherry-pick: {}", e));
+                        }
+                    }
+                }
+                ConfirmAction::MergeBranch(source, target) => {
+                    ctx.state.pending_confirmation = None;
+                    // Note: le merge devrait être fait sur la branche cible,
+                    // mais comme on est déjà dessus (par définition), on merge juste la source
+                    match crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, &source)
+                    {
+                        Ok(MergeResult::UpToDate) => {
+                            ctx.state
+                                .set_flash_message(format!("Branche '{}' est déjà à jour", source));
+                        }
+                        Ok(MergeResult::FastForward) => {
+                            ctx.state
+                                .set_flash_message(format!("Fast-forward vers '{}'", source));
+                            ctx.state.mark_dirty();
+                        }
+                        Ok(MergeResult::Success) => {
+                            ctx.state.set_flash_message(format!(
+                                "Branche '{}' mergée dans '{}' avec succès",
+                                source, target
+                            ));
+                            ctx.state.mark_dirty();
+                        }
+                        Ok(MergeResult::Conflicts(conflicts)) => {
+                            ctx.state.set_flash_message(format!(
+                                "Conflits lors du merge avec '{}' ({} fichiers)",
+                                source,
+                                conflicts.len()
+                            ));
+                            // Activer la vue conflits
+                            let current = ctx
+                                .state
+                                .current_branch
+                                .clone()
+                                .unwrap_or_else(|| "HEAD".to_string());
+                            ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
+                                conflicts,
+                                format!("merge {}", source),
+                                current,
+                                source.clone(),
+                            ));
+                            ctx.state.view_mode = ViewMode::Conflicts;
+                        }
+                        Err(e) => {
+                            ctx.state.set_flash_message(format!("Erreur merge: {}", e));
+                        }
+                    }
                 }
             }
         }
