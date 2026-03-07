@@ -45,6 +45,7 @@ pub fn render(
         BottomLeftMode::Files => {
             keys.push(("Tab", "fichiers"));
             keys.push(("Espace", "diff"));
+            keys.push(("Enter", "plein ecran"));
         }
         BottomLeftMode::Parents => keys.push(("Tab", "commit")),
     }

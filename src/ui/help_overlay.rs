@@ -47,7 +47,7 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("G / End", "Dernier commit"),
         key_line("Ctrl+D / PgDn", "Page suivante"),
         key_line("Ctrl+U / PgUp", "Page précédente"),
-        key_line("Enter", "Détail / action"),
+        key_line("Enter", "Détail / diff plein ecran"),
         key_line("Espace", "Ouvrir le panneau diff"),
         key_line("Tab", "Basculer panneaux"),
         Line::from(""),
