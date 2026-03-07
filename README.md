@@ -135,8 +135,8 @@ git_sv log --max-count 50
 | ------ | --------------------------------------- |
 | `b`    | Overlay liste des branches              |
 | `r`    | Rafraîchir                              |
-| `p`    | Push                                    |
-| `P`    | Pull                                    |
+| `P`    | Push                                    |
+| `p`    | Pull                                    |
 | `f`    | Fetch                                   |
 | `y`    | Copier le hash du commit                |
 | `/`    | Ouvrir la recherche                     |

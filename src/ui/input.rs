@@ -336,7 +336,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('c') => Some(AppAction::Git(GitAction::CommitPrompt)),
         KeyCode::Char('s') => Some(AppAction::Git(GitAction::StashPrompt)),
         KeyCode::Char('m') => Some(AppAction::Git(GitAction::MergePrompt)),
-        KeyCode::Char('b') => Some(AppAction::Git(GitAction::BranchList)),
+        KeyCode::Char('b') => Some(AppAction::Branch(BranchAction::List)),
         KeyCode::Char('P') => Some(AppAction::Git(GitAction::Push)),
         KeyCode::Char('p') => Some(AppAction::Git(GitAction::Pull)),
         KeyCode::Char('f') => Some(AppAction::Git(GitAction::Fetch)),
