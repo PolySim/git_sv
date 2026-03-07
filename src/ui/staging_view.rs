@@ -61,7 +61,7 @@ pub fn render(
         frame,
         staging_state.current_diff.as_ref(),
         staging_state.diff_scroll,
-        0, // horizontal_offset (pas de scroll horizontal en mode staging)
+        staging_state.diff_horizontal_offset,
         layout.diff_panel,
         staging_state.focus == StagingFocus::Diff,
         staging_state.diff_view_mode,
@@ -75,6 +75,7 @@ pub fn render(
         staging_state.cursor_position,
         staging_state.focus == StagingFocus::CommitMessage,
         !staging_state.staged_files().is_empty(),
+        staging_state.is_amending,
         layout.commit_message,
         theme,
     );
@@ -197,6 +198,7 @@ fn render_commit_input(
     cursor_pos: usize,
     is_focused: bool,
     has_staged_files: bool,
+    is_amending: bool,
     area: Rect,
     theme: &crate::ui::theme::Theme,
 ) {
@@ -206,14 +208,20 @@ fn render_commit_input(
         Style::default().fg(theme.border_inactive)
     };
 
-    let title = if has_staged_files {
+    let title = if is_amending {
+        " Amend commit (Enter pour valider) "
+    } else if has_staged_files {
         " Message de commit (Enter pour valider) "
     } else {
         " Message de commit (aucun fichier staged) "
     };
 
     let display_text = if message.is_empty() && !is_focused {
-        "Appuyez sur 'c' pour écrire un message de commit..."
+        if is_amending {
+            "Appuyez sur 'A' pour amender le dernier commit..."
+        } else {
+            "Appuyez sur 'c' pour écrire un message de commit..."
+        }
     } else {
         message
     };
@@ -269,13 +277,16 @@ fn render_staging_help(
 
     let help_text = match focus {
         StagingFocus::Unstaged => {
-            format!("j/k:nav  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit  P:push{}  1:graph  q:quit", abort_merge_text)
+            let amend_text = if is_merging { "" } else { "  A:amend" };
+            format!("j/k:nav  Espace:diff  s/Enter:stage  S:stash  a:stage all  d:discard  Tab:→Staged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
         }
         StagingFocus::Staged => {
-            format!("j/k:nav  u/Enter:unstage  U:unstage all  Tab:→Diff  c:commit  P:push{}  1:graph  q:quit", abort_merge_text)
+            let amend_text = if is_merging { "" } else { "  A:amend" };
+            format!("j/k:nav  Espace:diff  u/Enter:unstage  U:unstage all  Tab:→Unstaged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
         }
         StagingFocus::Diff => {
-            format!("j/k:scroll  v:vue  Tab:→Unstaged  Esc:Unstaged  c:commit  P:push{}  1:graph  q:quit", abort_merge_text)
+            let amend_text = if is_merging { "" } else { "  A:amend" };
+            format!("j/k:scroll  h/l:horizontal  v:vue  Tab/Esc:retour liste  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
         }
         StagingFocus::CommitMessage => "Enter:confirmer  Esc:annuler  ←→:curseur".to_string(),
     };

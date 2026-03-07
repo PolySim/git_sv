@@ -15,6 +15,8 @@ pub enum ResetMode {
 pub enum GitAction {
     /// Push vers le remote
     Push,
+    /// Force push vers le remote
+    ForcePush,
     /// Pull depuis le remote
     Pull,
     /// Fetch depuis le remote

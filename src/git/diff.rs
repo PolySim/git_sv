@@ -118,12 +118,7 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
             _ => continue, // Ignorer les autres types.
         };
 
-        let path = delta
-            .new_file()
-            .path()
-            .and_then(|p| p.to_str())
-            .unwrap_or("???")
-            .to_string();
+        let (path, old_path) = diff_paths(&delta);
 
         // Calculer les stats de lignes via le patch.
         let (additions, deletions) = if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
@@ -135,7 +130,7 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
         files.push(DiffFile {
             path,
             status,
-            old_path: None,
+            old_path,
             additions,
             deletions,
         });
@@ -253,11 +248,7 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
     let head_commit = repo.find_commit(head_oid)?;
     let head_tree = head_commit.tree()?;
 
-    // Options pour le diff entre HEAD et working directory.
-    let mut opts = git2::DiffOptions::new();
-    opts.pathspec(file_path);
-
-    let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut opts))?;
+    let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), None)?;
 
     // Trouver le delta correspondant au fichier.
     find_and_extract_file_diff(
@@ -278,13 +269,11 @@ fn find_and_extract_file_diff(
 ) -> Result<FileDiff> {
     // Trouver le delta correspondant au fichier.
     for (idx, delta) in diff.deltas().enumerate() {
-        let path = delta
-            .new_file()
-            .path()
-            .and_then(|p| p.to_str())
-            .unwrap_or("???");
+        let (path, old_path) = diff_paths(&delta);
+        let matches_requested_path =
+            path == file_path || old_path.as_deref().map_or(false, |old| old == file_path);
 
-        if path != file_path {
+        if !matches_requested_path {
             continue;
         }
 
@@ -305,7 +294,7 @@ fn find_and_extract_file_diff(
             };
 
         return Ok(FileDiff {
-            path: path.to_string(),
+            path,
             status,
             lines,
             additions,
@@ -316,6 +305,31 @@ fn find_and_extract_file_diff(
     Err(crate::error::GitSvError::Git(git2::Error::from_str(
         error_msg,
     )))
+}
+
+fn diff_paths(delta: &git2::DiffDelta<'_>) -> (String, Option<String>) {
+    let new_path = delta
+        .new_file()
+        .path()
+        .and_then(|p| p.to_str())
+        .map(str::to_string);
+    let old_path = delta
+        .old_file()
+        .path()
+        .and_then(|p| p.to_str())
+        .map(str::to_string);
+
+    let display_path = new_path
+        .clone()
+        .or_else(|| old_path.clone())
+        .unwrap_or_else(|| "???".to_string());
+
+    let previous_path = match (&old_path, &new_path) {
+        (Some(old), Some(new)) if old != new => Some(old.clone()),
+        _ => None,
+    };
+
+    (display_path, previous_path)
 }
 
 impl DiffStatus {
@@ -335,6 +349,14 @@ mod tests {
     use super::*;
     use crate::git::tests::test_utils::*;
     use std::path::Path;
+
+    fn delete_file(repo: &Repository, path: &str) {
+        let workdir = repo.workdir().unwrap();
+        std::fs::remove_file(workdir.join(path)).unwrap();
+        let mut index = repo.index().unwrap();
+        index.remove_path(Path::new(path)).unwrap();
+        index.write().unwrap();
+    }
 
     #[test]
     fn test_diff_status_display_char() {
@@ -448,5 +470,34 @@ mod tests {
         assert_eq!(file_diff.path, "test.txt");
         assert!(matches!(file_diff.status, DiffStatus::Modified));
         assert!(!file_diff.lines.is_empty());
+    }
+
+    #[test]
+    fn test_commit_diff_deleted_file_uses_deleted_path() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "docs/test.txt", "Hello", "Initial commit");
+        delete_file(&repo, "docs/test.txt");
+        let oid = commit(&repo, "Delete file");
+
+        let files = commit_diff(&repo, oid).unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "docs/test.txt");
+        assert!(matches!(files[0].status, DiffStatus::Deleted));
+    }
+
+    #[test]
+    fn test_working_dir_file_diff_deleted_file() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "docs/test.txt", "Hello", "Initial commit");
+        let workdir = repo.workdir().unwrap();
+        std::fs::remove_file(workdir.join("docs/test.txt")).unwrap();
+
+        let file_diff = working_dir_file_diff(&repo, "docs/test.txt").unwrap();
+
+        assert_eq!(file_diff.path, "docs/test.txt");
+        assert!(matches!(file_diff.status, DiffStatus::Deleted));
     }
 }

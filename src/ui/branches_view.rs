@@ -580,7 +580,7 @@ fn render_branches_help(
     } else {
         match section {
             BranchesSection::Branches => {
-                "Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  1:graph  2:staging"
+                "Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging"
             }
             BranchesSection::Worktrees => {
                 "Tab:section  n:new  d:delete  1:graph  2:staging"

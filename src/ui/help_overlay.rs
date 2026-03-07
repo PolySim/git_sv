@@ -48,6 +48,7 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("Ctrl+D / PgDn", "Page suivante"),
         key_line("Ctrl+U / PgUp", "Page précédente"),
         key_line("Enter", "Détail / action"),
+        key_line("Espace", "Ouvrir le panneau diff"),
         key_line("Tab", "Basculer panneaux"),
         Line::from(""),
         // ── Vues ──
@@ -66,6 +67,7 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line("m", "Merge"),
         key_line("b", "Panneau branches"),
         key_line("P", "Push"),
+        key_line("Ctrl+P", "Force push"),
         key_line("p", "Pull"),
         key_line("f", "Fetch"),
         key_line("x", "Cherry-pick"),

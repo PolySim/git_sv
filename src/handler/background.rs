@@ -34,15 +34,16 @@ impl BackgroundRunner {
     }
 
     /// Lance un push en arrière-plan.
-    pub fn spawn_push(&self, repo_path: PathBuf) {
+    pub fn spawn_push(&self, repo_path: PathBuf, force: bool) {
         let tx = self.sender.clone();
         thread::spawn(move || {
-            // Utiliser la version CLI car git2::Repository n'est pas Send
-            let result = crate::git::remote::push_current_branch_cli_path(&repo_path);
+            let result = if force {
+                crate::git::remote::force_push_current_branch_cli_path(&repo_path)
+            } else {
+                crate::git::remote::push_current_branch_cli_path(&repo_path)
+            };
             let _ = tx.send(BackgroundResult::PushComplete(
-                result
-                    .map(|_| "Push réussi ✓".to_string())
-                    .map_err(|e| e.to_string()),
+                result.map_err(|e| e.to_string()),
             ));
         });
     }

@@ -123,9 +123,9 @@ impl ActionDispatcher {
                 } else if ctx.state.view_mode == ViewMode::Graph
                     && ctx.state.focus == FocusPanel::BottomLeft
                 {
-                    // Depuis la liste de fichiers, Enter ouvre le diff en grand pour lecture.
+                    // Depuis la liste de fichiers, Espace ouvre le panneau diff sans plein écran.
                     ctx.state.focus = FocusPanel::BottomRight;
-                    ctx.state.diff_fullscreen = true;
+                    ctx.state.diff_fullscreen = false;
                 }
                 Ok(())
             }
@@ -749,7 +749,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dispatch_select_from_bottom_left_opens_fullscreen_diff() {
+    fn test_dispatch_select_from_bottom_left_opens_diff_panel() {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
         state.view_mode = ViewMode::Graph;
@@ -759,7 +759,7 @@ mod tests {
         dispatcher.dispatch(&mut state, AppAction::Select).unwrap();
 
         assert_eq!(state.focus, FocusPanel::BottomRight);
-        assert!(state.diff_fullscreen);
+        assert!(!state.diff_fullscreen);
     }
 
     #[test]

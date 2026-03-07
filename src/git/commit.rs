@@ -100,7 +100,16 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
 /// Stage un fichier dans l'index.
 pub fn stage_file(repo: &Repository, path: &str) -> Result<()> {
     let mut index = repo.index()?;
-    index.add_path(std::path::Path::new(path))?;
+
+    let status = repo
+        .status_file(std::path::Path::new(path))
+        .unwrap_or_else(|_| git2::Status::empty());
+    if status.contains(git2::Status::WT_DELETED) {
+        index.remove_path(std::path::Path::new(path))?;
+    } else {
+        index.add_path(std::path::Path::new(path))?;
+    }
+
     index.write()?;
     Ok(())
 }
@@ -327,6 +336,26 @@ mod tests {
             }
         }
         assert!(!found_staged, "Le fichier ne devrait plus être staged");
+    }
+
+    #[test]
+    fn test_stage_deleted_file() {
+        let (temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "deleted.txt", "Initial content", "Initial commit");
+
+        std::fs::remove_file(temp_dir.path().join("deleted.txt")).unwrap();
+
+        stage_file(&repo, "deleted.txt").unwrap();
+
+        let statuses = repo.statuses(None).unwrap();
+        let deleted_status = statuses
+            .iter()
+            .find(|entry| entry.path() == Some("deleted.txt"))
+            .map(|entry| entry.status())
+            .expect("Le fichier supprimé devrait apparaître dans le status");
+
+        assert!(deleted_status.contains(git2::Status::INDEX_DELETED));
     }
 
     #[test]

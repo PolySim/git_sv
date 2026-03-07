@@ -221,8 +221,11 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         );
     }
 
-    // Rendu du panneau bas-droit (contextuel selon le focus).
-    let is_detail_focused = state.focus == FocusPanel::BottomRight;
+    let is_diff_visible = matches!(
+        state.focus,
+        FocusPanel::BottomLeft | FocusPanel::BottomRight
+    );
+    let is_diff_focused = state.focus == FocusPanel::BottomRight;
 
     // Si mode diff plein écran est actif, afficher le diff sur toute la zone
     if let Some(diff_area) = layout.diff_fullscreen {
@@ -240,31 +243,26 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         state.diff_total_lines = total_lines;
     } else {
         // Mode normal
-        match state.focus {
-            FocusPanel::Graph | FocusPanel::BottomRight => {
-                // Afficher les métadonnées du commit.
-                detail_view::render(
-                    frame,
-                    &state.graph,
-                    state.selected_index,
-                    layout.bottom_right,
-                    is_detail_focused,
-                );
-            }
-            FocusPanel::BottomLeft => {
-                // Afficher le diff du fichier sélectionné.
-                let total_lines = diff_view::render(
-                    frame,
-                    state.selected_file_diff.as_ref(),
-                    state.diff_scroll_offset,
-                    state.diff_horizontal_offset,
-                    layout.bottom_right,
-                    false,
-                    state.diff_view_mode,
-                    false,
-                );
-                state.diff_total_lines = total_lines;
-            }
+        if is_diff_visible {
+            let total_lines = diff_view::render(
+                frame,
+                state.selected_file_diff.as_ref(),
+                state.diff_scroll_offset,
+                state.diff_horizontal_offset,
+                layout.bottom_right,
+                is_diff_focused,
+                state.diff_view_mode,
+                false,
+            );
+            state.diff_total_lines = total_lines;
+        } else {
+            detail_view::render(
+                frame,
+                &state.graph,
+                state.selected_index,
+                layout.bottom_right,
+                false,
+            );
         }
     }
 

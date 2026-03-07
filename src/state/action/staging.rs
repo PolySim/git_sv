@@ -24,6 +24,8 @@ pub enum StagingAction {
     DiscardAll,
     /// Changer le focus dans la vue staging
     SwitchFocus,
+    /// Ouvrir le panneau diff depuis la liste active
+    FocusDiff,
     /// Stash le fichier sélectionné
     StashSelectedFile,
     /// Stash tous les fichiers non stagés

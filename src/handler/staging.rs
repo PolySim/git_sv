@@ -24,6 +24,7 @@ impl ActionHandler for StagingHandler {
             StagingAction::ConfirmCommit => handle_confirm_commit(ctx.state),
             StagingAction::CancelCommit => handle_cancel_commit(ctx.state),
             StagingAction::SwitchFocus => handle_switch_focus(ctx.state),
+            StagingAction::FocusDiff => handle_focus_diff(ctx.state),
             StagingAction::StashSelectedFile => handle_stash_selected_file(ctx.state),
             StagingAction::StashUnstagedFiles => handle_stash_unstaged_files(ctx.state),
         }
@@ -148,13 +149,36 @@ fn handle_cancel_commit(state: &mut AppState) -> Result<()> {
 fn handle_switch_focus(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Staging {
         state.staging_state.focus = match state.staging_state.focus {
-            StagingFocus::Unstaged => StagingFocus::Staged,
-            StagingFocus::Staged => StagingFocus::Diff,
-            StagingFocus::Diff => StagingFocus::Unstaged,
+            StagingFocus::Unstaged => {
+                state.staging_state.last_file_focus = StagingFocus::Staged;
+                StagingFocus::Staged
+            }
+            StagingFocus::Staged => {
+                state.staging_state.last_file_focus = StagingFocus::Unstaged;
+                StagingFocus::Unstaged
+            }
+            StagingFocus::Diff => state.staging_state.last_file_focus,
             StagingFocus::CommitMessage => StagingFocus::Unstaged,
         };
         load_staging_diff(state);
     }
+    Ok(())
+}
+
+fn handle_focus_diff(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::Staging {
+        return Ok(());
+    }
+
+    match state.staging_state.focus {
+        StagingFocus::Unstaged | StagingFocus::Staged => {
+            state.staging_state.last_file_focus = state.staging_state.focus;
+            state.staging_state.focus = StagingFocus::Diff;
+            load_staging_diff(state);
+        }
+        _ => {}
+    }
+
     Ok(())
 }
 
@@ -226,6 +250,17 @@ pub fn load_staging_diff(state: &mut AppState) {
             .staging_state
             .staged_files()
             .get(state.staging_state.staged_selected()),
+        StagingFocus::Diff => match state.staging_state.last_file_focus {
+            StagingFocus::Unstaged => state
+                .staging_state
+                .unstaged_files()
+                .get(state.staging_state.unstaged_selected()),
+            StagingFocus::Staged => state
+                .staging_state
+                .staged_files()
+                .get(state.staging_state.staged_selected()),
+            _ => None,
+        },
         _ => None,
     };
 
@@ -242,6 +277,8 @@ pub fn load_staging_diff(state: &mut AppState) {
                 Ok(diff) => {
                     state.diff_cache.put(cache_key, diff.clone());
                     state.staging_state.current_diff = Some(diff);
+                    state.staging_state.diff_scroll = 0;
+                    state.staging_state.diff_horizontal_offset = 0;
                 }
                 Err(_) => {
                     state.staging_state.current_diff = None;
@@ -313,7 +350,34 @@ mod tests {
                 .handle(&mut ctx, StagingAction::SwitchFocus)
                 .unwrap();
         }
+        assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler
+                .handle(&mut ctx, StagingAction::SwitchFocus)
+                .unwrap();
+        }
+        assert_eq!(state.staging_state.focus, StagingFocus::Staged);
+    }
+
+    #[test]
+    fn test_focus_diff_and_return_to_previous_list() {
+        let (dir, repo) = setup_test_repo();
+        create_test_file(&dir, "file.txt", "content");
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::Unstaged;
+        refresh_staging(&mut state).unwrap();
+
+        let mut handler = StagingHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, StagingAction::FocusDiff).unwrap();
+        }
         assert_eq!(state.staging_state.focus, StagingFocus::Diff);
+        assert_eq!(state.staging_state.last_file_focus, StagingFocus::Unstaged);
 
         {
             let mut ctx = HandlerContext { state: &mut state };
@@ -322,6 +386,44 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
+    }
+
+    #[test]
+    fn test_focus_diff_keeps_selected_file_diff_visible() {
+        let (dir, repo) = setup_test_repo();
+        create_test_file(&dir, "file.txt", "initial");
+        {
+            let git_repo = git2::Repository::open(dir.path()).unwrap();
+            let mut index = git_repo.index().unwrap();
+            index.add_path(std::path::Path::new("file.txt")).unwrap();
+            index.write().unwrap();
+            let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+            let tree_oid = index.write_tree().unwrap();
+            let tree = git_repo.find_tree(tree_oid).unwrap();
+            let head = git_repo.head().unwrap();
+            let parent = git_repo.find_commit(head.target().unwrap()).unwrap();
+            git_repo
+                .commit(Some("HEAD"), &sig, &sig, "Add file", &tree, &[&parent])
+                .unwrap();
+        }
+        create_test_file(&dir, "file.txt", "modified");
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::Unstaged;
+        refresh_staging(&mut state).unwrap();
+
+        let mut handler = StagingHandler;
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, StagingAction::FocusDiff).unwrap();
+        }
+
+        assert_eq!(state.staging_state.focus, StagingFocus::Diff);
+        assert!(state.staging_state.current_diff.is_some());
+        assert_eq!(
+            state.staging_state.current_diff.as_ref().unwrap().path,
+            "file.txt"
+        );
     }
 
     #[test]

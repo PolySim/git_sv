@@ -32,6 +32,7 @@ pub fn render(
         ("s", "stash"),
         ("m", "merge"),
         ("P", "push"),
+        ("Ctrl+P", "force push"),
     ];
 
     // Ajouter abort merge si un merge est en cours.
@@ -41,7 +42,10 @@ pub fn render(
 
     // Ajouter le contexte du panneau bas.
     match bottom_left_mode {
-        BottomLeftMode::Files => keys.push(("Tab", "fichiers")),
+        BottomLeftMode::Files => {
+            keys.push(("Tab", "fichiers"));
+            keys.push(("Espace", "diff"));
+        }
         BottomLeftMode::Parents => keys.push(("Tab", "commit")),
     }
 

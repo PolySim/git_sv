@@ -131,6 +131,9 @@ impl EventHandler {
             crate::state::AppAction::Git(GitAction::Push) => {
                 self.handle_push_background()?;
             }
+            crate::state::AppAction::Git(GitAction::ForcePush) => {
+                self.handle_force_push_background()?;
+            }
             crate::state::AppAction::Git(GitAction::Pull) => {
                 self.handle_pull_background()?;
             }
@@ -154,7 +157,19 @@ impl EventHandler {
 
         // Lancer l'opération en arrière-plan
         let repo_path = std::path::PathBuf::from(&self.state.repo_path);
-        self.background.spawn_push(repo_path);
+        self.background.spawn_push(repo_path, false);
+
+        Ok(())
+    }
+
+    /// Lance un force push en arrière-plan avec spinner.
+    fn handle_force_push_background(&mut self) -> Result<()> {
+        self.state.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(
+            "Force push en cours...".to_string(),
+        ));
+
+        let repo_path = std::path::PathBuf::from(&self.state.repo_path);
+        self.background.spawn_push(repo_path, true);
 
         Ok(())
     }

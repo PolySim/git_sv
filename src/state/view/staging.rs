@@ -25,6 +25,8 @@ pub struct StagingState {
     pub staged: ListSelection<StatusEntry>,
     /// Panneau actif.
     pub focus: StagingFocus,
+    /// Dernier panneau fichier actif avant ouverture du diff.
+    pub last_file_focus: StagingFocus,
     /// Message de commit en cours.
     pub commit_message: String,
     /// Position du curseur dans le message.
@@ -37,6 +39,8 @@ pub struct StagingState {
     pub current_diff: Option<FileDiff>,
     /// Offset de scroll du diff.
     pub diff_scroll: usize,
+    /// Offset de scroll horizontal du diff.
+    pub diff_horizontal_offset: usize,
     /// Mode d'affichage du diff (unifié ou côte à côte).
     pub diff_view_mode: DiffViewMode,
 }

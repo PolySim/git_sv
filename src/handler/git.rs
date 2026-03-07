@@ -14,6 +14,7 @@ impl ActionHandler for GitHandler {
     fn handle(&mut self, ctx: &mut HandlerContext, action: GitAction) -> Result<()> {
         match action {
             GitAction::Push => handle_push(ctx.state),
+            GitAction::ForcePush => handle_force_push(ctx.state),
             GitAction::Pull => handle_pull(ctx.state),
             GitAction::Fetch => handle_fetch(ctx.state),
             GitAction::CherryPick => handle_cherry_pick(ctx.state),
@@ -39,6 +40,26 @@ fn handle_push(state: &mut AppState) -> Result<()> {
             }
             Err(e) => {
                 state.set_flash_message(format!("Erreur lors du push: {}", e));
+            }
+        },
+        Ok(false) => {
+            state.set_flash_message("Aucun remote configuré".to_string());
+        }
+        Err(e) => {
+            state.set_flash_message(format!("Erreur: {}", e));
+        }
+    }
+    Ok(())
+}
+
+fn handle_force_push(state: &mut AppState) -> Result<()> {
+    match crate::git::remote::has_remote(&state.repo.repo) {
+        Ok(true) => match crate::git::remote::force_push_current_branch(&state.repo.repo) {
+            Ok(msg) => {
+                state.set_flash_message(format!("{} ✓", msg));
+            }
+            Err(e) => {
+                state.set_flash_message(format!("Erreur lors du force push: {}", e));
             }
         },
         Ok(false) => {

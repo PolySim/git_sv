@@ -307,9 +307,26 @@ pub fn push_current_branch(repo: &Repository) -> Result<String> {
     }
 }
 
+/// Force push la branche courante vers le remote.
+pub fn force_push_current_branch(repo: &Repository) -> Result<String> {
+    force_push_current_branch_cli(repo)
+}
+
 /// Push la branche courante en utilisant git CLI (version pour threading).
 /// Prend le chemin du repository comme paramètre.
 pub fn push_current_branch_cli_path(repo_path: &std::path::Path) -> Result<String> {
+    push_current_branch_cli_path_with_options(repo_path, false)
+}
+
+/// Force push la branche courante en utilisant git CLI (version pour threading).
+pub fn force_push_current_branch_cli_path(repo_path: &std::path::Path) -> Result<String> {
+    push_current_branch_cli_path_with_options(repo_path, true)
+}
+
+fn push_current_branch_cli_path_with_options(
+    repo_path: &std::path::Path,
+    force: bool,
+) -> Result<String> {
     use std::process::Command;
 
     // Ouvrir le repo temporairement pour obtenir la branche courante
@@ -329,6 +346,10 @@ pub fn push_current_branch_cli_path(repo_path: &std::path::Path) -> Result<Strin
     let mut cmd = Command::new("git");
     cmd.arg("push");
 
+    if force {
+        cmd.arg("--force-with-lease");
+    }
+
     // Ajouter --set-upstream si pas d'upstream
     if !has_upstream {
         cmd.arg("--set-upstream");
@@ -346,12 +367,23 @@ pub fn push_current_branch_cli_path(repo_path: &std::path::Path) -> Result<Strin
     }
 
     if has_upstream {
-        Ok(format!("Push de '{}' effectué", branch_name))
+        if force {
+            Ok(format!("Force push de '{}' effectué", branch_name))
+        } else {
+            Ok(format!("Push de '{}' effectué", branch_name))
+        }
     } else {
-        Ok(format!(
-            "Push de '{}' effectué (upstream configuré)",
-            branch_name
-        ))
+        if force {
+            Ok(format!(
+                "Force push de '{}' effectué (upstream configuré)",
+                branch_name
+            ))
+        } else {
+            Ok(format!(
+                "Push de '{}' effectué (upstream configuré)",
+                branch_name
+            ))
+        }
     }
 }
 
@@ -633,6 +665,15 @@ pub fn get_default_remote(repo: &Repository) -> Result<String> {
 /// Push la branche courante en utilisant git CLI (fallback).
 /// Utilise le processus git standard qui gère correctement les alias SSH.
 pub fn push_current_branch_cli(repo: &Repository) -> Result<String> {
+    push_current_branch_cli_with_options(repo, false)
+}
+
+/// Force push la branche courante en utilisant git CLI (fallback).
+pub fn force_push_current_branch_cli(repo: &Repository) -> Result<String> {
+    push_current_branch_cli_with_options(repo, true)
+}
+
+fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Result<String> {
     use std::process::Command;
 
     // Récupérer la branche courante
@@ -655,6 +696,10 @@ pub fn push_current_branch_cli(repo: &Repository) -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.arg("push");
 
+    if force {
+        cmd.arg("--force-with-lease");
+    }
+
     // Ajouter --set-upstream si pas d'upstream
     if !has_upstream {
         cmd.arg("--set-upstream");
@@ -675,11 +720,25 @@ pub fn push_current_branch_cli(repo: &Repository) -> Result<String> {
     let remote_name = resolve_remote_name(repo, branch_name);
 
     if has_upstream {
-        Ok(format!("Push de '{}' vers {}", branch_name, remote_name))
+        if force {
+            Ok(format!(
+                "Force push de '{}' vers {}",
+                branch_name, remote_name
+            ))
+        } else {
+            Ok(format!("Push de '{}' vers {}", branch_name, remote_name))
+        }
     } else {
-        Ok(format!(
-            "Push de '{}' vers {}/{} (upstream configuré)",
-            branch_name, remote_name, branch_name
-        ))
+        if force {
+            Ok(format!(
+                "Force push de '{}' vers {}/{} (upstream configuré)",
+                branch_name, remote_name, branch_name
+            ))
+        } else {
+            Ok(format!(
+                "Push de '{}' vers {}/{} (upstream configuré)",
+                branch_name, remote_name, branch_name
+            ))
+        }
     }
 }

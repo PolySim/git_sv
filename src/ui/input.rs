@@ -193,6 +193,9 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Ctrl+R pour effacer les filtres si actifs
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
+            KeyCode::Char('p') => {
+                return Some(AppAction::Git(GitAction::ForcePush));
+            }
             KeyCode::Char('d') => {
                 if state.focus == FocusPanel::BottomRight {
                     return Some(AppAction::Navigation(NavigationAction::ScrollDiffPageDown));
@@ -267,7 +270,10 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                 KeyCode::Char('k') | KeyCode::Up => {
                     return Some(AppAction::Navigation(NavigationAction::FileUp))
                 }
-                KeyCode::Char('z') | KeyCode::Enter => return Some(AppAction::Select),
+                KeyCode::Char(' ') => return Some(AppAction::Select),
+                KeyCode::Char('z') | KeyCode::Enter => {
+                    return Some(AppAction::ToggleDiffFullscreen)
+                }
                 _ => {}
             }
         }
@@ -364,7 +370,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         // Copier le contenu du panneau actif dans le clipboard
         KeyCode::Char('y') => Some(AppAction::CopyPanelContent),
 
-        // Changer le focus entre les panneaux (Graph -> BottomLeft -> BottomRight -> Graph)
+        // Changer le focus entre les panneaux principaux (Graph <-> BottomLeft)
         KeyCode::Tab => Some(AppAction::Navigation(
             crate::state::action::NavigationAction::SwitchPanel,
         )),
@@ -505,6 +511,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('k') | KeyCode::Up => {
                 Some(AppAction::Navigation(NavigationAction::MoveUp))
             }
+            KeyCode::Char(' ') => Some(AppAction::Staging(StagingAction::FocusDiff)),
             KeyCode::Char('s') | KeyCode::Enter => {
                 Some(AppAction::Staging(StagingAction::StageFile))
             }
@@ -514,6 +521,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('D') => Some(AppAction::Staging(StagingAction::DiscardAll)),
             KeyCode::Tab => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
+            KeyCode::Char('A') if !state.is_merging => Some(AppAction::Git(GitAction::AmendCommit)),
             _ if key.modifiers.contains(KeyModifiers::CONTROL)
                 && key.code == KeyCode::Char('S') =>
             {
@@ -528,13 +536,14 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('k') | KeyCode::Up => {
                 Some(AppAction::Navigation(NavigationAction::MoveUp))
             }
+            KeyCode::Char(' ') => Some(AppAction::Staging(StagingAction::FocusDiff)),
             KeyCode::Char('u') | KeyCode::Enter => {
                 Some(AppAction::Staging(StagingAction::UnstageFile))
             }
             KeyCode::Char('U') => Some(AppAction::Staging(StagingAction::UnstageAll)),
             KeyCode::Tab => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
-            KeyCode::Char('A') => Some(AppAction::Git(GitAction::AmendCommit)),
+            KeyCode::Char('A') if !state.is_merging => Some(AppAction::Git(GitAction::AmendCommit)),
             _ => None,
         },
         StagingFocus::Diff => match key.code {
@@ -544,8 +553,15 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('k') | KeyCode::Up => {
                 Some(AppAction::Navigation(NavigationAction::ScrollDiffUp))
             }
+            KeyCode::Char('h') | KeyCode::Left => {
+                Some(AppAction::Navigation(NavigationAction::ScrollDiffLeft))
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                Some(AppAction::Navigation(NavigationAction::ScrollDiffRight))
+            }
             KeyCode::Tab | KeyCode::Esc => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
+            KeyCode::Char('A') if !state.is_merging => Some(AppAction::Git(GitAction::AmendCommit)),
             KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
             _ => None,
         },
@@ -874,5 +890,54 @@ mod tests {
         let action = map_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &state);
 
         assert_eq!(action, Some(AppAction::Filter(FilterAction::NextField)));
+    }
+
+    #[test]
+    fn test_ctrl_p_triggers_force_push() {
+        let state = create_test_state();
+
+        let action = map_key(
+            KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL),
+            &state,
+        );
+
+        assert_eq!(action, Some(AppAction::Git(GitAction::ForcePush)));
+    }
+
+    #[test]
+    fn test_bottom_left_space_opens_diff_panel() {
+        let mut state = create_test_state();
+        state.focus = FocusPanel::BottomLeft;
+
+        let action = map_key(
+            KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+            &state,
+        );
+
+        assert_eq!(action, Some(AppAction::Select));
+    }
+
+    #[test]
+    fn test_bottom_left_enter_opens_fullscreen_diff() {
+        let mut state = create_test_state();
+        state.focus = FocusPanel::BottomLeft;
+
+        let action = map_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &state);
+
+        assert_eq!(action, Some(AppAction::ToggleDiffFullscreen));
+    }
+
+    #[test]
+    fn test_staging_space_opens_diff_panel() {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::Staged;
+
+        let action = map_key(
+            KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+            &state,
+        );
+
+        assert_eq!(action, Some(AppAction::Staging(StagingAction::FocusDiff)));
     }
 }

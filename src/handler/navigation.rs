@@ -169,8 +169,8 @@ fn handle_switch_panel(state: &mut AppState) {
         ViewMode::Graph => {
             state.focus = match state.focus {
                 FocusPanel::Graph => FocusPanel::BottomLeft,
-                FocusPanel::BottomLeft => FocusPanel::BottomRight,
-                FocusPanel::BottomRight => FocusPanel::Graph,
+                FocusPanel::BottomLeft => FocusPanel::Graph,
+                FocusPanel::BottomRight => FocusPanel::BottomLeft,
             };
             // Quand on passe au panneau BottomLeft, charger le diff du fichier sélectionné
             if state.focus == FocusPanel::BottomLeft {
@@ -194,56 +194,84 @@ fn handle_switch_panel(state: &mut AppState) {
 const DIFF_VISIBLE_HEIGHT_ESTIMATE: usize = 20;
 
 fn handle_scroll_diff_up(state: &mut AppState) {
-    if state.diff_scroll_offset > 0 {
+    if state.view_mode == ViewMode::Staging {
+        if state.staging_state.diff_scroll > 0 {
+            state.staging_state.diff_scroll -= 1;
+        }
+    } else if state.diff_scroll_offset > 0 {
         state.diff_scroll_offset -= 1;
     }
 }
 
 fn handle_scroll_diff_down(state: &mut AppState) {
-    // Calculer la borne maximale du scroll
-    let max_scroll = state
-        .diff_total_lines
-        .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
-    if state.diff_scroll_offset < max_scroll {
-        state.diff_scroll_offset += 1;
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.diff_scroll += 1;
+    } else {
+        let max_scroll = state
+            .diff_total_lines
+            .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
+        if state.diff_scroll_offset < max_scroll {
+            state.diff_scroll_offset += 1;
+        }
     }
 }
 
 fn handle_scroll_diff_page_up(state: &mut AppState) {
-    // Scroller d'une demi-page (environ 10 lignes)
     let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
-    state.diff_scroll_offset = state.diff_scroll_offset.saturating_sub(page_size);
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.diff_scroll = state.staging_state.diff_scroll.saturating_sub(page_size);
+    } else {
+        state.diff_scroll_offset = state.diff_scroll_offset.saturating_sub(page_size);
+    }
 }
 
 fn handle_scroll_diff_page_down(state: &mut AppState) {
-    // Scroller d'une demi-page
     let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
-    let max_scroll = state
-        .diff_total_lines
-        .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
-    state.diff_scroll_offset = (state.diff_scroll_offset + page_size).min(max_scroll);
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.diff_scroll += page_size;
+    } else {
+        let max_scroll = state
+            .diff_total_lines
+            .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
+        state.diff_scroll_offset = (state.diff_scroll_offset + page_size).min(max_scroll);
+    }
 }
 
 fn handle_scroll_diff_top(state: &mut AppState) {
-    state.diff_scroll_offset = 0;
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.diff_scroll = 0;
+    } else {
+        state.diff_scroll_offset = 0;
+    }
 }
 
 fn handle_scroll_diff_bottom(state: &mut AppState) {
-    let max_scroll = state
-        .diff_total_lines
-        .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
-    state.diff_scroll_offset = max_scroll;
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.diff_scroll = usize::MAX / 4;
+    } else {
+        let max_scroll = state
+            .diff_total_lines
+            .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
+        state.diff_scroll_offset = max_scroll;
+    }
 }
 
 fn handle_scroll_diff_left(state: &mut AppState) {
-    if state.diff_horizontal_offset > 0 {
+    if state.view_mode == ViewMode::Staging {
+        if state.staging_state.diff_horizontal_offset > 0 {
+            state.staging_state.diff_horizontal_offset -= 1;
+        }
+    } else if state.diff_horizontal_offset > 0 {
         state.diff_horizontal_offset -= 1;
     }
 }
 
 fn handle_scroll_diff_right(state: &mut AppState) {
-    // Pas de borne max pour le scroll horizontal (on peut scroller indéfiniment)
-    state.diff_horizontal_offset += 1;
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.diff_horizontal_offset += 1;
+    } else {
+        state.diff_horizontal_offset += 1;
+    }
 }
 
 fn handle_scroll_stash_diff_up(state: &mut AppState) {
@@ -415,10 +443,13 @@ pub fn load_commit_file_diff(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::diff::DiffStatus;
     use crate::git::graph::{CommitNode, GraphRow};
     use crate::git::repo::GitRepo;
+    use crate::git::tests::test_utils::{commit, commit_file};
     use crate::state::selection::ListSelection;
     use git2::Oid;
+    use std::path::Path;
 
     /// Helper pour créer un état de test avec un graph de taille donnée.
     fn create_test_state_with_graph(size: usize) -> AppState {
@@ -593,5 +624,56 @@ mod tests {
             .unwrap();
 
         assert_eq!(state.selected_index, 19);
+    }
+
+    #[test]
+    fn test_load_commit_file_diff_for_deleted_file() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(temp_dir.path(), &opts).unwrap();
+
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        commit_file(&repo, "docs/deleted.txt", "hello", "Initial commit");
+        std::fs::remove_file(temp_dir.path().join("docs/deleted.txt")).unwrap();
+        let mut index = repo.index().unwrap();
+        index.remove_path(Path::new("docs/deleted.txt")).unwrap();
+        index.write().unwrap();
+        let deleted_commit_oid = commit(&repo, "Delete file");
+
+        let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
+        let mut state =
+            AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
+
+        state.graph = vec![GraphRow {
+            node: CommitNode {
+                oid: deleted_commit_oid,
+                message: "Delete file".to_string(),
+                author: "Test".to_string(),
+                timestamp: 0,
+                parents: vec![],
+                refs: vec![],
+                branch_name: None,
+                column: 0,
+                color_index: 0,
+            },
+            cells: vec![None],
+            connection: None,
+        }];
+        state.selected_index = 0;
+        state.commit_files = state.repo.commit_diff(deleted_commit_oid).unwrap();
+        state.file_selected_index = 0;
+
+        load_commit_file_diff(&mut state);
+
+        let selected_diff = state
+            .selected_file_diff
+            .as_ref()
+            .expect("Le diff du fichier supprimé devrait être chargé");
+        assert_eq!(selected_diff.path, "docs/deleted.txt");
+        assert!(matches!(selected_diff.status, DiffStatus::Deleted));
     }
 }
