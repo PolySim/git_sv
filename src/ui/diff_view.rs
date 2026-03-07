@@ -98,6 +98,12 @@ fn render_unified(
         }
     };
 
+    let title = if is_focused {
+        format!(">{}<", title)
+    } else {
+        title
+    };
+
     let paragraph = Paragraph::new(content)
         .scroll((scroll_offset as u16, horizontal_offset as u16))
         .block(
@@ -139,6 +145,12 @@ fn render_side_by_side(
             let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
             format!(" Diff (side-by-side){} ", fullscreen_indicator)
         }
+    };
+
+    let title = if is_focused {
+        format!(">{}<", title)
+    } else {
+        title
     };
 
     // Diviser l'aire en deux colonnes avec un séparateur au milieu.

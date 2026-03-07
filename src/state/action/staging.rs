@@ -30,4 +30,12 @@ pub enum StagingAction {
     StashSelectedFile,
     /// Stash tous les fichiers non stagés
     StashUnstagedFiles,
+    /// Donner le focus à la liste unstaged.
+    FocusUnstaged,
+    /// Donner le focus à la liste staged.
+    FocusStaged,
+    /// Sélectionner un fichier unstaged par index.
+    SelectUnstaged(usize),
+    /// Sélectionner un fichier staged par index.
+    SelectStaged(usize),
 }

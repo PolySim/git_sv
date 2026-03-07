@@ -33,6 +33,24 @@ impl ActionHandler for NavigationHandler {
             NavigationAction::FileUp => handle_file_up(ctx.state),
             NavigationAction::FileDown => handle_file_down(ctx.state),
             NavigationAction::BackToGraph => handle_back_to_graph(ctx.state),
+            NavigationAction::FocusGraph => ctx.state.focus = FocusPanel::Graph,
+            NavigationAction::FocusBottomLeft => {
+                ctx.state.focus = FocusPanel::BottomLeft;
+                load_commit_file_diff(ctx.state);
+            }
+            NavigationAction::FocusBottomRight => {
+                ctx.state.focus = FocusPanel::BottomRight;
+            }
+            NavigationAction::SelectCommit(index) => {
+                ctx.state.graph_view.select_commit(index);
+                ctx.state.focus = FocusPanel::Graph;
+                refresh_commit_file_data(ctx.state);
+            }
+            NavigationAction::SelectFile(index) => {
+                ctx.state.graph_view.select_file(index);
+                ctx.state.focus = FocusPanel::BottomLeft;
+                load_commit_file_diff(ctx.state);
+            }
         }
 
         Ok(())
@@ -284,7 +302,7 @@ fn handle_back_to_graph(state: &mut AppState) {
 
 /// Rafraîchit les données des fichiers du commit sélectionné.
 /// Cette fonction est appelée après chaque changement de commit.
-fn refresh_commit_file_data(state: &mut AppState) {
+pub fn refresh_commit_file_data(state: &mut AppState) {
     state.refresh_commit_files();
     // Charger le diff du premier fichier si disponible
     if !state.graph_view.commit_files.is_empty() {

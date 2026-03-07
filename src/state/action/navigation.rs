@@ -44,4 +44,14 @@ pub enum NavigationAction {
     FileDown,
     /// Retourner au focus Graph (depuis BottomLeft/Files)
     BackToGraph,
+    /// Donner explicitement le focus au graphe.
+    FocusGraph,
+    /// Donner explicitement le focus au panneau bas-gauche.
+    FocusBottomLeft,
+    /// Donner explicitement le focus au panneau bas-droit.
+    FocusBottomRight,
+    /// Sélectionner un commit spécifique par son index (souris)
+    SelectCommit(usize),
+    /// Sélectionner un fichier spécifique par son index (souris)
+    SelectFile(usize),
 }

@@ -15,6 +15,7 @@ pub mod graph_legend;
 pub mod graph_view;
 pub mod help_bar;
 pub mod help_overlay;
+pub mod hit_test;
 pub mod input;
 pub mod keybindings;
 pub mod layout;
@@ -36,6 +37,8 @@ use ratatui::Frame;
 
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, state: &mut AppState) {
+    state.screen_area = frame.area();
+
     // Dispatcher le rendu selon le mode de vue
     match state.view_mode {
         ViewMode::Graph => {

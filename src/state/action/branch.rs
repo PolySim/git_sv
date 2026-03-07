@@ -42,4 +42,16 @@ pub enum BranchAction {
     ConfirmInput,
     /// Annuler l'input
     CancelInput,
+    /// Sélectionner une branche locale.
+    SelectLocalBranch(usize),
+    /// Sélectionner une branche distante.
+    SelectRemoteBranch(usize),
+    /// Sélectionner un worktree.
+    SelectWorktree(usize),
+    /// Sélectionner un stash.
+    SelectStash(usize),
+    /// Donner le focus à la liste.
+    FocusList,
+    /// Donner le focus au détail.
+    FocusDetail,
 }

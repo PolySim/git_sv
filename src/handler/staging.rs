@@ -27,8 +27,50 @@ impl ActionHandler for StagingHandler {
             StagingAction::FocusDiff => handle_focus_diff(ctx.state),
             StagingAction::StashSelectedFile => handle_stash_selected_file(ctx.state),
             StagingAction::StashUnstagedFiles => handle_stash_unstaged_files(ctx.state),
+            StagingAction::FocusUnstaged => handle_focus_unstaged(ctx.state),
+            StagingAction::FocusStaged => handle_focus_staged(ctx.state),
+            StagingAction::SelectUnstaged(index) => handle_select_unstaged(ctx.state, index),
+            StagingAction::SelectStaged(index) => handle_select_staged(ctx.state, index),
         }
     }
+}
+
+fn handle_focus_unstaged(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.focus = StagingFocus::Unstaged;
+        state.staging_state.last_file_focus = StagingFocus::Unstaged;
+        load_staging_diff(state);
+    }
+    Ok(())
+}
+
+fn handle_focus_staged(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.focus = StagingFocus::Staged;
+        state.staging_state.last_file_focus = StagingFocus::Staged;
+        load_staging_diff(state);
+    }
+    Ok(())
+}
+
+fn handle_select_unstaged(state: &mut AppState, index: usize) -> Result<()> {
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.set_unstaged_selected(index);
+        state.staging_state.focus = StagingFocus::Unstaged;
+        state.staging_state.last_file_focus = StagingFocus::Unstaged;
+        load_staging_diff(state);
+    }
+    Ok(())
+}
+
+fn handle_select_staged(state: &mut AppState, index: usize) -> Result<()> {
+    if state.view_mode == ViewMode::Staging {
+        state.staging_state.set_staged_selected(index);
+        state.staging_state.focus = StagingFocus::Staged;
+        state.staging_state.last_file_focus = StagingFocus::Staged;
+        load_staging_diff(state);
+    }
+    Ok(())
 }
 
 fn handle_stage_file(state: &mut AppState) -> Result<()> {

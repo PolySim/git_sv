@@ -64,6 +64,12 @@ pub fn render(
         is_loading_more,
     );
 
+    let title = if is_focused {
+        format!(">{}<", title)
+    } else {
+        title
+    };
+
     let border_style = if is_focused {
         Style::default().fg(theme.border_active)
     } else {

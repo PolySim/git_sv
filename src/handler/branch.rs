@@ -3,7 +3,7 @@
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::BranchAction;
-use crate::state::{AppState, BranchesSection, ViewMode};
+use crate::state::{AppState, BranchesFocus, BranchesSection, SelectedBranch, ViewMode};
 
 /// Handler pour les opérations sur les branches.
 pub struct BranchHandler;
@@ -32,8 +32,62 @@ impl ActionHandler for BranchHandler {
             BranchAction::PrevSection => handle_prev_section(ctx.state),
             BranchAction::ConfirmInput => handle_confirm_input(ctx.state),
             BranchAction::CancelInput => handle_cancel_input(ctx.state),
+            BranchAction::SelectLocalBranch(index) => handle_select_local_branch(ctx.state, index),
+            BranchAction::SelectRemoteBranch(index) => {
+                handle_select_remote_branch(ctx.state, index)
+            }
+            BranchAction::SelectWorktree(index) => handle_select_worktree(ctx.state, index),
+            BranchAction::SelectStash(index) => handle_select_stash(ctx.state, index),
+            BranchAction::FocusList => handle_focus_list(ctx.state),
+            BranchAction::FocusDetail => handle_focus_detail(ctx.state),
         }
     }
+}
+
+fn handle_select_local_branch(state: &mut AppState, index: usize) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.selected_branch = Some(SelectedBranch::Local(index));
+        state.branches_view_state.focus = BranchesFocus::List;
+    }
+    Ok(())
+}
+
+fn handle_select_remote_branch(state: &mut AppState, index: usize) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.selected_branch = Some(SelectedBranch::Remote(index));
+        state.branches_view_state.focus = BranchesFocus::List;
+    }
+    Ok(())
+}
+
+fn handle_select_worktree(state: &mut AppState, index: usize) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.set_worktree_selected(index);
+        state.branches_view_state.focus = BranchesFocus::List;
+    }
+    Ok(())
+}
+
+fn handle_select_stash(state: &mut AppState, index: usize) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.set_stash_selected(index);
+        state.branches_view_state.focus = BranchesFocus::List;
+    }
+    Ok(())
+}
+
+fn handle_focus_list(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.focus = BranchesFocus::List;
+    }
+    Ok(())
+}
+
+fn handle_focus_detail(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.focus = BranchesFocus::Detail;
+    }
+    Ok(())
 }
 
 fn handle_list(state: &mut AppState) -> Result<()> {

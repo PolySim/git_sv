@@ -57,6 +57,9 @@ pub fn render(
 
     keys.extend(vec![("r", "rafraîchir"), ("?", "aide"), ("q", "quitter")]);
 
+    keys.push(("clic", "focus/select"));
+    keys.push(("molette", "scroll"));
+
     // Construire la ligne avec les touches formatées.
     let mut spans = build_help_spans(&keys, theme);
 

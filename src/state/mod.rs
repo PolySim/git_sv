@@ -13,6 +13,7 @@ pub use view::*;
 
 use crate::git::branch::BranchInfo;
 use crate::git::repo::{GitRepo, StatusEntry};
+use ratatui::layout::Rect;
 use std::time::{Duration, Instant};
 
 /// Nombre initial de commits à charger (affichage rapide au démarrage).
@@ -63,6 +64,9 @@ pub struct AppState {
 
     /// Panneau avec focus.
     pub focus: FocusPanel,
+
+    /// Dernière zone de rendu connue du terminal.
+    pub screen_area: Rect,
 
     // ═══════════════════════════════════════════════════
     // Données complémentaires
@@ -152,6 +156,7 @@ impl AppState {
             graph_view: GraphViewState::new(),
             bottom_left_mode: BottomLeftMode::Files,
             focus: FocusPanel::Graph,
+            screen_area: Rect::default(),
             status_entries: Vec::new(),
             branches: Vec::new(),
             staging_state: StagingState::new(),

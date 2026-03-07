@@ -46,6 +46,12 @@ pub fn render(
         Style::default()
     };
 
+    let title = if is_focused {
+        format!(">{}<", title)
+    } else {
+        title
+    };
+
     let list = List::new(items)
         .block(
             Block::default()
