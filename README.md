@@ -82,15 +82,59 @@ git_sv --path /chemin/vers/repo
 git_sv -p /chemin/vers/repo
 ```
 
-### Mode non-interactif (log)
+### Mode non-interactif (CLI)
+
+Le CLI permet d'inspecter rapidement un repo sans lancer la TUI, idéal pour les scripts et pipelines.
 
 ```bash
-# Afficher les 20 derniers commits
+# Afficher le log des commits
 git_sv log
-
-# Afficher les N derniers commits
 git_sv log -n 50
-git_sv log --max-count 50
+git_sv log --author "John" --message "fix"
+git_sv log --since 2024-01-01 --until 2024-12-31
+
+# Liste des branches
+git_sv branches
+
+# Status du working directory
+git_sv status
+
+# Recherche de commits
+git_sv search "fix bug"
+
+# Graphe textuel (simplifié)
+git_sv graph -n 30
+
+# Format JSON pour scripting
+git_sv log --format json -n 10
+git_sv branches --format json
+git_sv status --format json
+```
+
+**Options de filtrage pour `log` :**
+- `-n, --max-count` : Nombre de commits
+- `-a, --author` : Filtrer par auteur
+- `-m, --message` : Filtrer par message
+- `-p, --path-filter` : Filtrer par chemin modifié
+- `--since` : Date de début (YYYY-MM-DD)
+- `--until` : Date de fin (YYYY-MM-DD)
+
+**Formats de sortie :**
+- `human` (défaut) : Format lisible avec couleurs
+- `plain` : Texte simple sans couleurs
+- `json` : Format JSON pour parsing
+
+**Exemples pratiques :**
+
+```bash
+# Liste des fichiers modifiés par un auteur
+git_sv log --author "Alice" --format json | jq '.[].hash'
+
+# Vérifier rapidement le status
+git_sv status --format plain | grep "^M"
+
+# Trouver le dernier commit touchant un fichier
+git_sv log -n 1 --path-filter "src/main.rs"
 ```
 
 ---

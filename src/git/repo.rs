@@ -122,6 +122,47 @@ impl GitRepo {
         Ok(graph)
     }
 
+    /// Retourne le log filtré des commits.
+    pub fn log_filtered(&self, max_count: usize, filter: &crate::state::GraphFilter) -> Result<Vec<CommitInfo>> {
+        let fetch_count = max_count * 2;
+        let mut commits = self.log_all_branches(fetch_count)?;
+
+        // Si un filtre par chemin est actif, charger les chemins modifiés
+        if filter.path.is_some() {
+            for commit in &mut commits {
+                if commit.changed_paths.is_none() {
+                    if let Err(e) = commit.load_changed_paths(&self.repo) {
+                        eprintln!("Erreur chargement chemins pour {}: {}", commit.oid, e);
+                    }
+                }
+            }
+        }
+
+        // Appliquer le filtre
+        let filtered_commits = filter.filter_commits(&commits);
+
+        // Limiter au nombre demandé
+        Ok(filtered_commits.into_iter().take(max_count).collect())
+    }
+
+    /// Recherche des commits par message ou auteur.
+    pub fn search_commits(&self, query: &str, max_count: usize) -> Result<Vec<CommitInfo>> {
+        let query_lower = query.to_lowercase();
+        let commits = self.log_all_branches(max_count * 3)?;
+        
+        let filtered: Vec<CommitInfo> = commits
+            .into_iter()
+            .filter(|c| {
+                c.message.to_lowercase().contains(&query_lower)
+                    || c.author.to_lowercase().contains(&query_lower)
+                    || c.oid.to_string().to_lowercase().starts_with(&query_lower)
+            })
+            .take(max_count)
+            .collect();
+        
+        Ok(filtered)
+    }
+
     /// Retourne le status du working directory.
     pub fn status(&self) -> Result<Vec<StatusEntry>> {
         let mut opts = StatusOptions::new();

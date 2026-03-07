@@ -11,6 +11,7 @@ use ratatui::{
 use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
 use crate::state::SelectedBranch;
 use crate::ui::common::centered_rect;
+use crate::ui::theme::current_theme;
 use crate::utils::time::format_relative_time;
 
 /// Rend la vue complète branches/worktrees/stashes.
@@ -68,6 +69,7 @@ fn render_branches_status_bar(
     flash_message: Option<&str>,
     area: Rect,
 ) {
+    let theme = current_theme();
     let branch_name = current_branch.as_deref().unwrap_or("???");
 
     let content = if let Some(msg) = flash_message {
@@ -82,19 +84,20 @@ fn render_branches_status_bar(
     let line = Line::from(vec![Span::styled(
         content,
         Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
+            .fg(theme.status_bar_fg)
+            .bg(theme.status_bar_bg)
             .add_modifier(Modifier::BOLD),
     )]);
 
     frame.render_widget(
-        Paragraph::new(line).style(Style::default().bg(Color::Cyan)),
+        Paragraph::new(line).style(Style::default().bg(theme.status_bar_bg)),
         area,
     );
 }
 
 /// Rend les onglets de la vue branches.
 fn render_tabs(frame: &mut Frame, active: &BranchesSection, area: Rect) {
+    let theme = current_theme();
     let tabs = vec![
         ("Branches", BranchesSection::Branches),
         ("Worktrees", BranchesSection::Worktrees),
@@ -105,11 +108,11 @@ fn render_tabs(frame: &mut Frame, active: &BranchesSection, area: Rect) {
     for (label, section) in &tabs {
         let style = if section == active {
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.border_active)
                 .add_modifier(Modifier::BOLD)
                 .add_modifier(Modifier::UNDERLINED)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.text_secondary)
         };
         spans.push(Span::styled(format!(" {} ", label), style));
         spans.push(Span::raw("  "));
@@ -121,13 +124,14 @@ fn render_tabs(frame: &mut Frame, active: &BranchesSection, area: Rect) {
 
 /// Rend la liste des branches.
 fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let mut items: Vec<ListItem> = Vec::new();
 
     // Section locale.
     items.push(ListItem::new(Line::from(Span::styled(
         "Local",
         Style::default()
-            .fg(Color::Yellow)
+            .fg(theme.commit_hash)
             .add_modifier(Modifier::BOLD),
     ))));
 
@@ -135,7 +139,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         let prefix = if branch.is_head { "● " } else { "  " };
         let style = if branch.is_head {
             Style::default()
-                .fg(Color::Green)
+                .fg(theme.success)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
@@ -150,7 +154,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         if let (Some(ahead), Some(behind)) = (branch.ahead, branch.behind) {
             spans.push(Span::styled(
                 format!("  {}↑ {}↓", ahead, behind),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_secondary),
             ));
         }
 
@@ -163,14 +167,14 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         items.push(ListItem::new(Line::from(Span::styled(
             "Remote",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(theme.commit_hash)
                 .add_modifier(Modifier::BOLD),
         ))));
 
         for branch in &state.remote_branches {
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(&branch.name, Style::default().fg(Color::DarkGray)),
+                Span::styled(&branch.name, Style::default().fg(theme.text_secondary)),
             ])));
         }
     }
@@ -180,11 +184,11 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
             Block::default()
                 .title(" Branches ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.border_active)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.selection_bg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -209,6 +213,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
 /// Rend le détail d'une branche.
 fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let content = match state.selected_branch {
         Some(SelectedBranch::Remote(idx)) => {
             if let Some(branch) = state.remote_branches.get(idx) {
@@ -219,7 +224,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
                     ]),
                     Line::from(vec![
                         Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled("distante", Style::default().fg(Color::DarkGray)),
+                        Span::styled("distante", Style::default().fg(theme.text_secondary)),
                     ]),
                 ];
 
@@ -233,7 +238,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
                         Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
                         Span::styled(
                             format_relative_time(timestamp_secs),
-                            Style::default().fg(Color::Cyan),
+                            Style::default().fg(theme.primary),
                         ),
                     ]));
                 }
@@ -264,7 +269,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
                         Span::styled(
                             if branch.is_head { "oui" } else { "non" },
                             if branch.is_head {
-                                Style::default().fg(Color::Green)
+                                Style::default().fg(theme.success)
                             } else {
                                 Style::default()
                             },
@@ -292,7 +297,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
                         Span::styled("Modifiée: ", Style::default().add_modifier(Modifier::BOLD)),
                         Span::styled(
                             format_relative_time(timestamp_secs),
-                            Style::default().fg(Color::Cyan),
+                            Style::default().fg(theme.primary),
                         ),
                     ]));
                 }
@@ -335,6 +340,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
 /// Rend la liste des worktrees.
 fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let items: Vec<ListItem> = state
         .worktrees
         .iter()
@@ -343,7 +349,7 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
             let prefix = if worktree.is_main { "● " } else { "  " };
             let style = if worktree.is_main {
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(theme.success)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
@@ -362,11 +368,11 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
             Block::default()
                 .title(" Worktrees ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.border_active)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.selection_bg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -377,6 +383,7 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
 
 /// Rend le détail d'un worktree.
 fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let content = if let Some(worktree) = state.worktrees.get(state.worktree_selected()) {
         vec![
             Line::from(vec![
@@ -392,7 +399,7 @@ fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Re
                 Span::styled(
                     if worktree.is_main { "oui" } else { "non" },
                     if worktree.is_main {
-                        Style::default().fg(Color::Green)
+                        Style::default().fg(theme.success)
                     } else {
                         Style::default()
                     },
@@ -426,6 +433,7 @@ fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Re
 
 /// Rend la liste des stashes.
 fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let items: Vec<ListItem> = state
         .stashes
         .iter()
@@ -434,7 +442,7 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
             let line = Line::from(vec![
                 Span::styled(
                     format!("stash@{{{}}}: ", stash.index),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(theme.primary),
                 ),
                 Span::raw(&stash.message),
             ]);
@@ -447,11 +455,11 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
             Block::default()
                 .title(" Stashes ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(theme.border_active)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.selection_bg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -462,6 +470,7 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
 
 /// Rend le détail d'un stash.
 fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let content = if let Some(stash) = state.stashes.get(state.stash_selected()) {
         let mut lines = vec![
             Line::from(vec![
@@ -490,10 +499,10 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
 
             for (i, file) in stash.files.iter().enumerate() {
                 let status_color = match file.status_char() {
-                    'A' => Color::Green,
-                    'M' => Color::Yellow,
-                    'D' => Color::Red,
-                    'R' => Color::Cyan,
+                    'A' => theme.success,
+                    'M' => theme.warning,
+                    'D' => theme.error,
+                    'R' => theme.primary,
                     _ => Color::Reset,
                 };
                 let is_selected = i == state.stash_file_selected;
@@ -527,11 +536,11 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
                         .iter()
                         .map(|line| {
                             let styled_line = if line.starts_with("+") {
-                                Span::styled(line, Style::default().fg(Color::Green))
+                                Span::styled(line, Style::default().fg(theme.success))
                             } else if line.starts_with("-") {
-                                Span::styled(line, Style::default().fg(Color::Red))
+                                Span::styled(line, Style::default().fg(theme.error))
                             } else if line.starts_with("@") {
-                                Span::styled(line, Style::default().fg(Color::Cyan))
+                                Span::styled(line, Style::default().fg(theme.primary))
                             } else {
                                 Span::raw(line)
                             };
@@ -573,6 +582,7 @@ fn render_branches_help(
     focus: &BranchesFocus,
     area: Rect,
 ) {
+    let theme = current_theme();
     let help_text = if *focus == BranchesFocus::Input {
         "Enter:confirmer  Esc:annuler  ←→:curseur"
     } else {
@@ -591,7 +601,7 @@ fn render_branches_help(
 
     let line = Line::from(vec![Span::styled(
         format!(" {} ", help_text),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.text_secondary),
     )]);
 
     frame.render_widget(Paragraph::new(line), area);
@@ -599,6 +609,7 @@ fn render_branches_help(
 
 /// Rend l'overlay d'input.
 fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+    let theme = current_theme();
     let popup = centered_rect(50, 20, area);
     frame.render_widget(Clear, popup);
 
@@ -614,7 +625,7 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
         Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow)),
+            .border_style(Style::default().fg(theme.warning)),
     );
 
     frame.render_widget(paragraph, popup);
