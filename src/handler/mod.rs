@@ -3,8 +3,6 @@
 //! Ce module remplace event.rs par un système modulaire de handlers.
 //! Chaque handler spécialisé gère un domaine fonctionnel spécifique.
 
-#![allow(unused_imports)]
-
 pub mod background;
 pub mod branch;
 pub mod conflict;
@@ -20,7 +18,6 @@ pub mod traits;
 // Re-exports des handlers et dispatcher
 pub use background::{BackgroundResult, BackgroundRunner};
 pub use dispatcher::ActionDispatcher;
-pub use traits::{ActionHandler, HandlerContext};
 
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
@@ -238,12 +235,14 @@ impl EventHandler {
     }
 
     /// Rafraîchit les données depuis le repository.
+    /// 
+    /// Utilise l'API unifiée de GraphViewState pour garantir la cohérence de l'état.
     fn refresh(&mut self) -> Result<()> {
         // Mise à jour des données de base
         self.state.current_branch = self.state.repo.current_branch().ok();
 
         // Construire le graphe avec ou sans filtres
-        self.state.graph = if self.state.graph_filter.is_active() {
+        let new_graph = if self.state.graph_filter.is_active() {
             self.state
                 .repo
                 .build_graph_filtered(crate::state::MAX_COMMITS, &self.state.graph_filter)
@@ -257,43 +256,21 @@ impl EventHandler {
 
         self.state.status_entries = self.state.repo.status().unwrap_or_default();
 
-        // Synchroniser graph_view.rows avec le graphe reconstruit
-        self.state
-            .graph_view
-            .rows
-            .set_items(self.state.graph.clone());
+        // Utiliser la méthode unifiée pour remplacer le graphe
+        // Cela gère automatiquement:
+        // - La conservation de la sélection si le commit existe encore
+        // - Le clamping si le graphe est plus petit
+        // - La synchronisation de l'état visuel
+        self.state.replace_graph(new_graph);
 
-        // Synchronisation de la sélection - ne pas dépasser les bornes
-        if self.state.selected_index >= self.state.graph.len() && !self.state.graph.is_empty() {
-            self.state.selected_index = self.state.graph.len() - 1;
-        }
-        if self.state.graph.is_empty() {
-            self.state.selected_index = 0;
-        }
+        // Rafraîchir les fichiers du commit sélectionné
+        self.state.refresh_commit_files();
 
-        // Synchroniser graph_view avec la nouvelle sélection
-        self.state.graph_view.rows.select(self.state.selected_index);
-
-        // Synchroniser graph_state (ListState de ratatui) avec la sélection
-        // Le graphe contient 2 items par commit (ligne + connexion)
-        self.state
-            .graph_state
-            .select(Some(self.state.selected_index * 2));
-
-        // Clamper file_selected_index pour éviter les index hors limites
-        if self.state.file_selected_index >= self.state.commit_files.len() {
-            self.state.file_selected_index = self.state.commit_files.len().saturating_sub(1);
-        }
-
-        // Mise à jour des fichiers du commit sélectionné
-        if let Some(row) = self.state.graph.get(self.state.selected_index) {
-            self.state.commit_files = self
-                .state
-                .repo
-                .commit_diff(row.node.oid)
-                .unwrap_or_default();
+        // Charger le diff du premier fichier si disponible
+        if !self.state.graph_view.commit_files.is_empty() {
+            navigation::load_commit_file_diff(&mut self.state);
         } else {
-            self.state.commit_files.clear();
+            self.state.graph_view.clear_file_diff();
         }
 
         // Mise à jour du staging
@@ -313,7 +290,7 @@ impl EventHandler {
                 .collect(),
         );
 
-        // Charger les données de la vue branches
+        // Charger les données de la vue branches si nécessaire
         if self.state.view_mode == ViewMode::Branches {
             match crate::git::branch::list_all_branches(&self.state.repo.repo) {
                 Ok((local, remote)) => {
@@ -333,22 +310,16 @@ impl EventHandler {
             }
 
             // Charger les worktrees
-            match crate::git::worktree::list_worktrees(&self.state.repo.repo) {
-                Ok(worktrees) => {
-                    self.state
-                        .branches_view_state
-                        .worktrees
-                        .set_items(worktrees);
-                }
-                Err(_) => {}
+            if let Ok(worktrees) = crate::git::worktree::list_worktrees(&self.state.repo.repo) {
+                self.state
+                    .branches_view_state
+                    .worktrees
+                    .set_items(worktrees);
             }
 
             // Charger les stashes
-            match crate::git::stash::list_stashes(&mut self.state.repo.repo) {
-                Ok(stashes) => {
-                    self.state.branches_view_state.stashes.set_items(stashes);
-                }
-                Err(_) => {}
+            if let Ok(stashes) = crate::git::stash::list_stashes(&mut self.state.repo.repo) {
+                self.state.branches_view_state.stashes.set_items(stashes);
             }
         }
 

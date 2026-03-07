@@ -15,7 +15,7 @@ pub use branch::BranchAction;
 pub use conflict::ConflictAction;
 pub use edit::EditAction;
 pub use filter::FilterAction;
-pub use git::{GitAction, ResetMode};
+pub use git::GitAction;
 pub use navigation::NavigationAction;
 pub use search::SearchAction;
 pub use staging::StagingAction;

@@ -4,10 +4,6 @@
 //! modulaire où chaque type d'action est géré par un handler spécialisé.
 
 use crate::error::Result;
-use crate::state::action::{
-    BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
-    SearchAction, StagingAction,
-};
 use crate::state::{AppAction, AppState, FocusPanel, ViewMode};
 
 use super::branch::BranchHandler;
@@ -111,13 +107,9 @@ impl ActionDispatcher {
                 if ctx.state.view_mode == ViewMode::Graph && ctx.state.focus == FocusPanel::Graph {
                     ctx.state.focus = FocusPanel::BottomLeft;
                     // Réinitialiser la sélection de fichier pour commencer au début de la liste
-                    ctx.state.file_selected_index = 0;
                     ctx.state.graph_view.file_selected_index = 0;
-                    // S'assurer que les fichiers du commit actuel sont chargés
-                    if let Some(row) = ctx.state.graph.get(ctx.state.selected_index) {
-                        ctx.state.commit_files =
-                            ctx.state.repo.commit_diff(row.node.oid).unwrap_or_default();
-                    }
+                    // Rafraîchir les fichiers du commit actuel
+                    ctx.state.refresh_commit_files();
                     // Charger le diff du premier fichier
                     crate::handler::navigation::load_commit_file_diff(ctx.state);
                 } else if ctx.state.view_mode == ViewMode::Graph
@@ -125,7 +117,7 @@ impl ActionDispatcher {
                 {
                     // Depuis la liste de fichiers, Espace ouvre le panneau diff sans plein écran.
                     ctx.state.focus = FocusPanel::BottomRight;
-                    ctx.state.diff_fullscreen = false;
+                    ctx.state.graph_view.diff_fullscreen = false;
                 }
                 Ok(())
             }
@@ -207,7 +199,7 @@ impl ActionDispatcher {
 
             // Toggle diff view mode
             AppAction::ToggleDiffViewMode => {
-                ctx.state.diff_view_mode.toggle();
+                ctx.state.graph_view.toggle_diff_view_mode();
                 // Aussi toggle le mode dans la vue staging si on y est.
                 ctx.state.staging_state.diff_view_mode.toggle();
                 Ok(())
@@ -215,15 +207,14 @@ impl ActionDispatcher {
 
             // Toggle diff fullscreen mode
             AppAction::ToggleDiffFullscreen => {
-                ctx.state.diff_fullscreen = !ctx.state.diff_fullscreen;
-                if ctx.state.diff_fullscreen {
+                let is_fullscreen = ctx.state.graph_view.diff_fullscreen;
+                ctx.state.graph_view.diff_fullscreen = !is_fullscreen;
+                if ctx.state.graph_view.diff_fullscreen {
                     ctx.state.focus = FocusPanel::BottomRight;
                 } else if ctx.state.view_mode == ViewMode::Graph {
                     ctx.state.focus = FocusPanel::BottomLeft;
-                }
-                // Réinitialiser le scroll horizontal quand on bascule
-                if !ctx.state.diff_fullscreen {
-                    ctx.state.diff_horizontal_offset = 0;
+                    // Réinitialiser le scroll horizontal quand on sort du plein écran
+                    ctx.state.graph_view.diff_horizontal_offset = 0;
                 }
                 Ok(())
             }
@@ -242,9 +233,9 @@ impl ActionDispatcher {
         match ctx.state.view_mode {
             ViewMode::Graph => {
                 // Graph view: copier hash + message du commit sélectionné
-                if let Some(row) = ctx.state.graph.get(ctx.state.selected_index) {
-                    let oid_str = row.node.oid.to_string();
-                    let message = row.node.message.lines().next().unwrap_or("");
+                if let Some(commit) = ctx.state.selected_commit() {
+                    let oid_str = commit.oid.to_string();
+                    let message = commit.message.lines().next().unwrap_or("");
                     text_to_copy = format!("{} {}", oid_str, message);
                 } else {
                     return Ok(());
@@ -253,11 +244,13 @@ impl ActionDispatcher {
                 // Ajouter le contenu du panneau BottomRight si focus est sur BottomLeft ou BottomRight
                 match ctx.state.focus {
                     FocusPanel::BottomLeft => {
-                        if let Some(file) =
-                            ctx.state.commit_files.get(ctx.state.file_selected_index)
+                        if let Some(file) = ctx.state
+                            .graph_view
+                            .commit_files
+                            .get(ctx.state.graph_view.file_selected_index)
                         {
                             text_to_copy = file.path.clone();
-                            if let Some(ref diff) = ctx.state.selected_file_diff {
+                            if let Some(ref diff) = ctx.state.graph_view.selected_file_diff {
                                 let diff_text = diff
                                     .lines
                                     .iter()
@@ -269,7 +262,7 @@ impl ActionDispatcher {
                         }
                     }
                     FocusPanel::BottomRight => {
-                        if let Some(ref diff) = ctx.state.selected_file_diff {
+                        if let Some(ref diff) = ctx.state.graph_view.selected_file_diff {
                             text_to_copy = diff
                                 .lines
                                 .iter()
@@ -650,14 +643,33 @@ mod tests {
     fn test_dispatch_navigation_action() {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
-        state.selected_index = 5;
+        // Créer un graphe de test avec quelques commits
+        state.graph_view.rows = crate::state::selection::ListSelection::with_items(
+            (0..5).map(|i| crate::git::graph::GraphRow {
+                node: crate::git::graph::CommitNode {
+                    oid: git2::Oid::from_bytes(&[i as u8; 20]).unwrap_or(git2::Oid::zero()),
+                    message: format!("Commit {}", i),
+                    author: "Test".to_string(),
+                    timestamp: i as i64 * 1000,
+                    parents: vec![],
+                    refs: vec![],
+                    branch_name: None,
+                    column: 0,
+                    color_index: 0,
+                },
+                cells: vec![None],
+                connection: None,
+            }).collect()
+        );
+        state.graph_view.rows.select(3);
+
         let mut dispatcher = ActionDispatcher::new();
 
         dispatcher
             .dispatch(&mut state, AppAction::Navigation(NavigationAction::GoTop))
             .unwrap();
 
-        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.graph_view.selected_index(), 0);
     }
 
     #[test]
@@ -710,13 +722,13 @@ mod tests {
     fn test_dispatch_none_action() {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
-        let initial_state = state.selected_index;
+        let initial_index = state.graph_view.selected_index();
         let mut dispatcher = ActionDispatcher::new();
 
         dispatcher.dispatch(&mut state, AppAction::None).unwrap();
 
         // Aucun changement d'état
-        assert_eq!(state.selected_index, initial_state);
+        assert_eq!(state.graph_view.selected_index(), initial_index);
     }
 
     #[test]
@@ -759,7 +771,7 @@ mod tests {
         dispatcher.dispatch(&mut state, AppAction::Select).unwrap();
 
         assert_eq!(state.focus, FocusPanel::BottomRight);
-        assert!(!state.diff_fullscreen);
+        assert!(!state.graph_view.diff_fullscreen);
     }
 
     #[test]
@@ -773,13 +785,13 @@ mod tests {
         dispatcher
             .dispatch(&mut state, AppAction::ToggleDiffFullscreen)
             .unwrap();
-        assert!(state.diff_fullscreen);
+        assert!(state.graph_view.diff_fullscreen);
         assert_eq!(state.focus, FocusPanel::BottomRight);
 
         dispatcher
             .dispatch(&mut state, AppAction::ToggleDiffFullscreen)
             .unwrap();
-        assert!(!state.diff_fullscreen);
+        assert!(!state.graph_view.diff_fullscreen);
         assert_eq!(state.focus, FocusPanel::BottomLeft);
     }
 }

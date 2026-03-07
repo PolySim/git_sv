@@ -15,24 +15,32 @@ pub struct App {
 
 impl App {
     /// Crée une nouvelle instance de l'application.
+    ///
+    /// Utilise l'API unifiée de GraphViewState pour initialiser l'état
+    /// de manière cohérente avec le rafraîchissement.
     pub fn new(repo: GitRepo, repo_path: String) -> Result<Self> {
         let mut state = crate::state::AppState::new(repo, repo_path)?;
 
-        // Rafraîchir l'état initial.
+        // Rafraîchir l'état initial avec l'API unifiée
         state.current_branch = state.repo.current_branch().ok();
-        state.graph = state
+        
+        // Construire le graphe initial et l'assigner via l'API unifiée
+        let initial_graph = state
             .repo
             .build_graph(crate::state::MAX_COMMITS)
             .unwrap_or_default();
-        state.status_entries = state.repo.status().unwrap_or_default();
-
-        // Synchroniser graph_view.rows avec le graphe initial
-        state.graph_view.rows.set_items(state.graph.clone());
-
-        // Charger les données initiales.
-        if let Some(row) = state.graph.get(state.selected_index) {
-            state.commit_files = state.repo.commit_diff(row.node.oid).unwrap_or_default();
+        state.replace_graph(initial_graph);
+        
+        // Charger les fichiers du commit sélectionné
+        state.refresh_commit_files();
+        
+        // Charger le diff du premier fichier si disponible
+        if !state.graph_view.commit_files.is_empty() {
+            crate::handler::navigation::load_commit_file_diff(&mut state);
         }
+
+        // Statut du working directory
+        state.status_entries = state.repo.status().unwrap_or_default();
 
         // Rafraîchir l'état de staging.
         let all_entries = state.repo.status().unwrap_or_default();

@@ -47,11 +47,10 @@ fn handle_move_up(state: &mut AppState) {
                     state.branch_selected -= 1;
                     state.dirty = true;
                 }
-            } else if state.selected_index > 0 {
-                let new_index = state.selected_index - 1;
-                state.graph_view.rows.select(new_index);
-                state.sync_graph_selection();
-                state.sync_legacy_selection();
+            } else {
+                state.graph_view.select_previous();
+                // Charger les fichiers du nouveau commit sélectionné
+                refresh_commit_file_data(state);
             }
         }
         ViewMode::Staging => {
@@ -75,11 +74,10 @@ fn handle_move_down(state: &mut AppState) {
                     state.branch_selected += 1;
                     state.dirty = true;
                 }
-            } else if state.selected_index + 1 < state.graph.len() {
-                let new_index = state.selected_index + 1;
-                state.graph_view.rows.select(new_index);
-                state.sync_graph_selection();
-                state.sync_legacy_selection();
+            } else if !state.graph_view.is_empty() {
+                state.graph_view.select_next();
+                // Charger les fichiers du nouveau commit sélectionné
+                refresh_commit_file_data(state);
             }
         }
         ViewMode::Staging => {
@@ -102,12 +100,10 @@ fn handle_page_up(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel && !state.graph.is_empty() {
-                let page_size = 10;
-                let new_index = state.selected_index.saturating_sub(page_size);
-                state.graph_view.rows.select(new_index);
-                state.sync_graph_selection();
-                state.sync_legacy_selection();
+            if !state.show_branch_panel && !state.graph_view.is_empty() {
+                state.graph_view.page_up();
+                // Charger les fichiers du nouveau commit sélectionné
+                refresh_commit_file_data(state);
             }
         }
     }
@@ -120,12 +116,10 @@ fn handle_page_down(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel && !state.graph.is_empty() {
-                let page_size = 10;
-                let new_index = (state.selected_index + page_size).min(state.graph.len() - 1);
-                state.graph_view.rows.select(new_index);
-                state.sync_graph_selection();
-                state.sync_legacy_selection();
+            if !state.show_branch_panel && !state.graph_view.is_empty() {
+                state.graph_view.page_down();
+                // Charger les fichiers du nouveau commit sélectionné
+                refresh_commit_file_data(state);
             }
         }
     }
@@ -139,9 +133,9 @@ fn handle_go_top(state: &mut AppState) {
         }
         _ => {
             if !state.show_branch_panel {
-                state.graph_view.rows.select(0);
-                state.sync_graph_selection();
-                state.sync_legacy_selection();
+                state.graph_view.go_top();
+                // Charger les fichiers du nouveau commit sélectionné
+                refresh_commit_file_data(state);
             }
         }
     }
@@ -154,11 +148,10 @@ fn handle_go_bottom(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel && !state.graph.is_empty() {
-                let new_index = state.graph.len() - 1;
-                state.graph_view.rows.select(new_index);
-                state.sync_graph_selection();
-                state.sync_legacy_selection();
+            if !state.show_branch_panel && !state.graph_view.is_empty() {
+                state.graph_view.go_bottom();
+                // Charger les fichiers du nouveau commit sélectionné
+                refresh_commit_file_data(state);
             }
         }
     }
@@ -190,7 +183,6 @@ fn handle_switch_panel(state: &mut AppState) {
 }
 
 /// Hauteur visible estimée du panneau diff (en lignes).
-/// Cette valeur est approximative et sera ajustée par le rendu réel.
 const DIFF_VISIBLE_HEIGHT_ESTIMATE: usize = 20;
 
 fn handle_scroll_diff_up(state: &mut AppState) {
@@ -198,8 +190,8 @@ fn handle_scroll_diff_up(state: &mut AppState) {
         if state.staging_state.diff_scroll > 0 {
             state.staging_state.diff_scroll -= 1;
         }
-    } else if state.diff_scroll_offset > 0 {
-        state.diff_scroll_offset -= 1;
+    } else {
+        state.graph_view.scroll_diff_up();
     }
 }
 
@@ -207,33 +199,25 @@ fn handle_scroll_diff_down(state: &mut AppState) {
     if state.view_mode == ViewMode::Staging {
         state.staging_state.diff_scroll += 1;
     } else {
-        let max_scroll = state
-            .diff_total_lines
-            .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
-        if state.diff_scroll_offset < max_scroll {
-            state.diff_scroll_offset += 1;
-        }
+        state.graph_view.scroll_diff_down();
     }
 }
 
 fn handle_scroll_diff_page_up(state: &mut AppState) {
-    let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
     if state.view_mode == ViewMode::Staging {
+        let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
         state.staging_state.diff_scroll = state.staging_state.diff_scroll.saturating_sub(page_size);
     } else {
-        state.diff_scroll_offset = state.diff_scroll_offset.saturating_sub(page_size);
+        state.graph_view.scroll_diff_page_up();
     }
 }
 
 fn handle_scroll_diff_page_down(state: &mut AppState) {
-    let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
     if state.view_mode == ViewMode::Staging {
+        let page_size = DIFF_VISIBLE_HEIGHT_ESTIMATE / 2;
         state.staging_state.diff_scroll += page_size;
     } else {
-        let max_scroll = state
-            .diff_total_lines
-            .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
-        state.diff_scroll_offset = (state.diff_scroll_offset + page_size).min(max_scroll);
+        state.graph_view.scroll_diff_page_down();
     }
 }
 
@@ -241,7 +225,7 @@ fn handle_scroll_diff_top(state: &mut AppState) {
     if state.view_mode == ViewMode::Staging {
         state.staging_state.diff_scroll = 0;
     } else {
-        state.diff_scroll_offset = 0;
+        state.graph_view.scroll_diff_top();
     }
 }
 
@@ -249,10 +233,7 @@ fn handle_scroll_diff_bottom(state: &mut AppState) {
     if state.view_mode == ViewMode::Staging {
         state.staging_state.diff_scroll = usize::MAX / 4;
     } else {
-        let max_scroll = state
-            .diff_total_lines
-            .saturating_sub(DIFF_VISIBLE_HEIGHT_ESTIMATE);
-        state.diff_scroll_offset = max_scroll;
+        state.graph_view.scroll_diff_bottom();
     }
 }
 
@@ -261,8 +242,8 @@ fn handle_scroll_diff_left(state: &mut AppState) {
         if state.staging_state.diff_horizontal_offset > 0 {
             state.staging_state.diff_horizontal_offset -= 1;
         }
-    } else if state.diff_horizontal_offset > 0 {
-        state.diff_horizontal_offset -= 1;
+    } else {
+        state.graph_view.scroll_diff_left();
     }
 }
 
@@ -270,7 +251,7 @@ fn handle_scroll_diff_right(state: &mut AppState) {
     if state.view_mode == ViewMode::Staging {
         state.staging_state.diff_horizontal_offset += 1;
     } else {
-        state.diff_horizontal_offset += 1;
+        state.graph_view.scroll_diff_right();
     }
 }
 
@@ -285,27 +266,31 @@ fn handle_scroll_stash_diff_down(state: &mut AppState) {
 }
 
 fn handle_file_up(state: &mut AppState) {
-    if state.file_selected_index > 0 {
-        state.file_selected_index -= 1;
-        state.graph_view.file_selected_index = state.file_selected_index;
-        // Charger le diff du fichier sélectionné
-        load_commit_file_diff(state);
-    }
+    state.graph_view.select_previous_file();
+    load_commit_file_diff(state);
 }
 
 fn handle_file_down(state: &mut AppState) {
-    if state.file_selected_index + 1 < state.commit_files.len() {
-        state.file_selected_index += 1;
-        state.graph_view.file_selected_index = state.file_selected_index;
-        // Charger le diff du fichier sélectionné
-        load_commit_file_diff(state);
-    }
+    state.graph_view.select_next_file();
+    load_commit_file_diff(state);
 }
 
 fn handle_back_to_graph(state: &mut AppState) {
     // Retourner au focus Graph (utilisé par Esc depuis BottomLeft/Files)
     if state.view_mode == ViewMode::Graph {
         state.focus = FocusPanel::Graph;
+    }
+}
+
+/// Rafraîchit les données des fichiers du commit sélectionné.
+/// Cette fonction est appelée après chaque changement de commit.
+fn refresh_commit_file_data(state: &mut AppState) {
+    state.refresh_commit_files();
+    // Charger le diff du premier fichier si disponible
+    if !state.graph_view.commit_files.is_empty() {
+        load_commit_file_diff(state);
+    } else {
+        state.graph_view.clear_file_diff();
     }
 }
 
@@ -426,18 +411,15 @@ fn handle_blame_navigation(state: &mut AppState, delta: i32) {
 
 /// Charge le diff pour le fichier sélectionné dans le commit courant.
 pub fn load_commit_file_diff(state: &mut AppState) {
-    if let Some(row) = state.graph.get(state.selected_index) {
-        if let Some(file) = state.commit_files.get(state.file_selected_index) {
-            state.selected_file_diff = state.repo.file_diff(row.node.oid, &file.path).ok();
-            // Réinitialiser tous les offsets de scroll
-            state.diff_scroll_offset = 0;
-            state.diff_horizontal_offset = 0;
-            state.diff_total_lines = 0;
-            state.graph_view.diff_scroll_offset = 0;
+    if let Some(commit) = state.selected_commit() {
+        let file_index = state.graph_view.file_selected_index;
+        if let Some(file) = state.graph_view.commit_files.get(file_index) {
+            let diff = state.repo.file_diff(commit.oid, &file.path).ok();
+            state.graph_view.set_file_diff(diff);
             return;
         }
     }
-    state.selected_file_diff = None;
+    state.graph_view.clear_file_diff();
 }
 
 #[cfg(test)]
@@ -451,33 +433,8 @@ mod tests {
     use git2::Oid;
     use std::path::Path;
 
-    /// Helper pour créer un état de test avec un graph de taille donnée.
-    fn create_test_state_with_graph(size: usize) -> AppState {
-        // Créer un repo temporaire
-        let temp_dir = tempfile::TempDir::new().unwrap();
-        let mut opts = git2::RepositoryInitOptions::new();
-        opts.initial_head("main");
-        let repo = git2::Repository::init_opts(temp_dir.path(), &opts).unwrap();
-
-        // Configurer git
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test").unwrap();
-        config.set_str("user.email", "test@test.com").unwrap();
-
-        // Créer un commit initial
-        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
-        let mut index = repo.index().unwrap();
-        let tree_oid = index.write_tree().unwrap();
-        let tree = repo.find_tree(tree_oid).unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
-            .unwrap();
-
-        let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
-        let mut state =
-            AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
-
-        // Créer un graph de test
-        let graph: Vec<GraphRow> = (0..size)
+    fn create_test_graph(size: usize) -> Vec<GraphRow> {
+        (0..size)
             .map(|i| GraphRow {
                 node: CommitNode {
                     oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::zero()),
@@ -493,13 +450,34 @@ mod tests {
                 cells: vec![None],
                 connection: None,
             })
-            .collect();
+            .collect()
+    }
 
-        state.graph = graph;
-        state.graph_view.rows = ListSelection::with_items(state.graph.clone());
+    /// Helper pour créer un état de test avec un graph de taille donnée.
+    fn create_test_state_with_graph(size: usize) -> AppState {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(temp_dir.path(), &opts).unwrap();
+
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
+        let mut state =
+            AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
+
+        let graph = create_test_graph(size);
+        state.graph_view.rows = ListSelection::with_items(graph);
         state.graph_view.rows.select(0);
-        state.selected_index = 0;
-        state.graph_state.select(Some(0));
 
         state
     }
@@ -507,123 +485,147 @@ mod tests {
     #[test]
     fn test_move_up_in_graph_view() {
         let mut state = create_test_state_with_graph(5);
-        state.graph_view.rows.select(3); // Position initiale
-        state.selected_index = 3;
+        state.graph_view.rows.select(3);
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
         handler.handle(&mut ctx, NavigationAction::MoveUp).unwrap();
 
-        assert_eq!(state.selected_index, 2);
+        assert_eq!(state.graph_view.selected_index(), 2);
     }
 
     #[test]
     fn test_move_up_at_top_stays_at_top() {
         let mut state = create_test_state_with_graph(5);
         state.graph_view.rows.select(0);
-        state.selected_index = 0;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
         handler.handle(&mut ctx, NavigationAction::MoveUp).unwrap();
 
-        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.graph_view.selected_index(), 0);
     }
 
     #[test]
     fn test_move_down_in_graph_view() {
         let mut state = create_test_state_with_graph(5);
         state.graph_view.rows.select(2);
-        state.selected_index = 2;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler
-            .handle(&mut ctx, NavigationAction::MoveDown)
-            .unwrap();
+        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
 
-        assert_eq!(state.selected_index, 3);
+        assert_eq!(state.graph_view.selected_index(), 3);
     }
 
     #[test]
     fn test_move_down_at_bottom_stays_at_bottom() {
         let mut state = create_test_state_with_graph(5);
-        state.graph_view.rows.select(4); // Dernier élément
-        state.selected_index = 4;
+        state.graph_view.rows.select(4);
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler
-            .handle(&mut ctx, NavigationAction::MoveDown)
-            .unwrap();
+        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
 
-        assert_eq!(state.selected_index, 4);
+        assert_eq!(state.graph_view.selected_index(), 4);
     }
 
     #[test]
     fn test_page_up() {
         let mut state = create_test_state_with_graph(20);
-        state.graph_view.rows.set_visible_height(5);
+        // La taille de page est basée sur visible_height (10 par défaut)
         state.graph_view.rows.select(15);
-        state.selected_index = 15;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
         handler.handle(&mut ctx, NavigationAction::PageUp).unwrap();
 
-        assert_eq!(state.selected_index, 5); // 15 - 10 = 5
+        // page_up: 15 - 10 (visible_height) = 5
+        assert_eq!(state.graph_view.selected_index(), 5);
     }
 
     #[test]
     fn test_page_down() {
         let mut state = create_test_state_with_graph(20);
-        state.graph_view.rows.set_visible_height(5);
+        // La taille de page est basée sur visible_height (10 par défaut)
         state.graph_view.rows.select(5);
-        state.selected_index = 5;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler
-            .handle(&mut ctx, NavigationAction::PageDown)
-            .unwrap();
+        handler.handle(&mut ctx, NavigationAction::PageDown).unwrap();
 
-        assert_eq!(state.selected_index, 15); // 5 + 10 = 15
+        // page_down: 5 + 10 (visible_height) = 15
+        assert_eq!(state.graph_view.selected_index(), 15);
     }
 
     #[test]
     fn test_go_top() {
         let mut state = create_test_state_with_graph(20);
         state.graph_view.rows.select(15);
-        state.selected_index = 15;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
         handler.handle(&mut ctx, NavigationAction::GoTop).unwrap();
 
-        assert_eq!(state.selected_index, 0);
+        assert_eq!(state.graph_view.selected_index(), 0);
     }
 
     #[test]
     fn test_go_bottom() {
         let mut state = create_test_state_with_graph(20);
         state.graph_view.rows.select(5);
-        state.selected_index = 5;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler
-            .handle(&mut ctx, NavigationAction::GoBottom)
-            .unwrap();
+        handler.handle(&mut ctx, NavigationAction::GoBottom).unwrap();
 
-        assert_eq!(state.selected_index, 19);
+        assert_eq!(state.graph_view.selected_index(), 19);
+    }
+
+    #[test]
+    fn test_file_navigation() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.commit_files = vec![
+            crate::git::diff::DiffFile {
+                path: "a.txt".to_string(),
+                old_path: None,
+                status: DiffStatus::Added,
+                additions: 1,
+                deletions: 0,
+            },
+            crate::git::diff::DiffFile {
+                path: "b.txt".to_string(),
+                old_path: None,
+                status: DiffStatus::Modified,
+                additions: 0,
+                deletions: 1,
+            },
+        ];
+        state.graph_view.file_selected_index = 0;
+
+        let mut handler = NavigationHandler;
+        
+        // Test FileDown
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, NavigationAction::FileDown).unwrap();
+        }
+        assert_eq!(state.graph_view.file_selected_index, 1);
+
+        // Test FileUp
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, NavigationAction::FileUp).unwrap();
+        }
+        assert_eq!(state.graph_view.file_selected_index, 0);
     }
 
     #[test]
@@ -648,7 +650,7 @@ mod tests {
         let mut state =
             AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
 
-        state.graph = vec![GraphRow {
+        state.graph_view.rows = ListSelection::with_items(vec![GraphRow {
             node: CommitNode {
                 oid: deleted_commit_oid,
                 message: "Delete file".to_string(),
@@ -662,14 +664,14 @@ mod tests {
             },
             cells: vec![None],
             connection: None,
-        }];
-        state.selected_index = 0;
-        state.commit_files = state.repo.commit_diff(deleted_commit_oid).unwrap();
-        state.file_selected_index = 0;
+        }]);
+        state.graph_view.commit_files = state.repo.commit_diff(deleted_commit_oid).unwrap();
+        state.graph_view.file_selected_index = 0;
 
         load_commit_file_diff(&mut state);
 
         let selected_diff = state
+            .graph_view
             .selected_file_diff
             .as_ref()
             .expect("Le diff du fichier supprimé devrait être chargé");

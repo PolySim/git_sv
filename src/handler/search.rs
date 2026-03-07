@@ -64,10 +64,14 @@ fn handle_next_result(state: &mut AppState) -> Result<()> {
             .results
             .get(state.search_state.current_result)
         {
-            if index < state.graph.len() {
-                state.selected_index = index;
-                state.graph_state.select(Some(index * 2));
-                state.sync_legacy_selection();
+            if index < state.graph_view.len() {
+                state.graph_view.select_commit(index);
+                // Rafraîchir les fichiers du commit sélectionné
+                state.refresh_commit_files();
+                // Charger le diff du fichier si disponible
+                if !state.graph_view.commit_files.is_empty() {
+                    crate::handler::navigation::load_commit_file_diff(state);
+                }
             }
         }
     }
@@ -84,10 +88,14 @@ fn handle_previous_result(state: &mut AppState) -> Result<()> {
             .results
             .get(state.search_state.current_result)
         {
-            if index < state.graph.len() {
-                state.selected_index = index;
-                state.graph_state.select(Some(index * 2));
-                state.sync_legacy_selection();
+            if index < state.graph_view.len() {
+                state.graph_view.select_commit(index);
+                // Rafraîchir les fichiers du commit sélectionné
+                state.refresh_commit_files();
+                // Charger le diff du fichier si disponible
+                if !state.graph_view.commit_files.is_empty() {
+                    crate::handler::navigation::load_commit_file_diff(state);
+                }
             }
         }
     }
@@ -113,8 +121,8 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
     let query = state.search_state.query.clone();
     let search_type = state.search_state.search_type;
 
-    // Utiliser filter_commits de git::search
-    let results = crate::git::search::filter_commits(&state.graph, &query, search_type);
+    // Utiliser filter_commits de git::search avec l'API unifiée
+    let results = crate::git::search::filter_commits(&state.graph_view.rows.items, &query, search_type);
 
     state.search_state.results = results;
     state.search_state.current_result = 0;
@@ -122,10 +130,14 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
     if !state.search_state.results.is_empty() {
         // Naviguer directement vers le premier résultat
         if let Some(&index) = state.search_state.results.get(0) {
-            if index < state.graph.len() {
-                state.selected_index = index;
-                state.graph_state.select(Some(index * 2));
-                state.sync_legacy_selection();
+            if index < state.graph_view.len() {
+                state.graph_view.select_commit(index);
+                // Rafraîchir les fichiers du commit sélectionné
+                state.refresh_commit_files();
+                // Charger le diff du fichier si disponible
+                if !state.graph_view.commit_files.is_empty() {
+                    crate::handler::navigation::load_commit_file_diff(state);
+                }
             }
         }
         state.set_flash_message(format!(

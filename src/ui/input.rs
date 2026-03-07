@@ -225,7 +225,7 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     // Escape pour quitter le mode diff plein écran ou revenir au panneau précédent.
     if key.code == KeyCode::Esc {
         // Si mode diff plein écran actif, le quitter
-        if state.diff_fullscreen {
+        if state.graph_view.diff_fullscreen {
             return Some(AppAction::ToggleDiffFullscreen);
         }
         match state.focus {

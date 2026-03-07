@@ -149,8 +149,9 @@ fn handle_cherry_pick(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    let commit_oid = if let Some(row) = state.graph.get(state.selected_index) {
-        row.node.oid
+    // Utiliser l'API unifiée pour obtenir le commit sélectionné
+    let commit_oid = if let Some(commit) = state.selected_commit() {
+        commit.oid
     } else {
         state.set_flash_message("Aucun commit sélectionné".to_string());
         return Ok(());
@@ -193,12 +194,13 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    if state.commit_files.is_empty() {
+    // Utiliser l'API unifiée pour accéder aux fichiers
+    if state.graph_view.commit_files.is_empty() {
         state.set_flash_message("Aucun fichier sélectionné".to_string());
         return Ok(());
     }
 
-    let selected_file = match state.commit_files.get(state.file_selected_index) {
+    let selected_file = match state.graph_view.commit_files.get(state.graph_view.file_selected_index) {
         Some(f) => f,
         None => {
             state.set_flash_message("Index de fichier invalide".to_string());
@@ -207,8 +209,9 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
     };
     let file_path = selected_file.path.clone();
 
-    let commit_oid = if let Some(row) = state.graph.get(state.selected_index) {
-        row.node.oid
+    // Utiliser l'API unifiée pour obtenir le commit sélectionné
+    let commit_oid = if let Some(commit) = state.selected_commit() {
+        commit.oid
     } else {
         state.set_flash_message("Aucun commit sélectionné".to_string());
         return Ok(());
@@ -252,15 +255,15 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
                 state.blame_state = None;
                 state.view_mode = ViewMode::Graph;
 
-                // Chercher le commit dans le graphe
+                // Chercher le commit dans le graphe en utilisant l'API unifiée
                 if let Some(index) = state
-                    .graph
+                    .graph_view
+                    .rows
+                    .items
                     .iter()
                     .position(|row| row.node.oid == target_oid)
                 {
-                    state.selected_index = index;
-                    state.graph_state.select(Some(index * 2));
-                    state.sync_legacy_selection();
+                    state.graph_view.select_commit(index);
                     let commit_short_id = format!("{:.7}", target_oid);
                     state.set_flash_message(format!("Sauté au commit {}", commit_short_id));
                 } else {
@@ -347,11 +350,12 @@ fn handle_reset_prompt(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    // Récupérer le commit sélectionné
-    if let Some(row) = state.graph.get(state.selected_index) {
-        let oid = row.node.oid;
-        let short_hash = row.node.short_hash();
-        let commit_message = row.node.message.lines().next().unwrap_or("").to_string();
+    // Utiliser l'API unifiée pour récupérer le commit sélectionné
+    if let Some(commit) = state.selected_commit() {
+        let oid = commit.oid;
+        let short_hash = commit.oid.to_string();
+        let short_hash = format!("{:.7}", short_hash);
+        let commit_message = commit.message.lines().next().unwrap_or("").to_string();
 
         // Créer le reset picker
         state.reset_picker = Some(crate::state::ResetPickerState::new(
