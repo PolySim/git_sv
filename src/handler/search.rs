@@ -26,10 +26,7 @@ impl ActionHandler for SearchHandler {
 }
 
 fn handle_open(state: &mut AppState) -> Result<()> {
-    state.search_state.is_active = true;
-    state.search_state.query.clear();
-    state.search_state.results.clear();
-    state.search_state.current_result = 0;
+    state.search_state.open();
     Ok(())
 }
 

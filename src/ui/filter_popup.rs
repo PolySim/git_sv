@@ -51,6 +51,8 @@ pub fn render(
         .border_style(border_style)
         .style(Style::default().bg(theme.background));
 
+    frame.render_widget(block, popup_area);
+
     // Layout interne
     let inner = popup_area.inner(Margin::new(2, 1));
     let chunks = Layout::default()
@@ -121,18 +123,12 @@ pub fn render(
     );
 
     // Aide en bas
-    let help_text = if is_active {
-        "Tab/↑↓: changer champ | Entrée: appliquer | Échap: fermer | Ctrl+R: effacer"
-    } else {
-        "Tab/↑↓: changer champ | Entrée: appliquer | Échap: fermer"
-    };
+    let help_text =
+        "Tab/↑↓: changer champ | Entrée: appliquer | Échap: fermer | Ctrl+R: réinitialiser tous les filtres";
     let help = Paragraph::new(help_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(theme.text_secondary));
     frame.render_widget(help, chunks[8]);
-
-    // Rendre le bloc par-dessus
-    frame.render_widget(block, popup_area);
 }
 
 /// Rend un champ de filtre individuel.
@@ -146,7 +142,7 @@ fn render_filter_field(
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(2)])
+        .constraints([Constraint::Length(1), Constraint::Length(1)])
         .split(area);
 
     // Label
@@ -179,18 +175,38 @@ fn render_filter_field(
         Style::default().fg(fg_color).bg(bg_color)
     };
 
-    let value_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(if is_selected {
-            Style::default().fg(theme.warning)
-        } else {
-            Style::default().fg(theme.border_inactive)
-        });
-
-    let value_para = Paragraph::new(display_value)
+    let prefix = if is_selected { "> " } else { "  " };
+    let value_para = Paragraph::new(format!("{}{}", prefix, display_value))
         .style(value_style)
-        .block(value_block)
         .wrap(Wrap { trim: false });
 
     frame.render_widget(value_para, chunks[1]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::tests::render_to_string;
+
+    #[test]
+    fn test_filter_popup_displays_current_input_and_reset_legend() {
+        let popup_state = FilterPopupState {
+            is_open: true,
+            selected_field: FilterField::Author,
+            author_input: "Alice".to_string(),
+            ..FilterPopupState::default()
+        };
+
+        let output = render_to_string(100, 30, |frame| {
+            render(
+                frame,
+                &popup_state,
+                &GraphFilter::new(),
+                Rect::new(0, 0, 100, 30),
+            );
+        });
+
+        assert!(output.contains("Alice"));
+        assert!(output.contains("Ctrl+R"));
+    }
 }

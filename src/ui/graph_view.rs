@@ -20,6 +20,7 @@ pub fn render(
     frame: &mut Frame,
     graph: &[GraphRow],
     current_branch: &Option<String>,
+    filter_active: bool,
     selected_index: usize,
     total_commits: usize,
     area: Rect,
@@ -39,13 +40,17 @@ pub fn render(
     let scroll_offset = selected_index.saturating_sub(visible_commits / 2);
 
     // Construire les lignes du graphe avec les edges de connexion.
-    let items = build_graph_items(
-        graph,
-        selected_index,
-        content_width,
-        scroll_offset,
-        visible_commits,
-    );
+    let items = if graph.is_empty() {
+        vec![ListItem::new(build_empty_state_line(filter_active))]
+    } else {
+        build_graph_items(
+            graph,
+            selected_index,
+            content_width,
+            scroll_offset,
+            visible_commits,
+        )
+    };
 
     let branch_name = current_branch.as_deref().unwrap_or("???");
     let title = if graph.len() < total_commits {
@@ -76,6 +81,22 @@ pub fn render(
         .highlight_style(Style::default()); // Pas de style automatique, géré manuellement dans les spans
 
     frame.render_stateful_widget(list, area, state);
+}
+
+fn build_empty_state_line(filter_active: bool) -> Line<'static> {
+    let theme = current_theme();
+    let message = if filter_active {
+        "Aucun commit ne correspond aux filtres actifs."
+    } else {
+        "Aucun commit a afficher."
+    };
+
+    Line::from(Span::styled(
+        message,
+        Style::default()
+            .fg(theme.text_secondary)
+            .add_modifier(Modifier::ITALIC),
+    ))
 }
 
 /// Construit les items de la liste avec le graphe enrichi.
@@ -552,6 +573,7 @@ mod tests {
                     frame,
                     &graph,
                     &Some("main".to_string()),
+                    false,
                     0,
                     graph.len(),
                     area,
@@ -584,6 +606,7 @@ mod tests {
                     frame,
                     &graph,
                     &Some("feature".to_string()),
+                    false,
                     1, // selected_index = 1
                     graph.len(),
                     area,
@@ -962,5 +985,17 @@ mod tests {
             !padding_spans.is_empty(),
             "La ligne devrait avoir des spans de padding pour aligner avec max_graph_cols"
         );
+    }
+
+    #[test]
+    fn test_empty_graph_shows_filtered_message() {
+        let line = build_empty_state_line(true);
+        let text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+
+        assert!(text.contains("Aucun commit ne correspond aux filtres actifs"));
     }
 }

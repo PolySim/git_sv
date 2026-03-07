@@ -109,10 +109,12 @@ fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return match key.code {
             KeyCode::Esc => Some(AppAction::Search(SearchAction::Close)),
             KeyCode::Enter => Some(AppAction::Search(SearchAction::Execute)),
-            KeyCode::Down | KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Down => Some(AppAction::Search(SearchAction::NextResult)),
+            KeyCode::Up => Some(AppAction::Search(SearchAction::PreviousResult)),
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(AppAction::Search(SearchAction::NextResult))
             }
-            KeyCode::Up | KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(AppAction::Search(SearchAction::PreviousResult))
             }
             KeyCode::Tab => Some(AppAction::Search(SearchAction::ChangeType)),
@@ -826,5 +828,51 @@ fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
             }
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::repo::GitRepo;
+    use crate::git::tests::test_utils::create_test_repo;
+
+    fn create_test_state() -> AppState {
+        let (temp_dir, _repo) = create_test_repo();
+        let git_repo = GitRepo::open(temp_dir.path().to_string_lossy().as_ref()).unwrap();
+        AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap()
+    }
+
+    #[test]
+    fn test_search_mode_arrow_down_moves_to_next_result() {
+        let mut state = create_test_state();
+        state.search_state.is_active = true;
+
+        let action = map_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &state);
+
+        assert_eq!(action, Some(AppAction::Search(SearchAction::NextResult)));
+    }
+
+    #[test]
+    fn test_search_mode_ctrl_n_moves_to_next_result() {
+        let mut state = create_test_state();
+        state.search_state.is_active = true;
+
+        let action = map_key(
+            KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL),
+            &state,
+        );
+
+        assert_eq!(action, Some(AppAction::Search(SearchAction::NextResult)));
+    }
+
+    #[test]
+    fn test_filter_popup_arrow_down_moves_to_next_field() {
+        let mut state = create_test_state();
+        state.filter_popup.is_open = true;
+
+        let action = map_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &state);
+
+        assert_eq!(action, Some(AppAction::Filter(FilterAction::NextField)));
     }
 }

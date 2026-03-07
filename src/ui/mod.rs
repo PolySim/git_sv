@@ -191,6 +191,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
             frame,
             &state.graph,
             &state.current_branch,
+            state.graph_filter.is_active(),
             state.selected_index,
             total_commits,
             layout.graph,
