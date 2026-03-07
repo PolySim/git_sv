@@ -563,15 +563,11 @@ fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<RefInfo>>> {
         }
     }
 
-    // Marquer HEAD
+    // Marquer HEAD sans perdre la branche locale correspondante.
     if let (Some(oid), Some(branch)) = (head_oid, head_branch) {
-        if let Some(refs) = map.get_mut(&oid) {
-            for r in refs.iter_mut() {
-                if r.name == branch {
-                    r.ref_type = RefType::Head;
-                }
-            }
-        }
+        map.entry(oid)
+            .or_default()
+            .push(RefInfo::new(branch, RefType::Head));
     }
 
     Ok(map)
@@ -866,6 +862,12 @@ mod tests {
                 .iter()
                 .any(|r| r.ref_type == RefType::Head && r.name == "main"),
             "Devrait avoir HEAD sur main"
+        );
+        assert!(
+            commit_refs
+                .iter()
+                .any(|r| r.ref_type == RefType::LocalBranch && r.name == "main"),
+            "Devrait conserver la branche locale 'main'"
         );
         assert!(
             commit_refs

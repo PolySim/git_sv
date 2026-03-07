@@ -212,7 +212,19 @@ fn build_commit_line(
     ));
 
     // Labels de branches si présents — triés par pertinence.
-    let mut sorted_refs: Vec<_> = node.refs.iter().collect();
+    let head_branch_name = node
+        .refs
+        .iter()
+        .find(|r| r.ref_type == RefType::Head)
+        .map(|r| r.name.as_str());
+
+    let mut sorted_refs: Vec<_> = node
+        .refs
+        .iter()
+        .filter(|r| {
+            !(r.ref_type == RefType::LocalBranch && Some(r.name.as_str()) == head_branch_name)
+        })
+        .collect();
     sorted_refs.sort_by_key(|r| match r.ref_type {
         RefType::Head => 0,
         RefType::LocalBranch => 1,
@@ -224,7 +236,7 @@ fn build_commit_line(
         .iter()
         .map(|r| {
             let bracket_len = match r.ref_type {
-                RefType::Head => 4,         // ⦗⦘ + espace
+                RefType::Head => 8,         // HEAD-> + espace
                 RefType::Tag => 3,          // () + espace
                 RefType::RemoteBranch => 4, // ⟨⟩ + espace
                 RefType::LocalBranch => 3,  // [] + espace
@@ -237,10 +249,9 @@ fn build_commit_line(
         for ref_info in sorted_refs {
             let (bracket, style) = match ref_info.ref_type {
                 RefType::Head => {
-                    // HEAD : mise en avant forte (vert gras inversé)
-                    let bracket = format!("⦗{}⦘ ", ref_info.name);
-                    let style =
-                        sel_style(Color::Green).add_modifier(Modifier::BOLD | Modifier::REVERSED);
+                    // HEAD : format explicite et lisible pour la branche courante.
+                    let bracket = format!("HEAD->{} ", ref_info.name);
+                    let style = sel_style(Color::Green).add_modifier(Modifier::BOLD);
                     (bracket, style)
                 }
                 RefType::LocalBranch => {
