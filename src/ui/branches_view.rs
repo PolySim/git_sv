@@ -607,7 +607,7 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
     let title = match state.input_action {
         Some(InputAction::CreateBranch) => " Nouvelle branche ",
         Some(InputAction::RenameBranch) => " Renommer la branche ",
-        Some(InputAction::CreateWorktree) => " Nouveau worktree (nom chemin [branche]) ",
+        Some(InputAction::CreateWorktree) => " Nouveau worktree: nom chemin [branche] ",
         Some(InputAction::SaveStash) => " Message du stash ",
         None => " Input ",
     };

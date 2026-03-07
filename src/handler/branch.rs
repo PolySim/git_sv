@@ -319,19 +319,94 @@ fn handle_confirm_input(state: &mut AppState) -> Result<()> {
         Some(crate::state::InputAction::CreateWorktree) => {
             // Le format attendu est "nom chemin [branche]"
             let parts: Vec<&str> = input.split_whitespace().collect();
-            if parts.len() >= 2 {
+            if parts.len() < 2 {
+                state.set_flash_message("Format: nom chemin [branche]".to_string());
+            } else {
                 let name = parts[0];
                 let path = parts[1];
                 let branch = parts.get(2).copied();
-                match crate::git::worktree::create_worktree(&state.repo.repo, name, path, branch) {
-                    Ok(_) => {
-                        state.set_flash_message(format!("Worktree '{}' créé ✓", name));
-                        state.mark_dirty();
+
+                // Validation : nom non vide
+                if name.is_empty() {
+                    state.set_flash_message(
+                        "Erreur: le nom du worktree ne peut pas être vide".to_string(),
+                    );
+                } else if path.is_empty() {
+                    state.set_flash_message(
+                        "Erreur: le chemin du worktree ne peut pas être vide".to_string(),
+                    );
+                } else {
+                    // Vérifier si un worktree avec ce nom existe déjà
+                    let worktree_exists = state
+                        .branches_view_state
+                        .worktrees
+                        .iter()
+                        .any(|w| w.name == name);
+
+                    if worktree_exists {
+                        state.set_flash_message(format!(
+                            "Erreur: un worktree '{}' existe déjà",
+                            name
+                        ));
+                    } else {
+                        match crate::git::worktree::create_worktree(
+                            &state.repo.repo,
+                            name,
+                            path,
+                            branch,
+                        ) {
+                            Ok(_) => {
+                                state.set_flash_message(format!("Worktree '{}' créé ✓", name));
+                                state.mark_dirty();
+
+                                // Recharger la liste des worktrees
+                                if let Ok(worktrees) =
+                                    crate::git::worktree::list_worktrees(&state.repo.repo)
+                                {
+                                    state.branches_view_state.worktrees.set_items(worktrees);
+
+                                    // Tenter de resélectionner le worktree créé
+                                    if let Some(idx) = state
+                                        .branches_view_state
+                                        .worktrees
+                                        .iter()
+                                        .position(|w| w.name == name)
+                                    {
+                                        state.branches_view_state.worktrees.select(idx);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let error_msg = format!("{}", e);
+                                if error_msg.contains("exists") || error_msg.contains("déjà") {
+                                    state.set_flash_message(format!(
+                                        "Erreur: le chemin '{}' existe déjà",
+                                        path
+                                    ));
+                                } else if error_msg.contains("invalid")
+                                    || error_msg.contains("invalide")
+                                {
+                                    state.set_flash_message(format!(
+                                        "Erreur: chemin invalide '{}'",
+                                        path
+                                    ));
+                                } else if error_msg.contains("branch")
+                                    || error_msg.contains("branche")
+                                {
+                                    state.set_flash_message(format!(
+                                        "Erreur: branche '{}' inexistante",
+                                        branch.unwrap_or("")
+                                    ));
+                                } else {
+                                    state.set_flash_message(format!(
+                                        "Erreur création worktree: {}",
+                                        e
+                                    ));
+                                }
+                            }
+                        }
                     }
-                    Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
                 }
-            } else {
-                state.set_flash_message("Format: nom chemin [branche]".to_string());
             }
         }
         None => {}
@@ -590,5 +665,53 @@ mod tests {
             Some(InputAction::SaveStash)
         );
         assert!(state.branches_view_state.input_text.is_empty());
+    }
+
+    #[test]
+    fn test_handle_worktree_create_opens_input() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Branches;
+        state.branches_view_state.section = BranchesSection::Worktrees;
+        let mut handler = BranchHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler
+                .handle(&mut ctx, BranchAction::WorktreeCreate)
+                .unwrap();
+        }
+
+        assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
+        assert_eq!(
+            state.branches_view_state.input_action,
+            Some(InputAction::CreateWorktree)
+        );
+        assert!(state.branches_view_state.input_text.is_empty());
+        assert_eq!(state.branches_view_state.input_cursor, 0);
+    }
+
+    #[test]
+    fn test_handle_confirm_input_create_worktree_validation_empty() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Branches;
+        state.branches_view_state.focus = BranchesFocus::Input;
+        state.branches_view_state.input_action = Some(InputAction::CreateWorktree);
+        state.branches_view_state.input_text = "".to_string();
+        state.branches_view_state.input_cursor = 0;
+
+        // Simuler la confirmation avec un input vide
+        let mut handler = BranchHandler;
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler
+                .handle(&mut ctx, BranchAction::ConfirmInput)
+                .unwrap();
+        }
+
+        // L'input vide devrait annuler l'opération
+        assert_eq!(state.branches_view_state.focus, BranchesFocus::List);
+        assert!(state.branches_view_state.input_action.is_none());
     }
 }
