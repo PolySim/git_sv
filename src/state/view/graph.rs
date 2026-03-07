@@ -2,9 +2,9 @@
 
 #![allow(dead_code)]
 
+use crate::git::diff::DiffViewMode;
 use crate::git::diff::{DiffFile, FileDiff};
 use crate::git::graph::GraphRow;
-use crate::git::diff::DiffViewMode;
 use crate::state::selection::ListSelection;
 use ratatui::widgets::ListState;
 
@@ -12,7 +12,7 @@ use ratatui::widgets::ListState;
 const ITEMS_PER_COMMIT: usize = 2;
 
 /// État unifié de la vue graph.
-/// 
+///
 /// Cette structure est la source unique de vérité pour :
 /// - La liste des commits affichés
 /// - La sélection du commit
@@ -47,7 +47,7 @@ impl Default for GraphViewState {
     fn default() -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
-        
+
         Self {
             rows: ListSelection::new(),
             list_state,
@@ -90,7 +90,7 @@ impl GraphViewState {
     }
 
     /// Calcule l'index visuel pour ratatui à partir de l'index du commit.
-    /// 
+    ///
     /// Chaque commit produit 1 item + potentiellement 1 item de connexion.
     /// Cette fonction retourne l'index visuel dans la liste ratatui.
     pub fn visual_index(&self) -> usize {
@@ -102,16 +102,16 @@ impl GraphViewState {
     }
 
     /// Remplace le graphe par un nouveau et ajuste la sélection si nécessaire.
-    /// 
+    ///
     /// Si le commit sélectionné existe encore dans le nouveau graphe, conserve la sélection.
     /// Sinon, ajuste l'index pour rester dans les bornes.
     pub fn replace_graph(&mut self, new_graph: Vec<GraphRow>) {
         // Sauvegarder l'oid du commit actuellement sélectionné
         let current_oid = self.selected_commit().map(|node| node.oid);
-        
+
         // Remplacer les items
         self.rows.set_items(new_graph);
-        
+
         // Chercher si le commit existe encore
         if let Some(oid) = current_oid {
             if let Some(new_index) = self.rows.items.iter().position(|row| row.node.oid == oid) {
@@ -125,13 +125,13 @@ impl GraphViewState {
             // Pas de commit sélectionné, rester à 0
             self.rows.select(0);
         }
-        
+
         // Synchroniser l'état ratatui
         self.sync_list_state();
     }
 
     /// Sélectionne un commit par son index.
-    /// 
+    ///
     /// # Panics
     /// Panique si l'index est hors des bornes (en mode debug).
     pub fn select_commit(&mut self, index: usize) {
@@ -345,7 +345,7 @@ mod tests {
         let mut state = GraphViewState::new();
         state.rows = ListSelection::with_items(create_test_graph(5));
         state.rows.select(2);
-        
+
         // Index visuel = 2 * 2 = 4
         assert_eq!(state.visual_index(), 4);
     }
@@ -362,15 +362,15 @@ mod tests {
         let graph1 = create_test_graph(5);
         state.rows = ListSelection::with_items(graph1);
         state.rows.select(2);
-        
+
         // Remplacer par un graphe avec le même commit à l'index 3
         let mut graph2 = create_test_graph(5);
         // Déplacer le commit 2 à l'index 3
         let row = graph2.remove(2);
         graph2.insert(3, row);
-        
+
         state.replace_graph(graph2);
-        
+
         // La sélection devrait avoir suivi le commit
         assert_eq!(state.selected_index(), 3);
     }
@@ -380,10 +380,10 @@ mod tests {
         let mut state = GraphViewState::new();
         state.rows = ListSelection::with_items(create_test_graph(5));
         state.rows.select(4); // Dernier commit
-        
+
         // Remplacer par un graphe plus petit
         state.replace_graph(create_test_graph(3));
-        
+
         // La sélection devrait être clampée
         assert_eq!(state.selected_index(), 2);
     }
@@ -392,11 +392,11 @@ mod tests {
     fn test_select_commit_bounds() {
         let mut state = GraphViewState::new();
         state.rows = ListSelection::with_items(create_test_graph(5));
-        
+
         // Sélection valide
         state.select_commit(3);
         assert_eq!(state.selected_index(), 3);
-        
+
         // Sélection hors bornes (ignorée)
         state.select_commit(10);
         assert_eq!(state.selected_index(), 3); // Inchangé
@@ -406,14 +406,26 @@ mod tests {
     fn test_set_commit_files_adjusts_index() {
         let mut state = GraphViewState::new();
         state.file_selected_index = 5;
-        
+
         // Définir moins de fichiers que l'index
         let files = vec![
-            DiffFile { path: "a.txt".to_string(), old_path: None, status: crate::git::diff::DiffStatus::Added, additions: 1, deletions: 0 },
-            DiffFile { path: "b.txt".to_string(), old_path: None, status: crate::git::diff::DiffStatus::Modified, additions: 0, deletions: 1 },
+            DiffFile {
+                path: "a.txt".to_string(),
+                old_path: None,
+                status: crate::git::diff::DiffStatus::Added,
+                additions: 1,
+                deletions: 0,
+            },
+            DiffFile {
+                path: "b.txt".to_string(),
+                old_path: None,
+                status: crate::git::diff::DiffStatus::Modified,
+                additions: 0,
+                deletions: 1,
+            },
         ];
         state.set_commit_files(files);
-        
+
         // L'index devrait être ajusté
         assert_eq!(state.file_selected_index, 1);
     }

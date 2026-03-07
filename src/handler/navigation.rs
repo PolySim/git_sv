@@ -516,7 +516,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
 
         assert_eq!(state.graph_view.selected_index(), 3);
     }
@@ -529,7 +531,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::MoveDown).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
 
         assert_eq!(state.graph_view.selected_index(), 4);
     }
@@ -558,7 +562,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::PageDown).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::PageDown)
+            .unwrap();
 
         // page_down: 5 + 10 (visible_height) = 15
         assert_eq!(state.graph_view.selected_index(), 15);
@@ -585,7 +591,9 @@ mod tests {
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };
 
-        handler.handle(&mut ctx, NavigationAction::GoBottom).unwrap();
+        handler
+            .handle(&mut ctx, NavigationAction::GoBottom)
+            .unwrap();
 
         assert_eq!(state.graph_view.selected_index(), 19);
     }
@@ -612,11 +620,13 @@ mod tests {
         state.graph_view.file_selected_index = 0;
 
         let mut handler = NavigationHandler;
-        
+
         // Test FileDown
         {
             let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, NavigationAction::FileDown).unwrap();
+            handler
+                .handle(&mut ctx, NavigationAction::FileDown)
+                .unwrap();
         }
         assert_eq!(state.graph_view.file_selected_index, 1);
 

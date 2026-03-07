@@ -244,7 +244,8 @@ impl ActionDispatcher {
                 // Ajouter le contenu du panneau BottomRight si focus est sur BottomLeft ou BottomRight
                 match ctx.state.focus {
                     FocusPanel::BottomLeft => {
-                        if let Some(file) = ctx.state
+                        if let Some(file) = ctx
+                            .state
                             .graph_view
                             .commit_files
                             .get(ctx.state.graph_view.file_selected_index)
@@ -645,21 +646,23 @@ mod tests {
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
         // Créer un graphe de test avec quelques commits
         state.graph_view.rows = crate::state::selection::ListSelection::with_items(
-            (0..5).map(|i| crate::git::graph::GraphRow {
-                node: crate::git::graph::CommitNode {
-                    oid: git2::Oid::from_bytes(&[i as u8; 20]).unwrap_or(git2::Oid::zero()),
-                    message: format!("Commit {}", i),
-                    author: "Test".to_string(),
-                    timestamp: i as i64 * 1000,
-                    parents: vec![],
-                    refs: vec![],
-                    branch_name: None,
-                    column: 0,
-                    color_index: 0,
-                },
-                cells: vec![None],
-                connection: None,
-            }).collect()
+            (0..5)
+                .map(|i| crate::git::graph::GraphRow {
+                    node: crate::git::graph::CommitNode {
+                        oid: git2::Oid::from_bytes(&[i as u8; 20]).unwrap_or(git2::Oid::zero()),
+                        message: format!("Commit {}", i),
+                        author: "Test".to_string(),
+                        timestamp: i as i64 * 1000,
+                        parents: vec![],
+                        refs: vec![],
+                        branch_name: None,
+                        column: 0,
+                        color_index: 0,
+                    },
+                    cells: vec![None],
+                    connection: None,
+                })
+                .collect(),
         );
         state.graph_view.rows.select(3);
 

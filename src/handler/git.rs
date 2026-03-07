@@ -200,7 +200,11 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    let selected_file = match state.graph_view.commit_files.get(state.graph_view.file_selected_index) {
+    let selected_file = match state
+        .graph_view
+        .commit_files
+        .get(state.graph_view.file_selected_index)
+    {
         Some(f) => f,
         None => {
             state.set_flash_message("Index de fichier invalide".to_string());

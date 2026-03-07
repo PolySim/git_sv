@@ -23,17 +23,17 @@ impl App {
 
         // Rafraîchir l'état initial avec l'API unifiée
         state.current_branch = state.repo.current_branch().ok();
-        
+
         // Construire le graphe initial et l'assigner via l'API unifiée
         let initial_graph = state
             .repo
             .build_graph(crate::state::MAX_COMMITS)
             .unwrap_or_default();
         state.replace_graph(initial_graph);
-        
+
         // Charger les fichiers du commit sélectionné
         state.refresh_commit_files();
-        
+
         // Charger le diff du premier fichier si disponible
         if !state.graph_view.commit_files.is_empty() {
             crate::handler::navigation::load_commit_file_diff(&mut state);

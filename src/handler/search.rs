@@ -122,7 +122,8 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
     let search_type = state.search_state.search_type;
 
     // Utiliser filter_commits de git::search avec l'API unifiée
-    let results = crate::git::search::filter_commits(&state.graph_view.rows.items, &query, search_type);
+    let results =
+        crate::git::search::filter_commits(&state.graph_view.rows.items, &query, search_type);
 
     state.search_state.results = results;
     state.search_state.current_result = 0;

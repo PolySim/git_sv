@@ -238,8 +238,13 @@ fn handle_stash_drop(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_worktree_create(_state: &mut AppState) -> Result<()> {
-    // Ouvre un input pour créer un worktree (géré par le handler d'édition)
+fn handle_worktree_create(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::Branches {
+        state.branches_view_state.focus = crate::state::BranchesFocus::Input;
+        state.branches_view_state.input_action = Some(crate::state::InputAction::CreateWorktree);
+        state.branches_view_state.input_text.clear();
+        state.branches_view_state.input_cursor = 0;
+    }
     Ok(())
 }
 

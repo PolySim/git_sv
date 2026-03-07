@@ -149,9 +149,9 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
 }
 
 /// Rend la vue Graph (vue principale).
-/// 
+///
 /// Utilise l'API unifiée de GraphViewState pour accéder à toutes les données.
-/// 
+///
 /// Note: Cette fonction utilise des emprunts soigneusement gérés pour éviter
 /// les conflits d'emprunt mutables/immuables sur `state`.
 fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
@@ -159,7 +159,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
     let is_diff_fullscreen = state.graph_view.diff_fullscreen;
     let graph_len = state.graph_view.len();
     let selected_index = state.graph_view.selected_index();
-    
+
     // Utiliser le layout avec support du mode diff plein écran
     let layout = layout::build_layout_with_diff_mode(
         frame.area(),
@@ -197,12 +197,12 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         let is_graph_focused = state.focus == FocusPanel::Graph;
         let filter_active = state.graph_filter.is_active();
         let current_branch = state.current_branch.clone();
-        
+
         // Rendre le graphe avec emprunt mutable de list_state seulement
         let list_state = &mut state.graph_view.list_state;
         // Emprunter les rows de manière séparée
         let rows = &state.graph_view.rows.items;
-        
+
         graph_view::render(
             frame,
             rows,
@@ -226,7 +226,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
     if !is_diff_fullscreen {
         let is_files_focused = state.focus == FocusPanel::BottomLeft;
         let file_selected_index = state.graph_view.file_selected_index;
-        
+
         files_view::render(
             frame,
             &state.graph_view.commit_files,
@@ -253,7 +253,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         let diff_horizontal_offset = state.graph_view.diff_horizontal_offset;
         let diff_view_mode = state.graph_view.diff_view_mode;
         let is_bottom_right_focused = state.focus == FocusPanel::BottomRight;
-        
+
         let total_lines = diff_view::render(
             frame,
             state.graph_view.selected_file_diff.as_ref(),
@@ -270,7 +270,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         let diff_scroll_offset = state.graph_view.diff_scroll_offset;
         let diff_horizontal_offset = state.graph_view.diff_horizontal_offset;
         let diff_view_mode = state.graph_view.diff_view_mode;
-        
+
         let total_lines = diff_view::render(
             frame,
             state.graph_view.selected_file_diff.as_ref(),
@@ -285,14 +285,8 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
     } else {
         // Mode détail (pas de diff visible)
         let rows = &state.graph_view.rows.items;
-        
-        detail_view::render(
-            frame,
-            rows,
-            selected_index,
-            layout.bottom_right,
-            false,
-        );
+
+        detail_view::render(frame, rows, selected_index, layout.bottom_right, false);
     }
 
     // Rendu de la barre d'aide.

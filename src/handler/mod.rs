@@ -235,7 +235,7 @@ impl EventHandler {
     }
 
     /// Rafraîchit les données depuis le repository.
-    /// 
+    ///
     /// Utilise l'API unifiée de GraphViewState pour garantir la cohérence de l'état.
     fn refresh(&mut self) -> Result<()> {
         // Mise à jour des données de base
