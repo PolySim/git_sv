@@ -6,10 +6,12 @@
 
 mod app;
 mod cli;
+mod config;
 mod error;
 mod error_display;
 mod git;
 mod handler;
+mod i18n;
 mod state;
 mod terminal;
 mod test_utils;
@@ -21,6 +23,7 @@ use clap::{Parser, Subcommand};
 
 use crate::app::App;
 use crate::cli::{CliOptions, OutputFormat};
+use crate::config::AppConfig;
 use crate::git::GitRepo;
 use crate::state::GraphFilter;
 
@@ -95,6 +98,9 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    let config = AppConfig::load().unwrap_or_default();
+    crate::i18n::set_language(config.language);
+
     let cli = Cli::parse();
 
     let repo = GitRepo::open(&cli.path)?;

@@ -1,5 +1,6 @@
 //! Utilitaires pour le formatage des dates en format relatif.
 
+use crate::i18n::text_owned;
 use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 /// Formate un timestamp unix en date relative ("il y a 2h", "hier", etc.)
@@ -22,39 +23,57 @@ fn format_duration(diff: Duration) -> String {
     let years = days / 365;
 
     if seconds < 60 {
-        "à l'instant".to_string()
+        text_owned("a l'instant", "just now")
     } else if minutes < 60 {
         if minutes == 1 {
-            "il y a 1 minute".to_string()
+            text_owned("il y a 1 minute", "1 minute ago")
         } else {
-            format!("il y a {} minutes", minutes)
+            text_owned(
+                format!("il y a {} minutes", minutes),
+                format!("{} minutes ago", minutes),
+            )
         }
     } else if hours < 24 {
         if hours == 1 {
-            "il y a 1 heure".to_string()
+            text_owned("il y a 1 heure", "1 hour ago")
         } else {
-            format!("il y a {} heures", hours)
+            text_owned(
+                format!("il y a {} heures", hours),
+                format!("{} hours ago", hours),
+            )
         }
     } else if days == 1 {
-        "hier".to_string()
+        text_owned("hier", "yesterday")
     } else if days < 7 {
-        format!("il y a {} jours", days)
+        text_owned(
+            format!("il y a {} jours", days),
+            format!("{} days ago", days),
+        )
     } else if weeks < 4 {
         if weeks == 1 {
-            "il y a 1 semaine".to_string()
+            text_owned("il y a 1 semaine", "1 week ago")
         } else {
-            format!("il y a {} semaines", weeks)
+            text_owned(
+                format!("il y a {} semaines", weeks),
+                format!("{} weeks ago", weeks),
+            )
         }
     } else if months < 12 {
         if months == 1 {
-            "il y a 1 mois".to_string()
+            text_owned("il y a 1 mois", "1 month ago")
         } else {
-            format!("il y a {} mois", months)
+            text_owned(
+                format!("il y a {} mois", months),
+                format!("{} months ago", months),
+            )
         }
     } else if years == 1 {
-        "il y a 1 an".to_string()
+        text_owned("il y a 1 an", "1 year ago")
     } else {
-        format!("il y a {} ans", years)
+        text_owned(
+            format!("il y a {} ans", years),
+            format!("{} years ago", years),
+        )
     }
 }
 
@@ -76,7 +95,7 @@ mod tests {
     fn test_format_relative_time_now() {
         let now = Utc::now().timestamp();
         let result = format_relative_time(now);
-        assert_eq!(result, "à l'instant");
+        assert_eq!(result, "a l'instant");
     }
 
     #[test]

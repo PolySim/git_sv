@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::git::graph::{EdgeType, GraphRow, RefType};
+use crate::i18n::{text, text_owned};
 use crate::ui::theme::{branch_color, current_theme};
 use crate::utils::format_relative_time;
 
@@ -107,9 +108,12 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
 fn build_empty_state_line(filter_active: bool) -> Line<'static> {
     let theme = current_theme();
     let message = if filter_active {
-        "Aucun commit ne correspond aux filtres actifs."
+        text(
+            "Aucun commit ne correspond aux filtres actifs.",
+            "No commit matches the active filters.",
+        )
     } else {
-        "Aucun commit a afficher."
+        text("Aucun commit a afficher.", "No commit to display.")
     };
 
     Line::from(Span::styled(
@@ -129,25 +133,43 @@ fn build_title(
     is_loading_more: bool,
 ) -> String {
     if is_loading_more {
-        return format!(" Graphe — {} (chargement...) ", branch_name);
+        return text_owned(
+            format!(" Graphe - {} (chargement...) ", branch_name),
+            format!(" Graph - {} (loading...) ", branch_name),
+        );
     }
 
     match total_commits {
         Some(total) if total > 0 => {
             if loaded_count >= total {
-                format!(" Graphe — {} ({} commits) ", branch_name, loaded_count)
+                text_owned(
+                    format!(" Graphe - {} ({} commits) ", branch_name, loaded_count),
+                    format!(" Graph - {} ({} commits) ", branch_name, loaded_count),
+                )
             } else {
-                format!(
-                    " Graphe — {} ({} / {} commits) ",
-                    branch_name, loaded_count, total
+                text_owned(
+                    format!(
+                        " Graphe - {} ({} / {} commits) ",
+                        branch_name, loaded_count, total
+                    ),
+                    format!(
+                        " Graph - {} ({} / {} commits) ",
+                        branch_name, loaded_count, total
+                    ),
                 )
             }
         }
         _ => {
             if can_load_more {
-                format!(" Graphe — {} ({}+) ", branch_name, loaded_count)
+                text_owned(
+                    format!(" Graphe - {} ({}+) ", branch_name, loaded_count),
+                    format!(" Graph - {} ({}+) ", branch_name, loaded_count),
+                )
             } else {
-                format!(" Graphe — {} ({} commits) ", branch_name, loaded_count)
+                text_owned(
+                    format!(" Graphe - {} ({} commits) ", branch_name, loaded_count),
+                    format!(" Graph - {} ({} commits) ", branch_name, loaded_count),
+                )
             }
         }
     }

@@ -10,6 +10,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::i18n::text;
 use crate::ui::theme::current_theme;
 
 /// Un raccourci clavier à afficher.
@@ -77,7 +78,7 @@ pub mod bindings {
     pub const QUIT: KeyBinding = KeyBinding::new("q", "Quitter");
     pub const HELP: KeyBinding = KeyBinding::new("?", "Aide");
     pub const NAV_UP_DOWN: KeyBinding = KeyBinding::new("↑↓", "Naviguer");
-    pub const ENTER: KeyBinding = KeyBinding::new("Enter", "Sélectionner");
+    pub const ENTER: KeyBinding = KeyBinding::new("Enter", "Selectionner");
     pub const ESC: KeyBinding = KeyBinding::new("Esc", "Retour");
     pub const TAB: KeyBinding = KeyBinding::new("Tab", "Changer panel");
 }

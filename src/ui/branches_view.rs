@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
+use crate::i18n::text;
 use crate::state::SelectedBranch;
 use crate::ui::common::{centered_rect, StatusBarConfig};
 use crate::ui::theme::current_theme;
@@ -37,7 +38,11 @@ fn render_detail_panel(
     area: Rect,
 ) {
     let paragraph = Paragraph::new(content)
-        .block(Block::default().title(" Détail ").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(text(" Detail ", " Detail "))
+                .borders(Borders::ALL),
+        )
         .scroll((scroll_offset, 0));
     frame.render_widget(paragraph, area);
 }
@@ -81,7 +86,10 @@ fn append_last_commit_lines(
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         lines.push(Line::from(vec![
-            Span::styled("Modifiee: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                text("Modifiee: ", "Updated:  "),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 format_relative_time(timestamp_secs),
                 Style::default().fg(theme.primary),
@@ -92,7 +100,7 @@ fn append_last_commit_lines(
     if let Some(msg) = last_commit_message {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
-            "Dernier commit:",
+            text("Dernier commit:", "Last commit:"),
             Style::default().add_modifier(Modifier::BOLD),
         )]));
         lines.push(Line::from(msg.to_string()));
@@ -107,12 +115,21 @@ fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> 
             if let Some(branch) = state.remote_branches.get(idx) {
                 let mut lines = vec![
                     Line::from(vec![
-                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            text("Nom: ", "Name: "),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
                         Span::raw(branch.name.clone()),
                     ]),
                     Line::from(vec![
-                        Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled("distante", Style::default().fg(theme.text_secondary)),
+                        Span::styled(
+                            text("Type: ", "Type: "),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            text("distante", "remote"),
+                            Style::default().fg(theme.text_secondary),
+                        ),
                     ]),
                 ];
 
@@ -123,20 +140,33 @@ fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> 
                 );
                 lines
             } else {
-                vec![Line::from("Aucune branche distante selectionnee")]
+                vec![Line::from(text(
+                    "Aucune branche distante selectionnee",
+                    "No remote branch selected",
+                ))]
             }
         }
         Some(SelectedBranch::Local(idx)) => {
             if let Some(branch) = state.local_branches.get(idx) {
                 let mut lines = vec![
                     Line::from(vec![
-                        Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            text("Nom: ", "Name: "),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
                         Span::raw(branch.name.clone()),
                     ]),
                     Line::from(vec![
-                        Span::styled("HEAD: ", Style::default().add_modifier(Modifier::BOLD)),
                         Span::styled(
-                            if branch.is_head { "oui" } else { "non" },
+                            text("HEAD: ", "HEAD: "),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            if branch.is_head {
+                                text("oui", "yes")
+                            } else {
+                                text("non", "no")
+                            },
                             if branch.is_head {
                                 Style::default().fg(theme.success)
                             } else {
@@ -149,7 +179,7 @@ fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> 
                 if let (Some(ahead), Some(behind)) = (branch.ahead, branch.behind) {
                     lines.push(Line::from(vec![
                         Span::styled(
-                            "Ahead/Behind: ",
+                            text("Ahead/Behind: ", "Ahead/Behind: "),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(format!("{} / {}", ahead, behind)),
@@ -163,10 +193,16 @@ fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> 
                 );
                 lines
             } else {
-                vec![Line::from("Aucune branche locale selectionnee")]
+                vec![Line::from(text(
+                    "Aucune branche locale selectionnee",
+                    "No local branch selected",
+                ))]
             }
         }
-        None => vec![Line::from("Aucune branche selectionnee")],
+        None => vec![Line::from(text(
+            "Aucune branche selectionnee",
+            "No branch selected",
+        ))],
     }
 }
 
@@ -176,17 +212,30 @@ fn build_worktree_detail_content(state: &BranchesViewState) -> Vec<Line<'static>
     if let Some(worktree) = state.worktrees.get(state.worktree_selected()) {
         vec![
             Line::from(vec![
-                Span::styled("Nom: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    text("Nom: ", "Name: "),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(worktree.name.clone()),
             ]),
             Line::from(vec![
-                Span::styled("Chemin: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    text("Chemin: ", "Path: "),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(worktree.path.clone()),
             ]),
             Line::from(vec![
-                Span::styled("Principal: ", Style::default().add_modifier(Modifier::BOLD)),
                 Span::styled(
-                    if worktree.is_main { "oui" } else { "non" },
+                    text("Principal: ", "Main: "),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    if worktree.is_main {
+                        text("oui", "yes")
+                    } else {
+                        text("non", "no")
+                    },
                     if worktree.is_main {
                         Style::default().fg(theme.success)
                     } else {
@@ -195,12 +244,18 @@ fn build_worktree_detail_content(state: &BranchesViewState) -> Vec<Line<'static>
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    text("Branche: ", "Branch: "),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(worktree.branch.as_deref().unwrap_or("N/A").to_string()),
             ]),
         ]
     } else {
-        vec![Line::from("Aucun worktree selectionne")]
+        vec![Line::from(text(
+            "Aucun worktree selectionne",
+            "No worktree selected",
+        ))]
     }
 }
 
@@ -208,23 +263,35 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
     let theme = current_theme();
 
     let Some(stash) = state.stashes.get(state.stash_selected()) else {
-        return vec![Line::from("Aucun stash selectionne")];
+        return vec![Line::from(text(
+            "Aucun stash selectionne",
+            "No stash selected",
+        ))];
     };
 
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("Message: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                text("Message: ", "Message: "),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(stash.message.clone()),
         ]),
         Line::from(vec![
-            Span::styled("Index: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                text("Index: ", "Index: "),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(format!("stash@{{{}}}", stash.index)),
         ]),
     ];
 
     if let Some(branch) = stash.branch.as_deref() {
         lines.push(Line::from(vec![
-            Span::styled("Branche: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                text("Branche: ", "Branch: "),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(branch.to_string()),
         ]));
     }
@@ -232,7 +299,7 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
     if !stash.files.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
-            "Fichiers modifies:",
+            text("Fichiers modifies:", "Modified files:"),
             Style::default().add_modifier(Modifier::BOLD),
         )]));
 
@@ -264,7 +331,7 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
         if let Some(diff_lines) = state.stash_file_diff.as_ref().filter(|d| !d.is_empty()) {
             lines.push(Line::from(""));
             lines.push(Line::from(vec![Span::styled(
-                "Diff:",
+                text("Diff:", "Diff:"),
                 Style::default().add_modifier(Modifier::BOLD),
             )]));
 
@@ -301,7 +368,7 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
     crate::ui::common::render_status_bar(
         frame,
         StatusBarConfig {
-            view_title: "branches",
+            view_title: text("branches", "branches"),
             branch: current_branch,
             repo_path,
             flash_message,
@@ -342,9 +409,9 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
 fn render_tabs(frame: &mut Frame, active: &BranchesSection, area: Rect) {
     let theme = current_theme();
     let tabs = vec![
-        ("Branches", BranchesSection::Branches),
-        ("Worktrees", BranchesSection::Worktrees),
-        ("Stashes", BranchesSection::Stashes),
+        (text("Branches", "Branches"), BranchesSection::Branches),
+        (text("Worktrees", "Worktrees"), BranchesSection::Worktrees),
+        (text("Stashes", "Stashes"), BranchesSection::Stashes),
     ];
 
     let mut spans = Vec::new();
@@ -372,7 +439,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
     // Section locale.
     items.push(ListItem::new(Line::from(Span::styled(
-        "Local",
+        text("Local", "Local"),
         Style::default()
             .fg(theme.commit_hash)
             .add_modifier(Modifier::BOLD),
@@ -408,7 +475,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
     if state.show_remote {
         items.push(ListItem::new(Line::from("")));
         items.push(ListItem::new(Line::from(Span::styled(
-            "Remote",
+            text("Distant", "Remote"),
             Style::default()
                 .fg(theme.commit_hash)
                 .add_modifier(Modifier::BOLD),
@@ -436,7 +503,13 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         }
         None => 0,
     };
-    render_selection_list(frame, " Branches ", items, visual_index, area);
+    render_selection_list(
+        frame,
+        text(" Branches ", " Branches "),
+        items,
+        visual_index,
+        area,
+    );
 }
 
 /// Rend le détail d'une branche.
@@ -473,7 +546,13 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
         .map(ListItem::new)
         .collect();
 
-    render_selection_list(frame, " Worktrees ", items, state.worktree_selected(), area);
+    render_selection_list(
+        frame,
+        text(" Worktrees ", " Worktrees "),
+        items,
+        state.worktree_selected(),
+        area,
+    );
 }
 
 /// Rend le détail d'un worktree.
@@ -504,7 +583,13 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
         })
         .collect();
 
-    render_selection_list(frame, " Stashes ", items, state.stash_selected(), area);
+    render_selection_list(
+        frame,
+        text(" Stashes ", " Stashes "),
+        items,
+        state.stash_selected(),
+        area,
+    );
 }
 
 /// Rend le détail d'un stash.
@@ -526,17 +611,29 @@ fn render_branches_help(
 ) {
     let theme = current_theme();
     let help_text = if *focus == BranchesFocus::Input {
-        "Enter:confirmer  Esc:annuler  ←→:curseur"
+        text(
+            "Entree:confirmer  Echap:annuler  ←→:curseur",
+            "Enter:confirm  Esc:cancel  ←→:cursor",
+        )
     } else {
         match section {
             BranchesSection::Branches => {
-                "Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging"
+                text(
+                    "Tab:section  Entree:checkout  n:nouvelle  d:supprimer  r:renommer  m:fusion  R:distantes  P:push  Ctrl+P:force push  1:graphe  2:staging",
+                    "Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging",
+                )
             }
             BranchesSection::Worktrees => {
-                "Tab:section  n:new  d:delete  1:graph  2:staging"
+                text(
+                    "Tab:section  n:nouveau  d:supprimer  1:graphe  2:staging",
+                    "Tab:section  n:new  d:delete  1:graph  2:staging",
+                )
             }
             BranchesSection::Stashes => {
-                "Tab:section  h/l:fichiers  J/K:scroll diff  a:apply  p:pop  d:drop  s:save  1:graph  2:staging"
+                text(
+                    "Tab:section  h/l:fichiers  J/K:defiler diff  a:appliquer  p:pop  d:supprimer  s:sauver  1:graphe  2:staging",
+                    "Tab:section  h/l:files  J/K:scroll diff  a:apply  p:pop  d:drop  s:save  1:graph  2:staging",
+                )
             }
         }
     };
@@ -556,11 +653,14 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
     frame.render_widget(Clear, popup);
 
     let title = match state.input_action {
-        Some(InputAction::CreateBranch) => " Nouvelle branche ",
-        Some(InputAction::RenameBranch) => " Renommer la branche ",
-        Some(InputAction::CreateWorktree) => " Nouveau worktree: nom chemin [branche] ",
-        Some(InputAction::SaveStash) => " Message du stash ",
-        None => " Input ",
+        Some(InputAction::CreateBranch) => text(" Nouvelle branche ", " New branch "),
+        Some(InputAction::RenameBranch) => text(" Renommer la branche ", " Rename branch "),
+        Some(InputAction::CreateWorktree) => text(
+            " Nouveau worktree: nom chemin [branche] ",
+            " New worktree: name path [branch] ",
+        ),
+        Some(InputAction::SaveStash) => text(" Message du stash ", " Stash message "),
+        None => text(" Saisie ", " Input "),
     };
 
     let paragraph = Paragraph::new(state.input_text.as_str()).block(

@@ -3,6 +3,7 @@
 // Allow dead_code for methods that may be used in future features
 #![allow(dead_code)]
 
+use crate::i18n::text;
 use crate::ui::common::centered_rect;
 use crate::ui::theme::current_theme;
 use ratatui::{
@@ -101,7 +102,7 @@ pub fn render_overlay(frame: &mut Frame, spinner: &mut LoadingSpinner, area: Rec
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Chargement ")
+                .title(text(" Chargement ", " Loading "))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.primary)),
         )

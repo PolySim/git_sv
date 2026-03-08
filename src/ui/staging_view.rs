@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::app::{StagingFocus, StagingState};
 use crate::git::repo::StatusEntry;
+use crate::i18n::{text, text_owned};
 use crate::ui::common::StatusBarConfig;
 use crate::ui::theme::{current_theme, Theme};
 
@@ -64,7 +65,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
     crate::ui::common::render_status_bar(
         frame,
         StatusBarConfig {
-            view_title: "staging",
+            view_title: text("staging", "staging"),
             branch: current_branch,
             repo_path,
             flash_message,
@@ -77,7 +78,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
     render_file_list(
         frame,
         FileListRenderContext {
-            title: "Unstaged",
+            title: text("Non indexes", "Unstaged"),
             files: staging_state.unstaged_files(),
             selected: staging_state.unstaged_selected(),
             is_focused: staging_state.focus == StagingFocus::Unstaged,
@@ -90,7 +91,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
     render_file_list(
         frame,
         FileListRenderContext {
-            title: "Staged",
+            title: text("Indexes", "Staged"),
             files: staging_state.staged_files(),
             selected: staging_state.staged_selected(),
             is_focused: staging_state.focus == StagingFocus::Staged,
@@ -226,18 +227,33 @@ fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
     };
 
     let title = if is_amending {
-        " Amend commit (Enter pour valider) "
+        text(
+            " Amend commit (Entree pour valider) ",
+            " Amend commit (Enter to confirm) ",
+        )
     } else if has_staged_files {
-        " Message de commit (Enter pour valider) "
+        text(
+            " Message de commit (Entree pour valider) ",
+            " Commit message (Enter to confirm) ",
+        )
     } else {
-        " Message de commit (aucun fichier staged) "
+        text(
+            " Message de commit (aucun fichier indexe) ",
+            " Commit message (no staged files) ",
+        )
     };
 
     let display_text = if message.is_empty() && !is_focused {
         if is_amending {
-            "Appuyez sur 'A' pour amender le dernier commit..."
+            text(
+                "Appuyez sur 'A' pour amender le dernier commit...",
+                "Press 'A' to amend the last commit...",
+            )
         } else {
-            "Appuyez sur 'c' pour écrire un message de commit..."
+            text(
+                "Appuyez sur 'c' pour ecrire un message de commit...",
+                "Press 'c' to write a commit message...",
+            )
         }
     } else {
         message
@@ -288,22 +304,50 @@ fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
         theme,
     } = ctx;
 
-    let abort_merge_text = if is_merging { "  A:abort merge" } else { "" };
+    let abort_merge_text = if is_merging {
+        text("  A:annuler fusion", "  A:abort merge")
+    } else {
+        ""
+    };
 
     let help_text = match focus {
         StagingFocus::Unstaged => {
-            let amend_text = if is_merging { "" } else { "  A:amend" };
-            format!("j/k:nav  Espace:diff  s/Enter:stage  S:stash fichier  Ctrl+S:stash non stages  a:stage all  d:discard  Tab:→Staged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
+            let amend_text = if is_merging {
+                ""
+            } else {
+                text("  A:amender", "  A:amend")
+            };
+            text_owned(
+                format!("j/k:naviguer  Espace:diff  s/Entree:indexer  S:stocker fichier  Ctrl+S:stocker non indexes  a:indexer tout  d:abandonner  Tab:→Indexes  c:commit{}  P:push  Ctrl+P:force push{}  1:graphe  q:quitter", amend_text, abort_merge_text),
+                format!("j/k:nav  Space:diff  s/Enter:stage  S:stash file  Ctrl+S:stash unstaged  a:stage all  d:discard  Tab:→Staged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text),
+            )
         }
         StagingFocus::Staged => {
-            let amend_text = if is_merging { "" } else { "  A:amend" };
-            format!("j/k:nav  Espace:diff  u/Enter:unstage  U:unstage all  Tab:→Unstaged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
+            let amend_text = if is_merging {
+                ""
+            } else {
+                text("  A:amender", "  A:amend")
+            };
+            text_owned(
+                format!("j/k:naviguer  Espace:diff  u/Entree:desindexer  U:desindexer tout  Tab:→Non indexes  c:commit{}  P:push  Ctrl+P:force push{}  1:graphe  q:quitter", amend_text, abort_merge_text),
+                format!("j/k:nav  Space:diff  u/Enter:unstage  U:unstage all  Tab:→Unstaged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text),
+            )
         }
         StagingFocus::Diff => {
-            let amend_text = if is_merging { "" } else { "  A:amend" };
-            format!("j/k:scroll  h/l:horizontal  v:vue  Tab/Esc:retour liste  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text)
+            let amend_text = if is_merging {
+                ""
+            } else {
+                text("  A:amender", "  A:amend")
+            };
+            text_owned(
+                format!("j/k:defiler  h/l:horizontal  v:vue  Tab/Echap:retour liste  c:commit{}  P:push  Ctrl+P:force push{}  1:graphe  q:quitter", amend_text, abort_merge_text),
+                format!("j/k:scroll  h/l:horizontal  v:view  Tab/Esc:back to list  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text),
+            )
         }
-        StagingFocus::CommitMessage => "Enter:confirmer  Esc:annuler  ←→:curseur".to_string(),
+        StagingFocus::CommitMessage => text_owned(
+            "Entree:confirmer  Echap:annuler  ←→:curseur",
+            "Enter:confirm  Esc:cancel  ←→:cursor",
+        ),
     };
 
     let line = Line::from(vec![Span::styled(

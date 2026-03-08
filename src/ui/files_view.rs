@@ -11,6 +11,7 @@ use ratatui::{
 use crate::app::BottomLeftMode;
 use crate::git::diff::{DiffFile, DiffStatus};
 use crate::git::repo::StatusEntry;
+use crate::i18n::text_owned;
 use crate::ui::theme::{current_theme, Theme};
 
 /// Contexte de rendu du panneau de fichiers.
@@ -44,12 +45,18 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
         BottomLeftMode::Files => {
             let items = build_commit_file_items(commit_files, theme);
             let hash = selected_commit_hash.unwrap_or("???");
-            let title = format!(" Fichiers — {} ", hash);
+            let title = text_owned(
+                format!(" Fichiers - {} ", hash),
+                format!(" Files - {} ", hash),
+            );
             (items, title)
         }
         BottomLeftMode::Parents => {
             let items = build_status_items(status_entries, theme);
-            let title = format!(" Status ({} fichiers) ", status_entries.len());
+            let title = text_owned(
+                format!(" Statut ({} fichiers) ", status_entries.len()),
+                format!(" Status ({} files) ", status_entries.len()),
+            );
             (items, title)
         }
     };

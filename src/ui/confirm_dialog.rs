@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+use crate::i18n::{text, text_owned};
 use crate::ui::common::centered_rect;
 use crate::ui::theme::current_theme;
 use ratatui::{
@@ -47,46 +48,68 @@ impl ConfirmAction {
     pub fn message(&self) -> String {
         match self {
             ConfirmAction::BranchDelete(name) => {
-                format!("Êtes-vous sûr de vouloir supprimer la branche '{}' ?", name)
+                text_owned(
+                    format!("Etes-vous sur de vouloir supprimer la branche '{}' ?", name),
+                    format!("Are you sure you want to delete branch '{}' ?", name),
+                )
             }
             ConfirmAction::WorktreeRemove(name) => {
-                format!(
-                    "Êtes-vous sûr de vouloir supprimer le worktree '{}' ?",
-                    name
+                text_owned(
+                    format!("Etes-vous sur de vouloir supprimer le worktree '{}' ?", name),
+                    format!("Are you sure you want to delete worktree '{}' ?", name),
                 )
             }
             ConfirmAction::StashDrop(index) => {
-                format!(
-                    "Êtes-vous sûr de vouloir supprimer le stash @{{{}}} ?",
-                    index
+                text_owned(
+                    format!("Etes-vous sur de vouloir supprimer le stash @{{{}}} ?", index),
+                    format!("Are you sure you want to delete stash @{{{}}} ?", index),
                 )
             }
             ConfirmAction::DiscardFile(path) => {
-                format!(
-                    "Êtes-vous sûr de vouloir discard les modifications de '{}' ?",
-                    path
+                text_owned(
+                    format!("Etes-vous sur de vouloir abandonner les modifications de '{}' ?", path),
+                    format!("Are you sure you want to discard changes in '{}' ?", path),
                 )
             }
             ConfirmAction::DiscardAll => {
-                "Êtes-vous sûr de vouloir discard TOUTES les modifications non stagées ?"
-                    .to_string()
+                text_owned(
+                    "Etes-vous sur de vouloir abandonner TOUTES les modifications non indexees ?",
+                    "Are you sure you want to discard ALL unstaged changes?",
+                )
             }
             ConfirmAction::CherryPick(oid) => {
-                format!("Êtes-vous sûr de vouloir cherry-pick le commit {oid:.7} ?")
+                text_owned(
+                    format!("Etes-vous sur de vouloir cherry-pick le commit {oid:.7} ?"),
+                    format!("Are you sure you want to cherry-pick commit {oid:.7} ?"),
+                )
             }
             ConfirmAction::MergeBranch(source, target) => {
-                format!("Merger '{}' dans '{}' ?", source, target)
+                text_owned(
+                    format!("Fusionner '{}' dans '{}' ?", source, target),
+                    format!("Merge '{}' into '{}' ?", source, target),
+                )
             }
             ConfirmAction::AbortMerge => {
-                "Êtes-vous sûr de vouloir avorter le merge en cours ?".to_string()
+                text_owned(
+                    "Etes-vous sur de vouloir annuler la fusion en cours ?",
+                    "Are you sure you want to abort the current merge?",
+                )
             }
             ConfirmAction::ResetSoft(oid) => {
-                format!(
-                    "Reset SOFT vers {oid:.7} ?\nLes modifications seront conservées dans l'index."
+                text_owned(
+                    format!(
+                        "Reset SOFT vers {oid:.7} ?\nLes modifications seront conservees dans l'index."
+                    ),
+                    format!(
+                        "SOFT reset to {oid:.7} ?\nChanges will be kept in the index."
+                    ),
                 )
             }
             ConfirmAction::ResetHard(oid) => {
-                format!("⚠ RESET HARD vers {oid:.7} ?\n\n⚠ ATTENTION : Toutes les modifications non committées seront PERDUES !")
+                text_owned(
+                    format!("⚠ RESET HARD vers {oid:.7} ?\n\n⚠ ATTENTION : Toutes les modifications non committees seront PERDUES !"),
+                    format!("⚠ HARD RESET to {oid:.7} ?\n\n⚠ WARNING: All uncommitted changes will be LOST!"),
+                )
             }
         }
     }
@@ -94,16 +117,32 @@ impl ConfirmAction {
     /// Retourne le titre du dialogue.
     pub fn title(&self) -> &'static str {
         match self {
-            ConfirmAction::BranchDelete(_) => "Confirmer la suppression de branche",
-            ConfirmAction::WorktreeRemove(_) => "Confirmer la suppression de worktree",
-            ConfirmAction::StashDrop(_) => "Confirmer la suppression de stash",
-            ConfirmAction::DiscardFile(_) => "Confirmer le discard de fichier",
-            ConfirmAction::DiscardAll => "Confirmer le discard de tous les fichiers",
-            ConfirmAction::CherryPick(_) => "Confirmer le cherry-pick",
-            ConfirmAction::MergeBranch(_, _) => "Confirmer le merge",
-            ConfirmAction::AbortMerge => "Confirmer l'annulation du merge",
-            ConfirmAction::ResetSoft(_) => "Confirmer le reset soft",
-            ConfirmAction::ResetHard(_) => "⚠ Confirmer le reset hard",
+            ConfirmAction::BranchDelete(_) => {
+                text("Confirmer suppression branche", "Confirm branch deletion")
+            }
+            ConfirmAction::WorktreeRemove(_) => text(
+                "Confirmer suppression worktree",
+                "Confirm worktree deletion",
+            ),
+            ConfirmAction::StashDrop(_) => {
+                text("Confirmer suppression stash", "Confirm stash deletion")
+            }
+            ConfirmAction::DiscardFile(_) => {
+                text("Confirmer abandon fichier", "Confirm file discard")
+            }
+            ConfirmAction::DiscardAll => text(
+                "Confirmer abandon de tous les fichiers",
+                "Confirm discard of all files",
+            ),
+            ConfirmAction::CherryPick(_) => text("Confirmer le cherry-pick", "Confirm cherry-pick"),
+            ConfirmAction::MergeBranch(_, _) => text("Confirmer la fusion", "Confirm merge"),
+            ConfirmAction::AbortMerge => {
+                text("Confirmer l'annulation de la fusion", "Confirm merge abort")
+            }
+            ConfirmAction::ResetSoft(_) => text("Confirmer le reset soft", "Confirm soft reset"),
+            ConfirmAction::ResetHard(_) => {
+                text("⚠ Confirmer le reset hard", "⚠ Confirm hard reset")
+            }
         }
     }
 }
@@ -133,21 +172,21 @@ pub fn render(frame: &mut Frame, ctx: ConfirmDialogRenderContext<'_>) {
                     .fg(theme.success)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" - Oui  "),
+            Span::raw(text(" - Oui  ", " - Yes  ")),
             Span::styled(
                 "n",
                 Style::default()
                     .fg(theme.error)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" - Non  "),
+            Span::raw(text(" - Non  ", " - No  ")),
             Span::styled(
                 "ESC",
                 Style::default()
                     .fg(theme.warning)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" - Annuler"),
+            Span::raw(text(" - Annuler", " - Cancel")),
         ]),
     ];
 
@@ -163,4 +202,18 @@ pub fn render(frame: &mut Frame, ctx: ConfirmDialogRenderContext<'_>) {
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, popup_area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::{with_language, Language};
+
+    #[test]
+    fn test_confirm_title_is_localized_in_english() {
+        with_language(Language::En, || {
+            let title = ConfirmAction::BranchDelete("feature".to_string()).title();
+            assert_eq!(title, "Confirm branch deletion");
+        });
+    }
 }

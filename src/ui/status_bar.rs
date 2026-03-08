@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::git::repo::StatusEntry;
+use crate::i18n::{text, text_owned};
 use crate::state::GraphFilter;
 use crate::ui::theme::current_theme;
 
@@ -34,24 +35,36 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     } = ctx;
 
     let theme = current_theme();
-    let branch = current_branch.unwrap_or("???");
+    let branch = current_branch.unwrap_or(text("???", "???"));
 
     // Compter les fichiers modifiés/staged/untracked.
     let (modified, staged, untracked) = count_status(status_entries);
 
     // Construire le statut.
     let status_text = if modified == 0 && staged == 0 && untracked == 0 {
-        Span::styled("✓ clean", Style::default().fg(theme.success))
+        Span::styled(
+            text("✓ propre", "✓ clean"),
+            Style::default().fg(theme.success),
+        )
     } else {
         let mut parts = Vec::new();
         if staged > 0 {
-            parts.push(format!("{} staged", staged));
+            parts.push(text_owned(
+                format!("{} indexes", staged),
+                format!("{} staged", staged),
+            ));
         }
         if modified > 0 {
-            parts.push(format!("{} modifiés", modified));
+            parts.push(text_owned(
+                format!("{} modifies", modified),
+                format!("{} modified", modified),
+            ));
         }
         if untracked > 0 {
-            parts.push(format!("{} non suivi", untracked));
+            parts.push(text_owned(
+                format!("{} non suivis", untracked),
+                format!("{} untracked", untracked),
+            ));
         }
         Span::styled(
             format!("✗ {}", parts.join(", ")),
@@ -73,7 +86,7 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     if is_merging {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            "⚠ MERGING",
+            text("⚠ FUSION", "⚠ MERGING"),
             Style::default()
                 .fg(theme.error)
                 .add_modifier(Modifier::BOLD),
@@ -84,7 +97,7 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     if filter.is_active() {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            "[FILTRÉ]",
+            text("[FILTRE]", "[FILTERED]"),
             Style::default()
                 .fg(theme.warning)
                 .add_modifier(Modifier::BOLD),
@@ -131,4 +144,27 @@ fn count_status(entries: &[StatusEntry]) -> (usize, usize, usize) {
     }
 
     (modified, staged, untracked)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::{with_language, Language};
+
+    #[test]
+    fn test_clean_label_is_localized_in_english() {
+        with_language(Language::En, || {
+            let theme = current_theme();
+            let label = if true {
+                Span::styled(
+                    text("✓ propre", "✓ clean"),
+                    Style::default().fg(theme.success),
+                )
+            } else {
+                unreachable!()
+            };
+
+            assert_eq!(label.content, "✓ clean");
+        });
+    }
 }

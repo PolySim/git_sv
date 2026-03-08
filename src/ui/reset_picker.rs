@@ -1,5 +1,6 @@
 //! Composant de sélection du type de reset.
 
+use crate::i18n::{text, text_owned};
 use crate::state::ResetPickerState;
 use crate::ui::common::centered_rect;
 use crate::ui::theme::current_theme;
@@ -28,7 +29,10 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
     frame.render_widget(Clear, popup_area);
 
     // Construire le titre
-    let title = format!(" Reset vers {} ", state.short_hash);
+    let title = text_owned(
+        format!(" Reset vers {} ", state.short_hash),
+        format!(" Reset to {} ", state.short_hash),
+    );
 
     // Message du commit (tronqué si trop long)
     let commit_msg = if state.commit_message.len() > 50 {
@@ -69,23 +73,32 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
     let content = vec![
         Line::from(""),
         Line::from(vec![
-            Span::raw("Commit: "),
+            Span::raw(text("Commit: ", "Commit: ")),
             Span::styled(commit_msg, Style::default().add_modifier(Modifier::BOLD)),
         ]),
         Line::from(""),
-        Line::from("Choisissez le type de reset :"),
+        Line::from(text("Choisissez le type de reset :", "Choose reset type:")),
         Line::from(""),
         Line::from(vec![
             Span::raw(soft_indicator),
             Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" - Soft "),
-            Span::styled("(garde les modifications stagées)", soft_style),
+            Span::raw(text(" - Soft ", " - Soft ")),
+            Span::styled(
+                text(
+                    "(garde les modifications stagees)",
+                    "(keeps staged changes)",
+                ),
+                soft_style,
+            ),
         ]),
         Line::from(vec![
             Span::raw(hard_indicator),
             Span::styled("h", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" - Hard "),
-            Span::styled("(perd toutes les modifications)", hard_style),
+            Span::raw(text(" - Hard ", " - Hard ")),
+            Span::styled(
+                text("(perd toutes les modifications)", "(loses all changes)"),
+                hard_style,
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -95,14 +108,14 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" - Confirmer  "),
+            Span::raw(text(" - Confirmer  ", " - Confirm  ")),
             Span::styled(
                 "ESC",
                 Style::default()
                     .fg(theme.warning)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" - Annuler"),
+            Span::raw(text(" - Annuler", " - Cancel")),
         ]),
     ];
 

@@ -8,6 +8,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::i18n::{text, text_owned};
 use crate::ui::common::centered_rect;
 use crate::ui::keybindings;
 use crate::ui::theme::current_theme;
@@ -33,7 +34,7 @@ pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Aide ")
+                .title(text(" Aide ", " Help "))
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.primary)),
@@ -50,65 +51,134 @@ fn build_help_content() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
         // ── Navigation ──
-        section_header("Navigation"),
+        section_header(text("Navigation", "Navigation")),
         separator(),
-        key_line_multi(keybindings::navigation::DOWN, "Commit suivant"),
-        key_line_multi(keybindings::navigation::UP, "Commit précédent"),
-        key_line_multi(keybindings::navigation::TOP, "Premier commit"),
-        key_line_multi(keybindings::navigation::BOTTOM, "Dernier commit"),
-        key_line_multi(keybindings::navigation::PAGE_DOWN, "Page suivante"),
-        key_line_multi(keybindings::navigation::PAGE_UP, "Page précédente"),
-        key_line(keybindings::navigation::SWITCH_PANEL, "Basculer panneaux"),
-        key_line("Enter", "Contextuel (sélectionner/valider/plein écran)"),
-        key_line("Espace", "Ouvrir le panneau diff"),
+        key_line_multi(
+            keybindings::navigation::DOWN,
+            text("Commit suivant", "Next commit"),
+        ),
+        key_line_multi(
+            keybindings::navigation::UP,
+            text("Commit precedent", "Previous commit"),
+        ),
+        key_line_multi(
+            keybindings::navigation::TOP,
+            text("Premier commit", "First commit"),
+        ),
+        key_line_multi(
+            keybindings::navigation::BOTTOM,
+            text("Dernier commit", "Last commit"),
+        ),
+        key_line_multi(
+            keybindings::navigation::PAGE_DOWN,
+            text("Page suivante", "Next page"),
+        ),
+        key_line_multi(
+            keybindings::navigation::PAGE_UP,
+            text("Page precedente", "Previous page"),
+        ),
+        key_line(
+            keybindings::navigation::SWITCH_PANEL,
+            text("Basculer panneaux", "Switch panels"),
+        ),
+        key_line(
+            "Enter",
+            text(
+                "Contextuel (selectionner/valider/plein ecran)",
+                "Contextual (select/confirm/fullscreen)",
+            ),
+        ),
+        key_line("Espace", text("Ouvrir le panneau diff", "Open diff panel")),
         Line::from(""),
         // ── Vues ──
-        section_header("Vues"),
+        section_header(text("Vues", "Views")),
         separator(),
-        key_line(keybindings::global::VIEW_GRAPH, "Vue Graph"),
-        key_line(keybindings::global::VIEW_STAGING, "Vue Staging"),
-        key_line(keybindings::global::VIEW_BRANCHES, "Vue Branches"),
+        key_line(
+            keybindings::global::VIEW_GRAPH,
+            text("Vue Graph", "Graph view"),
+        ),
+        key_line(
+            keybindings::global::VIEW_STAGING,
+            text("Vue Staging", "Staging view"),
+        ),
+        key_line(
+            keybindings::global::VIEW_BRANCHES,
+            text("Vue Branches", "Branches view"),
+        ),
         key_line(
             keybindings::global::VIEW_CONFLICTS,
-            "Vue Conflits (si actifs)",
+            text("Vue Conflits (si actifs)", "Conflicts view (if active)"),
         ),
         Line::from(""),
         // ── Actions Git ──
-        section_header("Actions Git"),
+        section_header(text("Actions Git", "Git Actions")),
         separator(),
-        key_line(keybindings::git_actions::COMMIT, "Nouveau commit"),
-        key_line(keybindings::git_actions::STASH, "Stash"),
-        key_line(keybindings::git_actions::MERGE, "Merge"),
-        key_line(keybindings::git_actions::BRANCH_PANEL, "Panneau branches"),
-        key_line(keybindings::git_actions::PUSH, "Push"),
-        key_line(keybindings::git_actions::FORCE_PUSH, "Force push"),
-        key_line(keybindings::git_actions::PULL, "Pull"),
-        key_line(keybindings::git_actions::FETCH, "Fetch"),
-        key_line(keybindings::git_actions::CHERRY_PICK, "Cherry-pick"),
-        key_line(keybindings::git_actions::BLAME, "Blame du fichier"),
-        key_line(keybindings::git_actions::RESET, "Reset"),
+        key_line(
+            keybindings::git_actions::COMMIT,
+            text("Nouveau commit", "New commit"),
+        ),
+        key_line(keybindings::git_actions::STASH, text("Stash", "Stash")),
+        key_line(keybindings::git_actions::MERGE, text("Merge", "Merge")),
+        key_line(
+            keybindings::git_actions::BRANCH_PANEL,
+            text("Panneau branches", "Branches panel"),
+        ),
+        key_line(keybindings::git_actions::PUSH, text("Push", "Push")),
+        key_line(
+            keybindings::git_actions::FORCE_PUSH,
+            text("Force push", "Force push"),
+        ),
+        key_line(keybindings::git_actions::PULL, text("Pull", "Pull")),
+        key_line(keybindings::git_actions::FETCH, text("Fetch", "Fetch")),
+        key_line(
+            keybindings::git_actions::CHERRY_PICK,
+            text("Cherry-pick", "Cherry-pick"),
+        ),
+        key_line(
+            keybindings::git_actions::BLAME,
+            text("Blame du fichier", "File blame"),
+        ),
+        key_line(keybindings::git_actions::RESET, text("Reset", "Reset")),
         Line::from(""),
         // ── Recherche & Filtre ──
-        section_header("Recherche & Filtre"),
+        section_header(text("Recherche & Filtre", "Search & Filter")),
         separator(),
-        key_line(keybindings::search::OPEN, "Ouvrir la recherche"),
-        key_line(keybindings::search::NEXT, "Résultat suivant"),
-        key_line(keybindings::search::PREVIOUS, "Résultat précédent"),
-        key_line(keybindings::search::FILTER, "Filtre avancé"),
+        key_line(
+            keybindings::search::OPEN,
+            text("Ouvrir la recherche", "Open search"),
+        ),
+        key_line(
+            keybindings::search::NEXT,
+            text("Resultat suivant", "Next result"),
+        ),
+        key_line(
+            keybindings::search::PREVIOUS,
+            text("Resultat precedent", "Previous result"),
+        ),
+        key_line(
+            keybindings::search::FILTER,
+            text("Filtre avance", "Advanced filter"),
+        ),
         Line::from(""),
         // ── Interface ──
-        section_header("Interface"),
+        section_header(text("Interface", "Interface")),
         separator(),
         key_line(
             keybindings::diff::TOGGLE_VIEW,
-            "Toggle diff (unified/split)",
+            text(
+                "Basculer diff (unifie/split)",
+                "Toggle diff (unified/split)",
+            ),
         ),
-        key_line(keybindings::global::REFRESH, "Rafraîchir"),
-        key_line(keybindings::global::COPY, "Copier dans le clipboard"),
-        key_line_multi(keybindings::global::QUIT, "Quitter"),
+        key_line(keybindings::global::REFRESH, text("Rafraichir", "Refresh")),
+        key_line(
+            keybindings::global::COPY,
+            text("Copier dans le presse-papiers", "Copy to clipboard"),
+        ),
+        key_line_multi(keybindings::global::QUIT, text("Quitter", "Quit")),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "Esc ou ? pour fermer",
+            text_owned("Esc ou ? pour fermer", "Esc or ? to close"),
             Style::default()
                 .fg(theme.text_secondary)
                 .add_modifier(Modifier::ITALIC),

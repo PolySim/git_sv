@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::app::BottomLeftMode;
+use crate::i18n::text;
 use crate::ui::theme::current_theme;
 
 pub struct HelpBarRenderContext {
@@ -35,40 +36,44 @@ pub fn render(frame: &mut Frame, ctx: HelpBarRenderContext) {
 
     // Déterminer les touches à afficher.
     let mut keys = vec![
-        ("j/k", "naviguer"),
-        ("Enter", "détail"),
-        ("b", "branches"),
-        ("c", "commit"),
-        ("s", "stash"),
-        ("m", "merge"),
-        ("P", "push"),
-        ("Ctrl+P", "force push"),
+        ("j/k", text("naviguer", "navigate")),
+        ("Enter", text("detail", "details")),
+        ("b", text("branches", "branches")),
+        ("c", text("commit", "commit")),
+        ("s", text("stash", "stash")),
+        ("m", text("merge", "merge")),
+        ("P", text("push", "push")),
+        ("Ctrl+P", text("force push", "force push")),
     ];
 
     // Ajouter abort merge si un merge est en cours.
     if is_merging {
-        keys.push(("A", "abort merge"));
+        keys.push(("A", text("annuler merge", "abort merge")));
     }
 
     // Ajouter le contexte du panneau bas.
     match bottom_left_mode {
         BottomLeftMode::Files => {
-            keys.push(("Tab", "fichiers"));
-            keys.push(("Espace", "diff"));
-            keys.push(("Enter", "plein ecran"));
+            keys.push(("Tab", text("fichiers", "files")));
+            keys.push(("Espace", text("diff", "diff")));
+            keys.push(("Enter", text("plein ecran", "fullscreen")));
         }
-        BottomLeftMode::Parents => keys.push(("Tab", "commit")),
+        BottomLeftMode::Parents => keys.push(("Tab", text("commit", "commit"))),
     }
 
     // Ajouter le raccourci pour effacer les filtres s'ils sont actifs
     if filter_active {
-        keys.push(("Ctrl+R", "effacer filtres"));
+        keys.push(("Ctrl+R", text("effacer filtres", "clear filters")));
     }
 
-    keys.extend(vec![("r", "rafraîchir"), ("?", "aide"), ("q", "quitter")]);
+    keys.extend(vec![
+        ("r", text("rafraichir", "refresh")),
+        ("?", text("aide", "help")),
+        ("q", text("quitter", "quit")),
+    ]);
 
-    keys.push(("clic", "focus/select"));
-    keys.push(("molette", "scroll"));
+    keys.push((text("clic", "click"), text("focus/select", "focus/select")));
+    keys.push((text("molette", "wheel"), text("scroll", "scroll")));
 
     // Construire la ligne avec les touches formatées.
     let mut spans = build_help_spans(&keys, theme);

@@ -1,5 +1,6 @@
 //! Widget de sélection de branche pour le merge.
 
+use crate::i18n::{text, text_owned};
 use crate::ui::common::centered_rect;
 use crate::ui::theme::current_theme;
 use ratatui::{
@@ -35,7 +36,10 @@ pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
 
     // Construire le titre avec la branche courante
     let current_branch_name = current_branch.unwrap_or("???");
-    let title = format!(" Merger dans '{}' ", current_branch_name);
+    let title = text_owned(
+        format!(" Fusionner dans '{}' ", current_branch_name),
+        format!(" Merge into '{}' ", current_branch_name),
+    );
 
     // Construire la liste des branches
     let items: Vec<ListItem> = state
@@ -85,7 +89,10 @@ fn render_help_bar(frame: &mut Frame, popup_area: Rect) {
         height: 1,
     };
 
-    let help_text = "j/k:naviguer  Enter:merger  Esc:annuler";
+    let help_text = text(
+        "j/k:naviguer  Enter:fusionner  Esc:annuler",
+        "j/k:navigate  Enter:merge  Esc:cancel",
+    );
 
     let line = Line::from(vec![Span::styled(
         help_text,

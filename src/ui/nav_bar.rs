@@ -10,6 +10,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::i18n::{text, text_owned};
 use crate::state::ViewMode;
 use crate::ui::theme::current_theme;
 
@@ -33,9 +34,12 @@ pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
     // Label pour l'onglet Conflits (si applicable)
     let conflicts_label = if has_conflicts {
         Some(if unresolved_conflicts == 1 {
-            "Conflits (1)".to_string()
+            text_owned("Conflits (1)", "Conflicts (1)")
         } else {
-            format!("Conflits ({})", unresolved_conflicts)
+            text_owned(
+                format!("Conflits ({})", unresolved_conflicts),
+                format!("Conflicts ({})", unresolved_conflicts),
+            )
         })
     } else {
         None
@@ -45,9 +49,9 @@ pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
 
     // Onglets fixes
     let tabs = [
-        ("1", "Graph", ViewMode::Graph),
-        ("2", "Staging", ViewMode::Staging),
-        ("3", "Branches", ViewMode::Branches),
+        ("1", text("Graphe", "Graph"), ViewMode::Graph),
+        ("2", text("Staging", "Staging"), ViewMode::Staging),
+        ("3", text("Branches", "Branches"), ViewMode::Branches),
     ];
 
     // Rendre les onglets fixes
@@ -108,7 +112,7 @@ pub fn render_compact(current_view: ViewMode, unresolved_conflicts: usize) -> Li
     let has_conflicts = unresolved_conflicts > 0;
 
     let mut tabs: Vec<(&str, ViewMode)> = vec![
-        ("1:Graph", ViewMode::Graph),
+        (text("1:Graphe", "1:Graph"), ViewMode::Graph),
         ("2:Staging", ViewMode::Staging),
         ("3:Branches", ViewMode::Branches),
     ];
@@ -116,7 +120,7 @@ pub fn render_compact(current_view: ViewMode, unresolved_conflicts: usize) -> Li
     // Ajouter l'onglet Conflits s'il y a des conflits
     // Note: on n'affiche pas le nombre en mode compact pour garder la simplicité
     if has_conflicts {
-        tabs.push(("4:Conflits", ViewMode::Conflicts));
+        tabs.push((text("4:Conflits", "4:Conflicts"), ViewMode::Conflicts));
     }
 
     let mut spans: Vec<Span> = Vec::new();

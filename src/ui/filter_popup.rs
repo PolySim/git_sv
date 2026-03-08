@@ -1,5 +1,6 @@
 //! Popup de filtrage pour le graph de commits.
 
+use crate::i18n::text;
 use crate::ui::common::centered_rect;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
@@ -49,9 +50,9 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
     // Bordure avec titre
     let is_active = current_filter.is_active();
     let title = if is_active {
-        "Filtres de commits (actifs)"
+        text("Filtres de commits (actifs)", "Commit filters (active)")
     } else {
-        "Filtres de commits"
+        text("Filtres de commits", "Commit filters")
     };
 
     let border_style = if is_active {
@@ -86,16 +87,19 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
         .split(inner);
 
     // Description
-    let desc = Paragraph::new("Filtrer les commits affichés dans le graph")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(theme.text_secondary));
+    let desc = Paragraph::new(text(
+        "Filtrer les commits affiches dans le graphe",
+        "Filter commits shown in the graph",
+    ))
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(theme.text_secondary));
     frame.render_widget(desc, chunks[0]);
 
     // Champs de filtre
     render_filter_field(
         frame,
         FilterFieldRenderContext {
-            label: "Auteur",
+            label: text("Auteur", "Author"),
             value: &popup_state.author_input,
             is_selected: popup_state.selected_field == FilterField::Author,
             area: chunks[2],
@@ -106,7 +110,7 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
     render_filter_field(
         frame,
         FilterFieldRenderContext {
-            label: "Date début (YYYY-MM-DD)",
+            label: text("Date debut (YYYY-MM-DD)", "Start date (YYYY-MM-DD)"),
             value: &popup_state.date_from_input,
             is_selected: popup_state.selected_field == FilterField::DateFrom,
             area: chunks[3],
@@ -117,7 +121,7 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
     render_filter_field(
         frame,
         FilterFieldRenderContext {
-            label: "Date fin (YYYY-MM-DD)",
+            label: text("Date fin (YYYY-MM-DD)", "End date (YYYY-MM-DD)"),
             value: &popup_state.date_to_input,
             is_selected: popup_state.selected_field == FilterField::DateTo,
             area: chunks[4],
@@ -128,7 +132,7 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
     render_filter_field(
         frame,
         FilterFieldRenderContext {
-            label: "Chemin",
+            label: text("Chemin", "Path"),
             value: &popup_state.path_input,
             is_selected: popup_state.selected_field == FilterField::Path,
             area: chunks[5],
@@ -139,7 +143,7 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
     render_filter_field(
         frame,
         FilterFieldRenderContext {
-            label: "Message contient",
+            label: text("Message contient", "Message contains"),
             value: &popup_state.message_input,
             is_selected: popup_state.selected_field == FilterField::Message,
             area: chunks[6],
@@ -148,8 +152,10 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
     );
 
     // Aide en bas
-    let help_text =
-        "Tab/↑↓: changer champ | Entrée: appliquer | Échap: fermer | Ctrl+R: réinitialiser tous les filtres";
+    let help_text = text(
+        "Tab/↑↓: changer champ | Entree: appliquer | Echap: fermer | Ctrl+R: reinitialiser tous les filtres",
+        "Tab/↑↓: change field | Enter: apply | Esc: close | Ctrl+R: reset all filters",
+    );
     let help = Paragraph::new(help_text)
         .alignment(Alignment::Center)
         .style(Style::default().fg(theme.text_secondary));
@@ -193,7 +199,11 @@ fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
         (theme.background, theme.text_normal)
     };
 
-    let display_value = if value.is_empty() { " (vide) " } else { value };
+    let display_value = if value.is_empty() {
+        text(" (vide) ", " (empty) ")
+    } else {
+        value
+    };
 
     let value_style = if value.is_empty() && is_selected {
         Style::default().fg(theme.text_secondary).bg(bg_color)

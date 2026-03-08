@@ -1,6 +1,7 @@
 //! Vue blame : affiche les annotations de commit ligne par ligne.
 
 use crate::git::blame::FileBlame;
+use crate::i18n::{text, text_owned};
 use crate::state::BlameState;
 use crate::ui::theme::current_theme;
 use crate::utils::time::format_relative_time;
@@ -34,9 +35,15 @@ impl Widget for BlameView<'_> {
 
         // Titre avec le chemin du fichier
         let title = if let Some(ref blame) = self.state.blame {
-            format!(" Blame: {} ", blame.path)
+            text_owned(
+                format!(" Blame : {} ", blame.path),
+                format!(" Blame: {} ", blame.path),
+            )
         } else {
-            format!(" Blame: {} ", self.state.file_path)
+            text_owned(
+                format!(" Blame : {} ", self.state.file_path),
+                format!(" Blame: {} ", self.state.file_path),
+            )
         };
 
         let title_block = Block::default()
@@ -50,7 +57,7 @@ impl Widget for BlameView<'_> {
             render_blame_content(blame, self.state, chunks[1], buf);
         } else {
             // Afficher un message de chargement
-            let msg = Paragraph::new("Chargement du blame...")
+            let msg = Paragraph::new(text("Chargement du blame...", "Loading blame..."))
                 .style(
                     Style::default()
                         .fg(theme.text_secondary)
@@ -65,9 +72,10 @@ impl Widget for BlameView<'_> {
 /// Affiche le contenu annoté du fichier.
 fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: &mut Buffer) {
     let theme = current_theme();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Lignes annotées (↑↓: naviguer, Enter: aller au commit, Esc: fermer) ");
+    let block = Block::default().borders(Borders::ALL).title(text(
+        " Lignes annotees (↑↓: naviguer, Enter: aller au commit, Esc: fermer) ",
+        " Annotated lines (↑↓: navigate, Enter: go to commit, Esc: close) ",
+    ));
 
     let inner = block.inner(area);
     block.render(area, buf);

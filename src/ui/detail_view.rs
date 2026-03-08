@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::git::graph::GraphRow;
+use crate::i18n::{text, text_owned};
 use crate::ui::theme::current_theme;
 use crate::utils::format_absolute_time;
 
@@ -52,19 +53,19 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         // Indicateur de type de commit
         let (commit_type, type_style) = if node.parents.len() > 1 {
             (
-                "⊕ Merge",
+                text("⊕ Fusion", "⊕ Merge"),
                 Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )
         } else if node.parents.is_empty() {
             (
-                "◆ Initial",
+                text("◆ Initial", "◆ Initial"),
                 Style::default()
                     .fg(theme.success)
                     .add_modifier(Modifier::BOLD),
             )
         } else {
             (
-                "● Commit",
+                text("● Commit", "● Commit"),
                 Style::default()
                     .fg(theme.text_secondary)
                     .add_modifier(Modifier::BOLD),
@@ -77,7 +78,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
             // Commit hash
             Line::from(vec![
                 Span::styled(
-                    "Commit:  ",
+                    text("Commit:  ", "Commit:  "),
                     Style::default()
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
@@ -87,7 +88,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
             // Auteur
             Line::from(vec![
                 Span::styled(
-                    "Auteur:  ",
+                    text("Auteur:  ", "Author:  "),
                     Style::default()
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
@@ -97,7 +98,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
             // Date
             Line::from(vec![
                 Span::styled(
-                    "Date:    ",
+                    text("Date:    ", "Date:    "),
                     Style::default()
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
@@ -110,7 +111,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         if has_refs {
             lines.push(Line::from(vec![
                 Span::styled(
-                    "Refs:    ",
+                    text("Refs:    ", "Refs:    "),
                     Style::default()
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
@@ -123,7 +124,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         if let Some(branch) = &node.branch_name {
             lines.push(Line::from(vec![
                 Span::styled(
-                    "Branche: ",
+                    text("Branche: ", "Branch:  "),
                     Style::default()
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
@@ -136,7 +137,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         if has_parents {
             lines.push(Line::from(vec![
                 Span::styled(
-                    "Parents: ",
+                    text("Parents: ", "Parents: "),
                     Style::default()
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
@@ -162,7 +163,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         lines
     } else {
         vec![Line::from(Span::styled(
-            "Aucun commit sélectionné",
+            text("Aucun commit selectionne", "No commit selected"),
             Style::default().fg(theme.text_secondary),
         ))]
     };
@@ -176,7 +177,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Détail ")
+                .title(text_owned(" Détail ", " Detail "))
                 .borders(Borders::ALL)
                 .border_style(border_style),
         )

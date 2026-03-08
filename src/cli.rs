@@ -4,6 +4,7 @@
 //! sans lancer la TUI complète.
 
 use crate::git::{branch::BranchInfo, commit::CommitInfo, GitRepo};
+use crate::i18n::{text, text_owned};
 use crate::state::GraphFilter;
 use anyhow::Result;
 use serde::Serialize;
@@ -160,7 +161,11 @@ fn print_branches_human(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<(
     // Branches distantes
     if !remote.is_empty() {
         writeln!(handle)?;
-        writeln!(handle, "\x1b[90mRemote branches:\x1b[0m")?;
+        writeln!(
+            handle,
+            "\x1b[90m{}\x1b[0m",
+            text("Branches distantes:", "Remote branches:")
+        )?;
         for branch in remote {
             writeln!(handle, "  {}", branch.name)?;
         }
@@ -174,7 +179,11 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
     let mut handle = stdout.lock();
 
     if entries.is_empty() {
-        writeln!(handle, "\x1b[32mWorking directory clean\x1b[0m")?;
+        writeln!(
+            handle,
+            "\x1b[32m{}\x1b[0m",
+            text("Repertoire de travail propre", "Working directory clean")
+        )?;
         return Ok(());
     }
 
@@ -203,7 +212,11 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
     }
 
     if !staged.is_empty() {
-        writeln!(handle, "\x1b[32mChanges to be committed:\x1b[0m")?;
+        writeln!(
+            handle,
+            "\x1b[32m{}\x1b[0m",
+            text("Changements a valider :", "Changes to be committed:")
+        )?;
         for path in &staged {
             writeln!(handle, "  \x1b[32m+ {}\x1b[0m", path)?;
         }
@@ -211,7 +224,14 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
     }
 
     if !unstaged.is_empty() {
-        writeln!(handle, "\x1b[33mChanges not staged for commit:\x1b[0m")?;
+        writeln!(
+            handle,
+            "\x1b[33m{}\x1b[0m",
+            text(
+                "Changements non indexes pour le commit :",
+                "Changes not staged for commit:"
+            )
+        )?;
         for path in &unstaged {
             writeln!(handle, "  \x1b[33mM {}\x1b[0m", path)?;
         }
@@ -219,7 +239,11 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
     }
 
     if !untracked.is_empty() {
-        writeln!(handle, "\x1b[90mUntracked files:\x1b[0m")?;
+        writeln!(
+            handle,
+            "\x1b[90m{}\x1b[0m",
+            text("Fichiers non suivis :", "Untracked files:")
+        )?;
         for path in &untracked {
             writeln!(handle, "  \x1b[90m? {}\x1b[0m", path)?;
         }
@@ -408,7 +432,7 @@ fn print_graph_json(_graph_rows: &[crate::git::graph::GraphRow]) -> Result<()> {
 fn format_timestamp(timestamp: i64) -> String {
     chrono::DateTime::from_timestamp(timestamp, 0)
         .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-        .unwrap_or_else(|| "???".to_string())
+        .unwrap_or_else(|| text_owned("???", "???"))
 }
 
 fn format_status(status: &git2::Status) -> String {

@@ -5,6 +5,7 @@
 
 #![allow(dead_code)]
 
+use crate::i18n::text;
 use git2::{Repository, StatusOptions};
 
 use super::branch::BranchInfo;
@@ -29,7 +30,10 @@ impl GitRepo {
     /// Retourne le nom de la branche courante (HEAD).
     pub fn current_branch(&self) -> Result<String> {
         let head = self.repo.head()?;
-        let name = head.shorthand().unwrap_or("HEAD détachée").to_string();
+        let name = head
+            .shorthand()
+            .unwrap_or(text("HEAD detachee", "Detached HEAD"))
+            .to_string();
         Ok(name)
     }
 
@@ -302,19 +306,19 @@ impl StatusEntry {
     pub fn display_status(&self) -> &'static str {
         let s = self.status;
         if s.contains(git2::Status::INDEX_NEW) {
-            "Nouveau (staged)"
+            text("Nouveau (staged)", "New (staged)")
         } else if s.contains(git2::Status::INDEX_MODIFIED) {
-            "Modifié (staged)"
+            text("Modifié (staged)", "Modified (staged)")
         } else if s.contains(git2::Status::INDEX_DELETED) {
-            "Supprimé (staged)"
+            text("Supprimé (staged)", "Deleted (staged)")
         } else if s.contains(git2::Status::WT_MODIFIED) {
-            "Modifié"
+            text("Modifié", "Modified")
         } else if s.contains(git2::Status::WT_NEW) {
-            "Non suivi"
+            text("Non suivi", "Untracked")
         } else if s.contains(git2::Status::WT_DELETED) {
-            "Supprimé"
+            text("Supprimé", "Deleted")
         } else {
-            "Inconnu"
+            text("Inconnu", "Unknown")
         }
     }
 

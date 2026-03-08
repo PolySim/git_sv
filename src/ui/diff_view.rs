@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use crate::git::diff::{DiffLineType, DiffViewMode, FileDiff};
+use crate::i18n::{text, text_owned};
 use crate::ui::theme::{current_theme, Theme};
 
 /// Largeur minimale pour le mode side-by-side (en caractères par colonne).
@@ -86,7 +87,10 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
 
     let content = match diff {
         Some(d) => build_diff_lines(d),
-        None => vec![Line::from("Sélectionnez un fichier pour voir le diff")],
+        None => vec![Line::from(text(
+            "Selectionnez un fichier pour voir le diff",
+            "Select a file to view the diff",
+        ))],
     };
 
     let total_lines = content.len();
@@ -107,14 +111,23 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
             } else {
                 String::new()
             };
-            format!(
-                " Diff — {} (+{}/-{}){}{} ",
-                d.path, d.additions, d.deletions, fullscreen_indicator, scroll_indicator
+            text_owned(
+                format!(
+                    " Diff - {} (+{}/-{}){}{} ",
+                    d.path, d.additions, d.deletions, fullscreen_indicator, scroll_indicator
+                ),
+                format!(
+                    " Diff - {} (+{}/-{}){}{} ",
+                    d.path, d.additions, d.deletions, fullscreen_indicator, scroll_indicator
+                ),
             )
         }
         None => {
             let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
-            format!(" Diff{} ", fullscreen_indicator)
+            text_owned(
+                format!(" Diff{} ", fullscreen_indicator),
+                format!(" Diff{} ", fullscreen_indicator),
+            )
         }
     };
 
@@ -159,14 +172,23 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     let title = match diff {
         Some(d) => {
             let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
-            format!(
-                " Diff (side-by-side) — {} (+{}/-{}){} ",
-                d.path, d.additions, d.deletions, fullscreen_indicator
+            text_owned(
+                format!(
+                    " Diff (cote a cote) - {} (+{}/-{}){} ",
+                    d.path, d.additions, d.deletions, fullscreen_indicator
+                ),
+                format!(
+                    " Diff (side-by-side) - {} (+{}/-{}){} ",
+                    d.path, d.additions, d.deletions, fullscreen_indicator
+                ),
             )
         }
         None => {
             let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
-            format!(" Diff (side-by-side){} ", fullscreen_indicator)
+            text_owned(
+                format!(" Diff (cote a cote){} ", fullscreen_indicator),
+                format!(" Diff (side-by-side){} ", fullscreen_indicator),
+            )
         }
     };
 
@@ -240,7 +262,10 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
 
         total
     } else {
-        let msg = vec![Line::from("Sélectionnez un fichier pour voir le diff")];
+        let msg = vec![Line::from(text(
+            "Selectionnez un fichier pour voir le diff",
+            "Select a file to view the diff",
+        ))];
         let paragraph = Paragraph::new(msg);
         frame.render_widget(paragraph, inner_chunks[0]);
         0
