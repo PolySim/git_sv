@@ -190,6 +190,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
 mod tests {
     use super::*;
     use crate::git::graph::{CommitNode, GraphCell, GraphRow, RefInfo, RefType};
+    use crate::i18n::{with_language, Language};
     use git2::Oid;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
@@ -243,33 +244,32 @@ mod tests {
 
     #[test]
     fn test_detail_view_uses_theme() {
-        let graph = create_test_graph();
-        let backend = TestBackend::new(60, 20);
-        let mut terminal = Terminal::new(backend).unwrap();
-        terminal
-            .draw(|frame| {
-                let area = frame.area();
-                render(
-                    frame,
-                    DetailRenderContext {
-                        graph: &graph,
-                        selected_index: 0,
-                        area,
-                        is_focused: true,
-                    },
-                );
-            })
-            .unwrap();
+        with_language(Language::Fr, || {
+            let graph = create_test_graph();
+            let backend = TestBackend::new(60, 20);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    render(
+                        frame,
+                        DetailRenderContext {
+                            graph: &graph,
+                            selected_index: 0,
+                            area,
+                            is_focused: true,
+                        },
+                    );
+                })
+                .unwrap();
 
-        let buffer = terminal.backend().buffer();
+            let buffer = terminal.backend().buffer();
+            assert!(buffer.content.len() > 0);
 
-        // Vérifier que quelque chose a été rendu
-        assert!(buffer.content.len() > 0);
-
-        // Vérifier que le titre est présent
-        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("Détail"));
-        assert!(content.contains("First commit"));
+            let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+            assert!(content.contains("Détail"));
+            assert!(content.contains("First commit"));
+        });
     }
 
     #[test]
@@ -373,32 +373,33 @@ mod tests {
 
     #[test]
     fn test_detail_view_no_selection() {
-        let graph: Vec<GraphRow> = vec![];
-        let backend = TestBackend::new(60, 20);
-        let mut terminal = Terminal::new(backend).unwrap();
+        with_language(Language::Fr, || {
+            let graph: Vec<GraphRow> = vec![];
+            let backend = TestBackend::new(60, 20);
+            let mut terminal = Terminal::new(backend).unwrap();
 
-        terminal
-            .draw(|frame| {
-                let area = frame.area();
-                render(
-                    frame,
-                    DetailRenderContext {
-                        graph: &graph,
-                        selected_index: 0,
-                        area,
-                        is_focused: false,
-                    },
-                );
-            })
-            .unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    render(
+                        frame,
+                        DetailRenderContext {
+                            graph: &graph,
+                            selected_index: 0,
+                            area,
+                            is_focused: false,
+                        },
+                    );
+                })
+                .unwrap();
 
-        let buffer = terminal.backend().buffer();
-        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+            let buffer = terminal.backend().buffer();
+            let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
 
-        // Vérifier que le message "Aucun commit sélectionné" est affiché
-        assert!(
-            content.contains("Aucun commit"),
-            "Devrait afficher 'Aucun commit sélectionné' quand il n'y a pas de graphe"
-        );
+            assert!(
+                content.contains("Aucun commit"),
+                "Devrait afficher 'Aucun commit sélectionné' quand il n'y a pas de graphe"
+            );
+        });
     }
 }

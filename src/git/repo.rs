@@ -347,6 +347,7 @@ impl StatusEntry {
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::*;
+    use crate::i18n::{with_language, Language};
 
     #[test]
     fn test_status_entry_is_staged() {
@@ -385,29 +386,31 @@ mod tests {
 
     #[test]
     fn test_status_entry_display_status() {
-        let entry_new = StatusEntry {
-            path: "new.txt".to_string(),
-            status: git2::Status::INDEX_NEW,
-        };
-        assert_eq!(entry_new.display_status(), "Nouveau (staged)");
+        with_language(Language::Fr, || {
+            let entry_new = StatusEntry {
+                path: "new.txt".to_string(),
+                status: git2::Status::INDEX_NEW,
+            };
+            assert_eq!(entry_new.display_status(), "Nouveau (staged)");
 
-        let entry_modified = StatusEntry {
-            path: "modified.txt".to_string(),
-            status: git2::Status::WT_MODIFIED,
-        };
-        assert_eq!(entry_modified.display_status(), "Modifié");
+            let entry_modified = StatusEntry {
+                path: "modified.txt".to_string(),
+                status: git2::Status::WT_MODIFIED,
+            };
+            assert_eq!(entry_modified.display_status(), "Modifié");
 
-        let entry_untracked = StatusEntry {
-            path: "untracked.txt".to_string(),
-            status: git2::Status::WT_NEW,
-        };
-        assert_eq!(entry_untracked.display_status(), "Non suivi");
+            let entry_untracked = StatusEntry {
+                path: "untracked.txt".to_string(),
+                status: git2::Status::WT_NEW,
+            };
+            assert_eq!(entry_untracked.display_status(), "Non suivi");
 
-        let entry_deleted = StatusEntry {
-            path: "deleted.txt".to_string(),
-            status: git2::Status::WT_DELETED,
-        };
-        assert_eq!(entry_deleted.display_status(), "Supprimé");
+            let entry_deleted = StatusEntry {
+                path: "deleted.txt".to_string(),
+                status: git2::Status::WT_DELETED,
+            };
+            assert_eq!(entry_deleted.display_status(), "Supprimé");
+        });
     }
 
     #[test]

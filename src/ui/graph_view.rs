@@ -558,6 +558,7 @@ fn get_branch_color(index: usize) -> Color {
 mod tests {
     use super::*;
     use crate::git::graph::{CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow};
+    use crate::i18n::{with_language, Language};
     use git2::Oid;
     use ratatui::widgets::ListState;
 
@@ -1075,13 +1076,15 @@ mod tests {
 
     #[test]
     fn test_empty_graph_shows_filtered_message() {
-        let line = build_empty_state_line(true);
-        let text: String = line
-            .spans
-            .iter()
-            .map(|span| span.content.as_ref())
-            .collect();
+        with_language(Language::Fr, || {
+            let line = build_empty_state_line(true);
+            let text: String = line
+                .spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect();
 
-        assert!(text.contains("Aucun commit ne correspond aux filtres actifs"));
+            assert!(text.contains("Aucun commit ne correspond aux filtres actifs"));
+        });
     }
 }

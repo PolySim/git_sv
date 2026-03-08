@@ -8,9 +8,9 @@ use std::sync::{OnceLock, RwLock};
 #[serde(rename_all = "lowercase")]
 pub enum Language {
     /// Français.
-    #[default]
     Fr,
     /// Anglais.
+    #[default]
     En,
 }
 

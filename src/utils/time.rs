@@ -90,60 +90,77 @@ pub fn format_absolute_time(timestamp: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::{with_language, Language};
 
     #[test]
     fn test_format_relative_time_now() {
-        let now = Utc::now().timestamp();
-        let result = format_relative_time(now);
-        assert_eq!(result, "a l'instant");
+        with_language(Language::Fr, || {
+            let now = Utc::now().timestamp();
+            let result = format_relative_time(now);
+            assert_eq!(result, "a l'instant");
+        });
     }
 
     #[test]
     fn test_format_relative_time_minutes() {
-        let five_min_ago = (Utc::now() - Duration::minutes(5)).timestamp();
-        let result = format_relative_time(five_min_ago);
-        assert_eq!(result, "il y a 5 minutes");
+        with_language(Language::Fr, || {
+            let five_min_ago = (Utc::now() - Duration::minutes(5)).timestamp();
+            let result = format_relative_time(five_min_ago);
+            assert_eq!(result, "il y a 5 minutes");
+        });
     }
 
     #[test]
     fn test_format_relative_time_hours() {
-        let two_hours_ago = (Utc::now() - Duration::hours(2)).timestamp();
-        let result = format_relative_time(two_hours_ago);
-        assert_eq!(result, "il y a 2 heures");
+        with_language(Language::Fr, || {
+            let two_hours_ago = (Utc::now() - Duration::hours(2)).timestamp();
+            let result = format_relative_time(two_hours_ago);
+            assert_eq!(result, "il y a 2 heures");
+        });
     }
 
     #[test]
     fn test_format_relative_time_yesterday() {
-        let yesterday = (Utc::now() - Duration::days(1)).timestamp();
-        let result = format_relative_time(yesterday);
-        assert_eq!(result, "hier");
+        with_language(Language::Fr, || {
+            let yesterday = (Utc::now() - Duration::days(1)).timestamp();
+            let result = format_relative_time(yesterday);
+            assert_eq!(result, "hier");
+        });
     }
 
     #[test]
     fn test_format_relative_time_days() {
-        let three_days_ago = (Utc::now() - Duration::days(3)).timestamp();
-        let result = format_relative_time(three_days_ago);
-        assert_eq!(result, "il y a 3 jours");
+        with_language(Language::Fr, || {
+            let three_days_ago = (Utc::now() - Duration::days(3)).timestamp();
+            let result = format_relative_time(three_days_ago);
+            assert_eq!(result, "il y a 3 jours");
+        });
     }
 
     #[test]
     fn test_format_relative_time_weeks() {
-        let two_weeks_ago = (Utc::now() - Duration::weeks(2)).timestamp();
-        let result = format_relative_time(two_weeks_ago);
-        assert_eq!(result, "il y a 2 semaines");
+        with_language(Language::Fr, || {
+            let two_weeks_ago = (Utc::now() - Duration::weeks(2)).timestamp();
+            let result = format_relative_time(two_weeks_ago);
+            assert_eq!(result, "il y a 2 semaines");
+        });
     }
 
     #[test]
     fn test_format_relative_time_months() {
-        let two_months_ago = (Utc::now() - Duration::days(60)).timestamp();
-        let result = format_relative_time(two_months_ago);
-        assert_eq!(result, "il y a 2 mois");
+        with_language(Language::Fr, || {
+            let two_months_ago = (Utc::now() - Duration::days(60)).timestamp();
+            let result = format_relative_time(two_months_ago);
+            assert_eq!(result, "il y a 2 mois");
+        });
     }
 
     #[test]
     fn test_format_relative_time_years() {
-        let two_years_ago = (Utc::now() - Duration::days(730)).timestamp();
-        let result = format_relative_time(two_years_ago);
-        assert_eq!(result, "il y a 2 ans");
+        with_language(Language::Fr, || {
+            let two_years_ago = (Utc::now() - Duration::days(730)).timestamp();
+            let result = format_relative_time(two_years_ago);
+            assert_eq!(result, "il y a 2 ans");
+        });
     }
 }

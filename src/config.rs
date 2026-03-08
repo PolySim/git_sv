@@ -18,15 +18,33 @@ pub struct AppConfig {
 impl AppConfig {
     /// Charge la configuration depuis le fichier utilisateur.
     pub fn load() -> Result<Self> {
-        Self::load_from_path(&Self::config_path())
+        for path in Self::candidate_paths() {
+            if path.exists() {
+                return Self::load_from_path(&path);
+            }
+        }
+
+        let config = Self::default();
+        config.write_default_file()?;
+        Ok(config)
     }
 
-    /// Retourne le chemin du fichier de configuration.
-    pub fn config_path() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("git_sv")
-            .join("config.json")
+    /// Retourne les chemins de configuration pris en charge.
+    pub fn candidate_paths() -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+
+        if let Some(home_dir) = dirs::home_dir() {
+            paths.push(home_dir.join(".config").join("git_sv").join("config.json"));
+        }
+
+        if let Some(config_dir) = dirs::config_dir() {
+            let platform_path = config_dir.join("git_sv").join("config.json");
+            if !paths.iter().any(|path| path == &platform_path) {
+                paths.push(platform_path);
+            }
+        }
+
+        paths
     }
 
     /// Charge la configuration depuis un chemin donné.
@@ -38,6 +56,33 @@ impl AppConfig {
         let content = std::fs::read_to_string(path)?;
         let config = serde_json::from_str(&content)?;
         Ok(config)
+    }
+
+    /// Ecrit le fichier de configuration par defaut au premier chemin supporte.
+    pub fn write_default_file(&self) -> Result<()> {
+        let Some(path) = Self::candidate_paths().into_iter().next() else {
+            return Ok(());
+        };
+
+        self.write_default_file_to_path(&path)
+    }
+
+    /// Ecrit le fichier de configuration par defaut a un chemin donne.
+    pub fn write_default_file_to_path(&self, path: &Path) -> Result<()> {
+        if path.as_os_str().is_empty() {
+            return Ok(());
+        }
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        if !path.exists() {
+            let content = serde_json::to_string_pretty(self)?;
+            std::fs::write(path, format!("{}\n", content))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -51,7 +96,7 @@ mod tests {
         let path = dir.path().join("missing.json");
 
         let config = AppConfig::load_from_path(&path).unwrap();
-        assert_eq!(config.language, Language::Fr);
+        assert_eq!(config.language, Language::En);
     }
 
     #[test]
@@ -63,5 +108,28 @@ mod tests {
 
         let config = AppConfig::load_from_path(&path).unwrap();
         assert_eq!(config.language, Language::En);
+    }
+
+    #[test]
+    fn test_candidate_paths_contains_xdg_style_path() {
+        let paths = AppConfig::candidate_paths();
+        assert!(
+            paths
+                .iter()
+                .any(|path| path.ends_with(".config/git_sv/config.json")),
+            "Le chemin ~/.config/git_sv/config.json devrait etre pris en charge"
+        );
+    }
+
+    #[test]
+    fn test_write_default_file_creates_english_config() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+        let config = AppConfig::default();
+
+        config.write_default_file_to_path(&path).unwrap();
+
+        let loaded = AppConfig::load_from_path(&path).unwrap();
+        assert_eq!(loaded.language, Language::En);
     }
 }
