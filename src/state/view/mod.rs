@@ -1,7 +1,5 @@
 //! États spécifiques à chaque vue.
 
-#![allow(dead_code)]
-
 mod blame;
 mod branches;
 mod conflicts;
@@ -49,16 +47,6 @@ impl BottomLeftMode {
             BottomLeftMode::Files => BottomLeftMode::Parents,
             BottomLeftMode::Parents => BottomLeftMode::Files,
         };
-    }
-
-    /// Retourne true si le mode affiche les fichiers du commit.
-    pub fn is_commit_files(&self) -> bool {
-        matches!(self, BottomLeftMode::Files)
-    }
-
-    /// Retourne true si le mode affiche le working directory.
-    pub fn is_working_dir(&self) -> bool {
-        matches!(self, BottomLeftMode::Parents)
     }
 }
 

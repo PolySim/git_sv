@@ -2,8 +2,6 @@
 //!
 //! Ce module est le point central de gestion des entrees utilisateur.
 
-#![allow(dead_code)]
-
 mod keyboard;
 mod mouse;
 #[cfg(test)]
@@ -19,14 +17,6 @@ use keyboard::map_key;
 #[cfg(test)]
 pub(crate) use keyboard::map_key_for_test;
 use mouse::map_mouse;
-
-/// Timeout par defaut pour le polling des evenements (ms).
-const DEFAULT_INPUT_TIMEOUT_MS: u64 = 100;
-
-/// Poll un evenement clavier et retourne l'action correspondante.
-pub fn handle_input(state: &AppState) -> std::io::Result<Option<AppAction>> {
-    handle_input_with_timeout(state, DEFAULT_INPUT_TIMEOUT_MS)
-}
 
 /// Poll un evenement avec un timeout configurable (clavier + souris).
 pub fn handle_input_with_timeout(

@@ -7,11 +7,11 @@ use crate::error::Result;
 
 /// Informations sur une branche.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub struct BranchInfo {
     pub name: String,
     pub is_head: bool,
     /// Indique si c'est une branche distante (remote)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub is_remote: bool,
     /// Dernier message de commit sur cette branche.
     pub last_commit_message: Option<String>,
@@ -24,7 +24,7 @@ pub struct BranchInfo {
 
 impl BranchInfo {
     /// Crée un BranchInfo simple (pour compatibilité avec le code existant).
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn simple(name: String, is_head: bool, is_remote: bool) -> Self {
         Self {
             name,
@@ -116,7 +116,6 @@ fn build_remote_branch_info(branch: &Branch) -> Result<BranchInfo> {
 }
 
 /// Liste toutes les branches locales du repository.
-#[allow(dead_code)]
 pub fn list_branches(repo: &Repository) -> Result<Vec<BranchInfo>> {
     // Utilise list_all_branches et filtre pour ne garder que les locales
     let (local_branches, _) = list_all_branches(repo)?;

@@ -49,12 +49,6 @@ impl UiTestHarness {
         self.dispatcher.dispatch(&mut self.state, action).unwrap();
     }
 
-    pub fn dispatch_all(&mut self, actions: &[AppAction]) {
-        for action in actions {
-            self.dispatch(action.clone());
-        }
-    }
-
     pub fn send_key(&mut self, key: KeyEvent) {
         if let Some(action) = crate::ui::input::map_key_for_test(key, &self.state) {
             self.dispatch(action);
@@ -63,10 +57,6 @@ impl UiTestHarness {
 
     pub fn send_char(&mut self, c: char) {
         self.send_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
-    }
-
-    pub fn send_ctrl_char(&mut self, c: char) {
-        self.send_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL));
     }
 
     pub fn send_enter(&mut self) {
@@ -129,18 +119,6 @@ impl UiTestHarness {
         self.commit_all(message)
     }
 
-    pub fn create_branch(&self, name: &str) {
-        let head = self
-            .state
-            .repo
-            .repo
-            .head()
-            .unwrap()
-            .peel_to_commit()
-            .unwrap();
-        self.state.repo.repo.branch(name, &head, false).unwrap();
-    }
-
     pub fn refresh_graph(&mut self) {
         let graph = self.state.repo.build_graph(50).unwrap();
         self.state.replace_graph(graph);
@@ -152,17 +130,5 @@ impl UiTestHarness {
 
     pub fn refresh_staging(&mut self) {
         crate::handler::staging::refresh_staging(&mut self.state).unwrap();
-    }
-
-    pub fn load_branches(&mut self) {
-        let (local, remote) = crate::git::branch::list_all_branches(&self.state.repo.repo).unwrap();
-        self.state
-            .branches_view_state
-            .local_branches
-            .set_items(local);
-        self.state
-            .branches_view_state
-            .remote_branches
-            .set_items(remote);
     }
 }

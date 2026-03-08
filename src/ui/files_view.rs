@@ -8,10 +8,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::BottomLeftMode;
 use crate::git::diff::{DiffFile, DiffStatus};
 use crate::git::repo::StatusEntry;
 use crate::i18n::text_owned;
+use crate::state::BottomLeftMode;
 use crate::ui::theme::{current_theme, Theme};
 
 /// Contexte de rendu du panneau de fichiers.

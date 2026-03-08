@@ -8,7 +8,6 @@ mod app;
 mod cli;
 mod config;
 mod error;
-mod error_display;
 mod git;
 mod handler;
 mod i18n;

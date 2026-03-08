@@ -364,6 +364,26 @@ struct StatusJson {
     staged: bool,
 }
 
+#[derive(Serialize)]
+struct GraphRefJson {
+    name: String,
+    kind: String,
+}
+
+#[derive(Serialize)]
+struct GraphRowJson {
+    hash: String,
+    short_hash: String,
+    message: String,
+    author: String,
+    timestamp: i64,
+    parents: Vec<String>,
+    column: usize,
+    color_index: usize,
+    is_merge: bool,
+    refs: Vec<GraphRefJson>,
+}
+
 fn print_log_json(commits: &[CommitInfo]) -> Result<()> {
     let json_commits: Vec<CommitJson> = commits
         .iter()
@@ -419,9 +439,43 @@ fn print_status_json(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
     Ok(())
 }
 
-fn print_graph_json(_graph_rows: &[crate::git::graph::GraphRow]) -> Result<()> {
-    // Pour l'instant, retourner un objet vide
-    println!("{{}}");
+fn print_graph_json(graph_rows: &[crate::git::graph::GraphRow]) -> Result<()> {
+    let json_rows: Vec<GraphRowJson> = graph_rows
+        .iter()
+        .map(|row| GraphRowJson {
+            hash: row.node.oid.to_string(),
+            short_hash: row.node.short_hash(),
+            message: row.node.message.clone(),
+            author: row.node.author.clone(),
+            timestamp: row.node.timestamp,
+            parents: row
+                .node
+                .parents
+                .iter()
+                .map(|parent| parent.to_string())
+                .collect(),
+            column: row.node.column,
+            color_index: row.node.color_index,
+            is_merge: row.node.parents.len() > 1,
+            refs: row
+                .node
+                .refs
+                .iter()
+                .map(|reference| GraphRefJson {
+                    name: reference.name.clone(),
+                    kind: match reference.ref_type {
+                        crate::git::graph::RefType::LocalBranch => "local_branch",
+                        crate::git::graph::RefType::RemoteBranch => "remote_branch",
+                        crate::git::graph::RefType::Tag => "tag",
+                        crate::git::graph::RefType::Head => "head",
+                    }
+                    .to_string(),
+                })
+                .collect(),
+        })
+        .collect();
+
+    println!("{}", serde_json::to_string_pretty(&json_rows)?);
     Ok(())
 }
 

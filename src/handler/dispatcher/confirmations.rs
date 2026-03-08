@@ -141,52 +141,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                     }
                 }
             }
-            ConfirmAction::MergeBranch(source, target) => {
-                ctx.state.pending_confirmation = None;
-                // Note: le merge devrait être fait sur la branche cible,
-                // mais comme on est déjà dessus (par définition), on merge juste la source
-                match crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, &source) {
-                    Ok(MergeResult::UpToDate) => {
-                        ctx.state
-                            .set_flash_message(format!("Branche '{}' est déjà à jour", source));
-                    }
-                    Ok(MergeResult::FastForward) => {
-                        ctx.state
-                            .set_flash_message(format!("Fast-forward vers '{}'", source));
-                        ctx.state.mark_dirty();
-                    }
-                    Ok(MergeResult::Success) => {
-                        ctx.state.set_flash_message(format!(
-                            "Branche '{}' mergée dans '{}' avec succès",
-                            source, target
-                        ));
-                        ctx.state.mark_dirty();
-                    }
-                    Ok(MergeResult::Conflicts(conflicts)) => {
-                        ctx.state.set_flash_message(format!(
-                            "Conflits lors du merge avec '{}' ({} fichiers)",
-                            source,
-                            conflicts.len()
-                        ));
-                        // Activer la vue conflits
-                        let current = ctx
-                            .state
-                            .current_branch
-                            .clone()
-                            .unwrap_or_else(|| "HEAD".to_string());
-                        ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
-                            conflicts,
-                            format!("merge {}", source),
-                            current,
-                            source.clone(),
-                        ));
-                        ctx.state.view_mode = ViewMode::Conflicts;
-                    }
-                    Err(e) => {
-                        ctx.state.set_flash_message(format!("Erreur merge: {}", e));
-                    }
-                }
-            }
         }
     }
     Ok(())

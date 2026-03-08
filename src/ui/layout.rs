@@ -51,11 +51,6 @@ pub struct LayoutChunks {
 /// ├───────────────────────────┤
 /// │       Help Bar (1 ligne)  │
 /// └───────────────────────────┘
-#[allow(dead_code)]
-pub fn build_layout(area: Rect, show_search: bool) -> LayoutChunks {
-    build_layout_with_diff_mode(area, show_search, false)
-}
-
 /// Construit le layout avec support du mode diff plein écran.
 ///
 /// Quand diff_fullscreen est true, le diff occupe toute la zone de contenu principal.

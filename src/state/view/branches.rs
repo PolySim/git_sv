@@ -1,7 +1,5 @@
 //! État de la vue branches/worktrees/stashes.
 
-#![allow(dead_code)]
-
 use crate::git::branch::BranchInfo;
 use crate::git::stash::StashEntry;
 use crate::git::worktree::WorktreeInfo;
@@ -44,19 +42,6 @@ pub enum SelectedBranch {
 }
 
 impl SelectedBranch {
-    /// Retourne l'index dans la liste correspondante.
-    pub fn index(&self) -> usize {
-        match self {
-            SelectedBranch::Local(idx) => *idx,
-            SelectedBranch::Remote(idx) => *idx,
-        }
-    }
-
-    /// Vérifie si c'est une branche locale.
-    pub fn is_local(&self) -> bool {
-        matches!(self, SelectedBranch::Local(_))
-    }
-
     /// Vérifie si c'est une branche distante.
     pub fn is_remote(&self) -> bool {
         matches!(self, SelectedBranch::Remote(_))
@@ -101,14 +86,9 @@ impl BranchesViewState {
         })
     }
 
-    /// Retourne uniquement la branche sélectionnée (pour compatibilité ascendante).
+    /// Retourne uniquement la branche sélectionnée.
     pub fn selected_branch(&self) -> Option<&BranchInfo> {
         self.selected_branch_info().map(|(branch, _)| branch)
-    }
-
-    /// Retourne true si une branche distante est sélectionnée.
-    pub fn is_remote_selected(&self) -> bool {
-        self.selected_branch.map(|s| s.is_remote()).unwrap_or(false)
     }
 
     /// Déplace la sélection vers le haut.
@@ -210,30 +190,6 @@ impl BranchesViewState {
             }
         }
     }
-
-    // ═══════════════════════════════════════════════════
-    // Compatibilité ascendante - accesseurs legacy
-    // ═══════════════════════════════════════════════════
-
-    /// Index de la branche sélectionnée pour le rendu (compatibilité).
-    /// Retourne l'index dans la liste combinée (avec headers).
-    pub fn branch_selected(&self) -> usize {
-        match self.selected_branch {
-            Some(SelectedBranch::Local(idx)) => idx,
-            Some(SelectedBranch::Remote(idx)) => {
-                // Pour les remotes, l'index dans remote_branches
-                // Le calcul visuel est fait dans le rendu
-                idx
-            }
-            None => 0,
-        }
-    }
-
-    /// Définit l'index de la branche sélectionnée (compatibilité - assume local).
-    pub fn set_branch_selected(&mut self, index: usize) {
-        self.selected_branch = Some(SelectedBranch::Local(index));
-    }
-
     /// Index du stash sélectionné (compatibilité).
     pub fn stash_selected(&self) -> usize {
         self.stashes.selected_index()
@@ -410,18 +366,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_remote_selected() {
-        let mut state = BranchesViewState::new();
-        state.selected_branch = Some(SelectedBranch::Remote(0));
-
-        assert!(state.is_remote_selected());
-
-        state.selected_branch = Some(SelectedBranch::Local(0));
-
-        assert!(!state.is_remote_selected());
-    }
-
-    #[test]
     fn test_selected_branch_info() {
         let mut state = BranchesViewState::new();
         state
@@ -432,7 +376,7 @@ mod tests {
         let (branch, selected) = state.selected_branch_info().unwrap();
 
         assert_eq!(branch.name, "main");
-        assert!(selected.is_local());
+        assert_eq!(selected, SelectedBranch::Local(0));
     }
 
     #[test]

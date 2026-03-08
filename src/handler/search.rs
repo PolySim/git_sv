@@ -31,7 +31,7 @@ fn handle_open(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_close(state: &mut AppState) -> Result<()> {
-    state.search_state.is_active = false;
+    state.search_state.close();
     // Ne PAS effacer query et results pour permettre la navigation n/N après fermeture
     Ok(())
 }
@@ -56,8 +56,7 @@ fn handle_delete_char(state: &mut AppState) -> Result<()> {
 
 fn handle_next_result(state: &mut AppState) -> Result<()> {
     if !state.search_state.results.is_empty() {
-        state.search_state.current_result =
-            (state.search_state.current_result + 1) % state.search_state.results.len();
+        state.search_state.next_result();
         // Naviguer vers le résultat sélectionné
         if let Some(&index) = state
             .search_state
@@ -80,8 +79,7 @@ fn handle_next_result(state: &mut AppState) -> Result<()> {
 
 fn handle_previous_result(state: &mut AppState) -> Result<()> {
     if !state.search_state.results.is_empty() {
-        let len = state.search_state.results.len();
-        state.search_state.current_result = (state.search_state.current_result + len - 1) % len;
+        state.search_state.previous_result();
         // Naviguer vers le résultat sélectionné
         if let Some(&index) = state
             .search_state
@@ -103,13 +101,7 @@ fn handle_previous_result(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_change_type(state: &mut AppState) -> Result<()> {
-    use crate::git::search::SearchType;
-
-    state.search_state.search_type = match state.search_state.search_type {
-        SearchType::Message => SearchType::Author,
-        SearchType::Author => SearchType::Hash,
-        SearchType::Hash => SearchType::Message,
-    };
+    state.search_state.cycle_search_type();
     Ok(())
 }
 

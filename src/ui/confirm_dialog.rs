@@ -1,7 +1,5 @@
 //! Composant de dialogue de confirmation pour les actions destructives.
 
-#![allow(dead_code)]
-
 use crate::i18n::{text, text_owned};
 use crate::ui::common::centered_rect;
 use crate::ui::theme::current_theme;
@@ -33,8 +31,6 @@ pub enum ConfirmAction {
     DiscardAll,
     /// Cherry-pick un commit
     CherryPick(git2::Oid),
-    /// Merger une branche (source, cible)
-    MergeBranch(String, String),
     /// Avorter le merge en cours
     AbortMerge,
     /// Reset soft vers un commit
@@ -77,18 +73,10 @@ impl ConfirmAction {
                     "Are you sure you want to discard ALL unstaged changes?",
                 )
             }
-            ConfirmAction::CherryPick(oid) => {
-                text_owned(
-                    format!("Etes-vous sur de vouloir cherry-pick le commit {oid:.7} ?"),
-                    format!("Are you sure you want to cherry-pick commit {oid:.7} ?"),
-                )
-            }
-            ConfirmAction::MergeBranch(source, target) => {
-                text_owned(
-                    format!("Fusionner '{}' dans '{}' ?", source, target),
-                    format!("Merge '{}' into '{}' ?", source, target),
-                )
-            }
+            ConfirmAction::CherryPick(oid) => text_owned(
+                format!("Etes-vous sur de vouloir cherry-pick le commit {oid:.7} ?"),
+                format!("Are you sure you want to cherry-pick commit {oid:.7} ?"),
+            ),
             ConfirmAction::AbortMerge => {
                 text_owned(
                     "Etes-vous sur de vouloir annuler la fusion en cours ?",
@@ -135,7 +123,6 @@ impl ConfirmAction {
                 "Confirm discard of all files",
             ),
             ConfirmAction::CherryPick(_) => text("Confirmer le cherry-pick", "Confirm cherry-pick"),
-            ConfirmAction::MergeBranch(_, _) => text("Confirmer la fusion", "Confirm merge"),
             ConfirmAction::AbortMerge => {
                 text("Confirmer l'annulation de la fusion", "Confirm merge abort")
             }

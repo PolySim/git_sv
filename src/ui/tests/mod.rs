@@ -1,6 +1,6 @@
 //! Tests snapshot pour les composants UI.
 
-use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, Terminal};
+use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
 
 /// Helper pour capturer le rendu d'un composant.
 pub fn render_to_string<F>(width: u16, height: u16, render_fn: F) -> String
@@ -24,7 +24,7 @@ fn buffer_to_string(buffer: &Buffer) -> String {
     let mut output = String::new();
     for y in 0..buffer.area.height {
         for x in 0..buffer.area.width {
-            let cell = buffer.get(x, y);
+            let cell = &buffer[(x, y)];
             output.push_str(cell.symbol());
         }
         output.push('\n');

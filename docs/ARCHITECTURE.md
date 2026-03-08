@@ -2,499 +2,362 @@
 
 ## Objectif
 
-`git_sv` est un outil CLI interactif (TUI) en Rust permettant de visualiser le graphe git
-d'un repository directement dans le terminal, et d'effectuer des opérations git courantes
-(commit, merge, stash, branches, cherry-pick, blame, résolution de conflits, etc.).
+`git_sv` est un outil Rust qui combine un mode CLI non interactif et une TUI pour explorer un repository git, afficher son historique sous forme de graphe et executer les operations courantes du quotidien.
 
 ---
 
 ## Stack technique
 
-| Crate       | Version | Rôle                                          |
-|-------------|---------|-----------------------------------------------|
-| ratatui     | 0.29    | Framework TUI (rendu terminal)                |
-| crossterm   | 0.28    | Backend terminal (compatible macOS/Linux/Win) |
-| git2        | 0.19    | Bindings libgit2 (opérations git)             |
-| clap        | 4       | Parsing des arguments CLI (derive)            |
-| anyhow      | 1       | Gestion d'erreurs applicatives                |
-| thiserror   | 2       | Erreurs typées custom                         |
-| chrono      | 0.4     | Formatage des dates de commits                |
-| arboard     | 3       | Accès au presse-papier système                |
-| lru         | 0.12    | Cache LRU pour les diffs                      |
-| notify      | 6       | Surveillance du système de fichiers           |
-| tempfile    | 3       | Répertoires temporaires (tests)               |
+| Crate            | Version | Role |
+|------------------|---------|------|
+| ratatui          | 0.29    | Rendu TUI |
+| crossterm        | 0.28    | Evenements clavier/souris et backend terminal |
+| git2             | 0.19    | Acces aux operations git via libgit2 |
+| clap             | 4       | Parsing CLI |
+| anyhow           | 1       | Erreurs applicatives au point d'entree |
+| thiserror        | 2       | Erreurs typees du projet |
+| chrono           | 0.4     | Dates et formatage temporel |
+| arboard          | 3       | Presse-papier |
+| lru              | 0.12    | Cache des diffs |
+| terminal-light   | 1.4     | Detection du theme du terminal |
+| serde / serde_json | 1.0   | Sorties JSON du CLI |
+| tempfile         | 3       | Repositories temporaires pour les tests |
+
+Le watcher git n'utilise pas `notify` : il repose sur un polling leger des fichiers critiques du repertoire `.git` dans `src/watcher.rs`.
 
 ---
 
 ## Structure du projet
 
-```
+```text
 git_sv/
 ├── Cargo.toml
-├── AGENTS.md                  # Instructions pour les AI agents
+├── README.md
 ├── docs/
-│   ├── ARCHITECTURE.md        # Ce fichier
-│   ├── CONTRIBUTING.md        # Guide pour les contributeurs
-│   └── STEP-XX-*.md           # Feuille de route et plans d'amélioration
-└── src/
-    ├── main.rs                # Point d'entrée, parsing CLI (clap)
-    ├── app.rs                 # Orchestration : initialisation et lancement
-    ├── error.rs               # Types d'erreurs custom (thiserror)
-    ├── error_display.rs       # Utilitaires d'affichage des erreurs
-    ├── terminal.rs            # Setup/teardown du terminal crossterm
-    ├── watcher.rs             # Surveillance des changements git (polling)
-    ├── git/                   # Couche d'accès git (libgit2)
-    ├── handler/               # Gestionnaires d'actions (EventLoop)
-    ├── state/                 # État global de l'application
-    ├── ui/                    # Rendu des vues (ratatui)
-    ├── utils/                 # Utilitaires généraux
-    └── test_utils/            # Helpers pour les tests
+│   ├── ARCHITECTURE.md
+│   └── CONTRIBUTING.md
+├── src/
+│   ├── main.rs
+│   ├── app.rs
+│   ├── cli.rs
+│   ├── config.rs
+│   ├── error.rs
+│   ├── i18n.rs
+│   ├── terminal.rs
+│   ├── watcher.rs
+│   ├── git/
+│   ├── handler/
+│   ├── state/
+│   ├── test_utils/
+│   ├── ui/
+│   └── utils/
+├── tests/
+│   ├── common/
+│   ├── integration/
+│   └── integration_test.rs
+└── homebrew/
+    └── git_sv.rb
 ```
 
 ---
 
-## Module `git/` — Couche d'accès git
+## Point d'entree
 
+- `src/main.rs` parse les arguments, ouvre le repository et choisit entre mode CLI et TUI.
+- `src/cli.rs` implemente les commandes non interactives : `log`, `branches`, `status`, `search`, `graph`.
+- `src/app.rs` initialise l'etat TUI, charge les donnees initiales et lance la boucle evenementielle.
+
+### Flux global
+
+```text
+main.rs
+  -> GitRepo::open()
+  -> commande CLI directe via cli.rs
+     ou
+  -> App::new()
+  -> EventHandler::run()
+  -> ui::render()
 ```
+
+---
+
+## Couche git
+
+Le dossier `src/git/` encapsule les operations metier sur git :
+
+```text
 src/git/
-├── mod.rs         # Re-exports publics
-├── repo.rs        # Wrapper GitRepo autour de git2::Repository
-├── graph.rs       # Construction du graphe de commits (colonnes, connexions)
-├── commit.rs      # Création et amendement de commits
-├── branch.rs      # Opérations branches (list, create, checkout, delete, rename)
-├── stash.rs       # Opérations stash (list, save, pop, drop)
-├── merge.rs       # Merge avec détection de conflits
-├── diff.rs        # Types et parsing des diffs (unifié, side-by-side)
-├── blame.rs       # Blame par fichier et ligne
-├── conflict.rs    # Résolution de conflits (bloc, ligne, fichier)
-├── discard.rs     # Discard des modifications (fichier ou tout)
-├── helpers.rs     # Fonctions utilitaires git
-├── remote.rs      # Opérations remote (push, pull, fetch)
-├── search.rs      # Recherche dans les commits
-├── worktree.rs    # Gestion des worktrees
-└── tests/
-    └── test_utils.rs  # Helpers pour créer des repos de test
+├── mod.rs
+├── repo.rs
+├── graph.rs
+├── commit.rs
+├── branch.rs
+├── stash.rs
+├── merge.rs
+├── diff.rs
+├── blame.rs
+├── discard.rs
+├── helpers.rs
+├── remote.rs
+├── search.rs
+├── worktree.rs
+└── conflict/
+    ├── mod.rs
+    ├── content.rs
+    ├── merge_files.rs
+    ├── parse.rs
+    ├── repo_state.rs
+    ├── resolve.rs
+    └── types.rs
 ```
 
-### Types clés
+### Types importants
 
-| Type          | Fichier       | Description                                          |
-|---------------|---------------|------------------------------------------------------|
-| `GitRepo`     | `repo.rs`     | Wrapper autour de `git2::Repository`                 |
-| `CommitNode`  | `graph.rs`    | Nœud du graphe (oid, message, auteur, colonne, etc.) |
-| `GraphRow`    | `graph.rs`    | Ligne du graphe (CommitNode + cellules visuelles)    |
-| `ConnectionRow` | `graph.rs`  | Ligne de connexion entre deux commits                |
-| `DiffFile`    | `diff.rs`     | Fichier modifié dans un commit                       |
-| `FileDiff`    | `diff.rs`     | Contenu du diff d'un fichier                         |
-| `DiffLine`    | `diff.rs`     | Ligne de diff (ajout, suppression, contexte)         |
-| `StatusEntry` | `repo.rs`     | Entrée de statut (staged, unstaged, untracked)       |
-| `BranchInfo`  | `branch.rs`   | Informations sur une branche (nom, is_head, remote)  |
-| `StashEntry`  | `stash.rs`    | Entrée de stash                                      |
-| `WorktreeInfo`| `worktree.rs` | Informations sur un worktree                         |
+| Type | Fichier | Description |
+|------|---------|-------------|
+| `GitRepo` | `src/git/repo.rs` | Facade principale autour de `git2::Repository` |
+| `CommitInfo` | `src/git/commit.rs` | Representation CLI d'un commit |
+| `CommitNode` | `src/git/graph.rs` | Noeud du graphe pour la TUI |
+| `GraphRow` | `src/git/graph.rs` | Ligne de rendu du graphe |
+| `BranchInfo` | `src/git/branch.rs` | Metadonnees de branche locale ou distante |
+| `StatusEntry` | `src/git/repo.rs` | Entree de statut pour staging et CLI |
+| `StashEntry` | `src/git/stash.rs` | Entree de stash |
+| `WorktreeInfo` | `src/git/worktree.rs` | Entree de worktree |
 
 ---
 
-## Module `handler/` — Gestionnaires d'actions
+## Etat applicatif
 
-```
-src/handler/
-├── mod.rs          # Re-exports + EventHandler (boucle événementielle)
-├── dispatcher.rs   # ActionDispatcher : routing des AppAction vers handlers
-├── traits.rs       # Traits ActionHandler et HandlerContext
-├── navigation.rs   # Déplacements, sélection, scroll
-├── git.rs          # Opérations git (commit, stash, merge, blame, push...)
-├── staging.rs      # Staging/unstaging, commit, amend
-├── branch.rs       # Gestion des branches et worktrees
-├── conflict.rs     # Résolution de conflits
-├── search.rs       # Recherche dans les commits
-├── edit.rs         # Édition de texte (input fields)
-└── filter.rs       # Filtrage du graphe
-```
+`src/state/` centralise l'etat metier de la TUI.
 
-### Architecture du dispatcher
-
-```
-EventHandler (boucle)
-  └─ handle_input_with_timeout()    ← crossterm events
-       └─ map_key() / map_mouse()   ← src/ui/input.rs
-            └─ AppAction
-  └─ ActionDispatcher::dispatch()
-       ├─ NavigationHandler
-       ├─ GitHandler
-       ├─ StagingHandler
-       ├─ BranchHandler
-       ├─ ConflictHandler
-       ├─ SearchHandler
-       ├─ EditHandler
-       └─ FilterHandler
-```
-
-Chaque handler implémente le trait `ActionHandler<Action = XxxAction>` et reçoit
-un `HandlerContext<'a>` donnant accès mutable à l'`AppState`.
-
----
-
-## Module `state/` — État global
-
-```
+```text
 src/state/
-├── mod.rs          # AppState (struct centrale), MAX_COMMITS, constantes
+├── mod.rs
 ├── action/
-│   ├── mod.rs      # AppAction (enum principale) + re-exports
-│   ├── navigation.rs
-│   ├── git.rs
-│   ├── staging.rs
+│   ├── mod.rs
 │   ├── branch.rs
 │   ├── conflict.rs
-│   ├── search.rs
 │   ├── edit.rs
-│   └── filter.rs
-├── view/
-│   ├── mod.rs      # ViewMode, BottomLeftMode, FocusPanel
-│   ├── graph.rs    # GraphViewState
-│   ├── staging.rs  # StagingState, StagingFocus
-│   ├── branches.rs # BranchesViewState, BranchesSection, BranchesFocus
-│   ├── conflicts.rs# ConflictsState, ConflictPanelFocus
-│   ├── blame.rs    # BlameState
-│   ├── merge_picker.rs # MergePickerState
-│   └── search.rs   # SearchState
-├── cache.rs        # DiffCache (LRU), LazyDiff, LazyBlame
-├── filter.rs       # GraphFilter, FilterPopupState, FilterField
-└── selection.rs    # ListSelection<T> (sélection générique avec index)
+│   ├── filter.rs
+│   ├── git.rs
+│   ├── navigation.rs
+│   ├── search.rs
+│   └── staging.rs
+├── cache.rs
+├── filter.rs
+├── selection.rs
+└── view/
+    ├── mod.rs
+    ├── blame.rs
+    ├── branches.rs
+    ├── conflicts.rs
+    ├── graph.rs
+    ├── merge_picker.rs
+    ├── reset_picker.rs
+    ├── search.rs
+    └── staging.rs
 ```
 
-### Modes de vue (`ViewMode`)
+### `AppState`
 
-| Mode        | Description                                     |
-|-------------|-------------------------------------------------|
-| `Graph`     | Vue principale : graphe git + détails commit    |
-| `Staging`   | Vue de staging/commit                           |
-| `Branches`  | Vue branches / worktrees / stashes              |
-| `Conflicts` | Vue de résolution de conflits                   |
-| `Blame`     | Vue blame d'un fichier                          |
-| `Help`      | Overlay d'aide (s'affiche par-dessus la vue actuelle) |
+`AppState` vit dans `src/state/mod.rs` et regroupe notamment :
 
-### `AppState` — Champs principaux
+- le repository ouvert et son chemin ;
+- le mode de vue courant ;
+- `graph_view`, qui contient le graphe, les selections et l'etat du diff ;
+- les etats de vues secondaires : staging, branches, conflits, blame, recherche ;
+- les messages flash, boites de confirmation et pickers temporaires ;
+- le cache des diffs et les filtres appliques ;
+- plusieurs champs legacy encore utilises par l'overlay historique de branches (`show_branch_panel`, `branch_selected`).
 
-| Champ                  | Type                | Description                                  |
-|------------------------|---------------------|----------------------------------------------|
-| `repo`                 | `GitRepo`           | Repository git                               |
-| `view_mode`            | `ViewMode`          | Vue active                                   |
-| `graph`                | `Vec<GraphRow>`     | Commits chargés                              |
-| `graph_view`           | `GraphViewState`    | État de la vue graph (sélection, scroll)     |
-| `selected_index`       | `usize`             | Index du commit sélectionné                  |
-| `staging_state`        | `StagingState`      | État de la vue staging                       |
-| `branches_view_state`  | `BranchesViewState` | État de la vue branches                      |
-| `blame_state`          | `Option<BlameState>` | État du blame (si actif)                    |
-| `conflicts_state`      | `Option<ConflictsState>` | État de résolution de conflits          |
-| `search_state`         | `SearchState`       | État de la recherche                         |
-| `merge_picker`         | `Option<MergePickerState>` | Picker de merge (si actif)            |
-| `diff_cache`           | `DiffCache`         | Cache LRU des diffs (capacité : 50 entrées)  |
-| `graph_filter`         | `GraphFilter`       | Filtres actifs sur le graphe                 |
-| `flash_message`        | `Option<(String, Instant)>` | Message temporaire (3s)            |
-| `pending_confirmation` | `Option<ConfirmAction>` | Dialogue de confirmation en attente      |
-| `dirty`                | `bool`              | Flag indiquant qu'un refresh est nécessaire  |
+### Modes principaux
+
+`ViewMode` dans `src/state/view/mod.rs` expose :
+
+- `Graph`
+- `Staging`
+- `Branches`
+- `Conflicts`
+- `Blame`
+- `Help`
 
 ---
 
-## Module `ui/` — Rendu des vues
+## Boucle evenementielle et handlers
 
+Le module `src/handler/` porte la boucle principale et le dispatch des actions.
+
+```text
+src/handler/
+├── mod.rs
+├── background.rs
+├── branch.rs
+├── edit.rs
+├── filter.rs
+├── git.rs
+├── navigation.rs
+├── search.rs
+├── staging.rs
+├── traits.rs
+├── conflict/
+│   ├── mod.rs
+│   ├── edit.rs
+│   ├── modes.rs
+│   ├── navigation.rs
+│   └── shared.rs
+└── dispatcher/
+    ├── mod.rs
+    ├── clipboard.rs
+    ├── confirmations.rs
+    ├── pickers.rs
+    └── tests.rs
 ```
+
+### Pipeline d'execution
+
+```text
+EventHandler::run()
+  -> ui::render(frame, &mut state)
+  -> GitWatcher::check_changed()
+  -> ui::input::handle_input_with_timeout()
+  -> AppAction
+  -> ActionDispatcher::dispatch()
+  -> mutation de AppState
+  -> refresh conditionnel
+```
+
+### Background jobs
+
+Les operations reseau potentiellement longues (`push`, `pull`, `fetch`) sont lancees via `src/handler/background.rs` avec spinner de chargement et restitution du resultat dans la boucle principale.
+
+---
+
+## UI
+
+Le rendu TUI reside dans `src/ui/`.
+
+```text
 src/ui/
-├── mod.rs              # Point d'entrée render(), dispatch par ViewMode
-├── input.rs            # Mapping clavier → AppAction (par mode de vue)
-├── layout.rs           # Disposition des panneaux (ratatui Layout)
-├── theme.rs            # Définition des couleurs et styles
-├── graph_view.rs       # Rendu du graphe git
-├── detail_view.rs      # Panneau détail commit
-├── diff_view.rs        # Rendu du diff (unifié et side-by-side)
-├── files_view.rs       # Liste des fichiers d'un commit
-├── staging_layout.rs   # Disposition de la vue staging
-├── staging_view.rs     # Rendu de la vue staging
-├── branches_layout.rs  # Disposition de la vue branches
-├── branches_view.rs    # Rendu de la vue branches
-├── branch_panel.rs     # Panneau branches (legacy overlay)
-├── conflicts_view.rs   # Rendu de la vue conflits
-├── blame_view.rs       # Rendu de la vue blame
-├── nav_bar.rs          # Barre de navigation (tabs de vue)
-├── status_bar.rs       # Barre de statut (branche, repo, flash)
-├── help_bar.rs         # Barre d'aide contextuelle en bas
-├── help_overlay.rs     # Overlay d'aide complète (?)
-├── search_bar.rs       # Barre de recherche
-├── graph_legend.rs     # Légende du graphe
-├── filter_popup.rs     # Popup de filtrage du graphe
-├── merge_picker.rs     # Picker de branche pour merge
-├── confirm_dialog.rs   # Dialogue de confirmation (actions destructives)
-├── loading.rs          # Spinner de chargement
-└── common/             # Composants UI réutilisables
-    ├── mod.rs          # Re-exports + StatusBarConfig + render_status_bar()
-    ├── block.rs        # StyledBlock (bloc avec titre et bordures)
-    ├── help_bar.rs     # HelpBar, KeyBinding
-    ├── list.rs         # StyledList, list_item, list_item_styled
-    ├── popup.rs        # Popup (centrage et rendu d'overlay)
-    ├── rect.rs         # centered_rect, is_terminal_size_adequate
-    ├── style.rs        # Styles et constantes de couleur
-    └── text.rs         # truncate, pad_left, pad_right, etc.
+├── mod.rs
+├── blame_view.rs
+├── branch_panel.rs
+├── branches_layout.rs
+├── branches_view.rs
+├── confirm_dialog.rs
+├── conflicts_view.rs
+├── detail_view.rs
+├── diff_view.rs
+├── files_view.rs
+├── filter_popup.rs
+├── graph_view.rs
+├── help_bar.rs
+├── help_overlay.rs
+├── hit_test.rs
+├── input/
+│   ├── mod.rs
+│   ├── keyboard.rs
+│   ├── mouse.rs
+│   └── tests.rs
+├── keybindings.rs
+├── layout.rs
+├── loading.rs
+├── merge_picker.rs
+├── nav_bar.rs
+├── reset_picker.rs
+├── search_bar.rs
+├── staging_layout.rs
+├── staging_view.rs
+├── status_bar.rs
+├── theme.rs
+└── common/
+    ├── mod.rs
+    ├── block.rs
+    ├── help_bar.rs
+    ├── list.rs
+    ├── popup.rs
+    ├── rect.rs
+    ├── style.rs
+    └── text.rs
 ```
+
+### Organisation
+
+- `ui/mod.rs` orchestre le rendu selon `ViewMode`.
+- `ui/input/keyboard.rs` et `ui/input/mouse.rs` traduisent les interactions en `AppAction`.
+- `layout.rs`, `branches_layout.rs` et `staging_layout.rs` decoupent l'ecran.
+- `common/` contient des composants et helpers reutilisables.
+- `branch_panel.rs` correspond a un overlay legacy encore supporte en vue graph.
 
 ---
 
-## Module `utils/` — Utilitaires
+## CLI non interactif
 
-```
-src/utils/
-├── mod.rs       # Re-exports
-└── time.rs      # Formatage des timestamps git
-```
+`src/cli.rs` propose trois formats de sortie :
+
+- `human`
+- `plain`
+- `json`
+
+La sortie JSON existe pour `log`, `branches`, `status` et `graph`.
+
+Le format `graph` JSON expose une vue simplifiee de chaque commit : hash, message, auteur, parents, colonne, couleur et references attachees.
 
 ---
 
-## Module `test_utils/` — Helpers de test
+## Watcher git
 
-```
+Le watcher dans `src/watcher.rs` surveille par polling :
+
+- `.git/HEAD`
+- `.git/index`
+- `.git/refs/heads/`
+
+Regles actuelles :
+
+- intervalle de verification : 2 secondes ;
+- debounce : 500 ms ;
+- si un changement est confirme, `state.dirty` est releve puis la boucle recharge les donnees.
+
+Le watcher gere aussi les worktrees via `git rev-parse --git-dir` si `.git/` n'est pas un repertoire direct.
+
+---
+
+## Cache des diffs
+
+`DiffCache` dans `src/state/cache.rs` stocke les diffs les plus recents via un LRU.
+
+- capacite actuelle : 50 entrees ;
+- les diffs du working directory sont invalides lors d'un `mark_dirty()` ;
+- les diffs de commits restent en cache jusqu'a eviction.
+
+---
+
+## Tests
+
+Le projet combine :
+
+- des tests unitaires co-localises dans les modules ;
+- des helpers de test dans `src/test_utils/` ;
+- des tests d'integration dans `tests/`.
+
+Structure actuelle :
+
+```text
 src/test_utils/
-├── mod.rs            # Re-exports
-├── mock_repo.rs      # Création de repos git temporaires pour les tests
-├── test_state.rs     # Création d'AppState de test
-└── assertions.rs     # Assertions spécialisées pour les tests
+├── assertions.rs
+├── mod.rs
+└── ui_driver.rs
+
+tests/
+├── common/
+├── integration/
+└── integration_test.rs
 ```
 
 ---
 
-## Flux de données
+## Points a surveiller
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         main.rs (CLI/clap)                        │
-└───────────────────────────────┬──────────────────────────────────┘
-                                │
-                                v
-┌──────────────────────────────────────────────────────────────────┐
-│                          app.rs (App)                             │
-│   Initialisation : git data, staging, graph, worktrees            │
-└───────────────────────────────┬──────────────────────────────────┘
-                                │
-                                v
-┌──────────────────────────────────────────────────────────────────┐
-│                 handler/mod.rs (EventHandler)                     │
-│                                                                   │
-│  loop {                                                           │
-│    terminal.draw(|f| ui::render(f, &state))                      │
-│    watcher.check_changed() → state.dirty                         │
-│    handle_input_with_timeout() → Option<AppAction>               │
-│    dispatcher.dispatch(&mut state, action)                        │
-│    state.check_flash_expired()                                    │
-│    if state.dirty { self.refresh() }                              │
-│  }                                                                │
-└────────┬──────────────────┬─────────────────┬────────────────────┘
-         │                  │                  │
-         v                  v                  v
-┌──────────────┐  ┌──────────────────┐  ┌────────────┐
-│  ui/input.rs │  │handler/dispatcher│  │  git/      │
-│  map_key()   │  │ActionDispatcher  │  │  (GitRepo) │
-│  map_mouse() │  │  → Handlers      │  └────────────┘
-└──────────────┘  └──────────────────┘
-```
-
-### Cycle de rendu
-
-1. `ui::render(frame, &mut state)` dispatche vers la vue active (`ViewMode`)
-2. Chaque vue appelle `layout::build_layout()` pour diviser l'espace
-3. Les composants reçoivent des `Rect` et `&state` en lecture seule
-4. Le `theme.rs` fournit les couleurs et styles centralisés
-5. `common/` fournit les widgets réutilisables (Popup, StyledList, etc.)
-
----
-
-## Système de cache (LRU Diff Cache)
-
-`DiffCache` est un cache LRU (Least Recently Used) de capacité 50 entrées.  
-La clé est `DiffCacheKey { oid: Oid, path: String, is_working_dir: bool }`.
-
-- Les diffs de commits sont mis en cache indéfiniment (tant qu'ils ne sont pas évictés).
-- Les diffs du working directory sont invalidés lors d'un `mark_dirty()`.
-- `LazyDiff` et `LazyBlame` permettent un chargement paresseux.
-
----
-
-## File Watcher
-
-`GitWatcher` (dans `watcher.rs`) surveille les changements git par polling des timestamps :
-
-- Fichiers surveillés : `.git/HEAD`, `.git/index`, `.git/refs/heads/`
-- Intervalle de vérification : 2 secondes
-- Debounce : 500ms après la dernière modification détectée
-- Quand un changement est détecté : `state.dirty = true` → `EventHandler::refresh()`
-
----
-
-## Système de thème
-
-`src/ui/theme.rs` centralise les couleurs de l'application.  
-`src/ui/common/style.rs` exporte les styles ratatui réutilisables :
-
-| Constante/Fonction    | Description                         |
-|-----------------------|-------------------------------------|
-| `FOCUS_COLOR`         | Couleur de bordure quand focalisé   |
-| `INACTIVE_COLOR`      | Couleur de bordure quand inactif    |
-| `highlight_style()`   | Style de sélection (fond coloré)    |
-| `diff_add_style()`    | Style ajout (vert)                  |
-| `diff_remove_style()` | Style suppression (rouge)           |
-| `error_style()`       | Style erreur (rouge)                |
-| `success_style()`     | Style succès (vert)                 |
-| `dim_style()`         | Style grisé (inactive text)         |
-
----
-
-## Keybindings par mode de vue
-
-### Vue Graph (mode par défaut)
-
-| Touche         | Action                                   |
-|----------------|------------------------------------------|
-| `q`            | Quitter                                  |
-| `j` / `↓`     | Commit suivant                           |
-| `k` / `↑`     | Commit précédent                         |
-| `g` / `Home`   | Premier commit                           |
-| `G` / `End`    | Dernier commit                           |
-| `Ctrl+d`       | Page suivante                            |
-| `Ctrl+u`       | Page précédente                          |
-| `Enter`        | Focus sur la liste de fichiers           |
-| `Tab`          | Basculer le focus entre les panneaux     |
-| `c`            | Nouveau commit (ouvre la vue Staging)    |
-| `s`            | Stash                                    |
-| `m`            | Merge (ouvre le picker de branche)       |
-| `b`            | Panneau branches (legacy)                |
-| `P`            | Push                                     |
-| `p`            | Pull                                     |
-| `f`            | Fetch                                    |
-| `x`            | Cherry-pick                              |
-| `B`            | Blame du fichier sélectionné             |
-| `/`            | Ouvrir la recherche                      |
-| `n` / `N`      | Résultat suivant / précédent             |
-| `F`            | Ouvrir le popup de filtre                |
-| `Ctrl+r`       | Effacer les filtres actifs               |
-| `r`            | Rafraîchir                               |
-| `y`            | Copier dans le presse-papier             |
-| `v`            | Basculer mode diff (unifié/side-by-side) |
-| `M`            | Basculer mode panneau bas-gauche         |
-| `?`            | Aide                                     |
-| `1/2/3/4`      | Changer de vue (Graph/Staging/Branches/Conflicts) |
-
-### Vue Staging
-
-| Touche         | Action                                   |
-|----------------|------------------------------------------|
-| `j` / `↓`     | Fichier suivant                          |
-| `k` / `↑`     | Fichier précédent                        |
-| `s` / `Enter`  | Stager le fichier (panneau Unstaged)     |
-| `u` / `Enter`  | Unstager le fichier (panneau Staged)     |
-| `a`            | Stager tous les fichiers                 |
-| `U`            | Unstager tous les fichiers               |
-| `d`            | Discard le fichier sélectionné           |
-| `D`            | Discard toutes les modifications         |
-| `c`            | Saisir le message de commit              |
-| `A`            | Amend le dernier commit                  |
-| `Tab`          | Basculer le focus (Unstaged/Staged/Diff) |
-| `Enter` (commit)| Confirmer le commit                    |
-| `Esc`          | Annuler                                  |
-
-### Vue Branches
-
-| Touche         | Action                                   |
-|----------------|------------------------------------------|
-| `j` / `↓`     | Branche / worktree / stash suivant       |
-| `k` / `↑`     | Précédent                                |
-| `Tab`          | Section suivante (Branches/Worktrees/Stashes) |
-| `Enter`        | Checkout la branche sélectionnée         |
-| `n`            | Créer une nouvelle branche / worktree    |
-| `d`            | Supprimer                                |
-| `r`            | Renommer la branche                      |
-| `R`            | Afficher/masquer les branches remote     |
-| `m`            | Merger la branche sélectionnée           |
-| `a`            | Appliquer le stash                       |
-| `p`            | Pop le stash                             |
-
-### Vue Conflicts
-
-| Touche         | Action                                   |
-|----------------|------------------------------------------|
-| `Tab`          | Basculer le panneau actif                |
-| `j` / `k`      | Navigation (fichier, section, ou ligne)  |
-| `o` / `←`      | Accepter "ours" (dans FileList)          |
-| `t` / `→`      | Accepter "theirs" (dans FileList)        |
-| `b`            | Accepter les deux (mode Bloc)            |
-| `Space`        | Toggle sélection / entrée résolution     |
-| `Enter`        | Valider la résolution                    |
-| `r`            | Marquer comme résolu                     |
-| `i` / `e`      | Mode édition (panneau résultat)          |
-| `F/B/L`        | Changer le mode de résolution            |
-| `V`            | Finaliser le merge                       |
-| `A`            | Annuler le merge                         |
-| `q` / `Esc`    | Quitter la vue conflits                  |
-
-### Vue Blame
-
-| Touche         | Action                                   |
-|----------------|------------------------------------------|
-| `j` / `↓`     | Ligne suivante                           |
-| `k` / `↑`     | Ligne précédente                         |
-| `g` / `Home`   | Première ligne                           |
-| `G` / `End`    | Dernière ligne                           |
-| `Enter`        | Sauter au commit blame                   |
-| `y`            | Copier dans le presse-papier             |
-| `q` / `Esc`    | Fermer le blame                          |
-
----
-
-## Patterns et conventions
-
-### Gestion d'erreurs
-
-```rust
-// Types d'erreurs dans src/error.rs
-pub enum GitSvError {
-    Git(git2::Error),
-    Io(std::io::Error),
-    Clipboard(String),
-    // ...
-}
-
-// Alias dans src/error.rs
-pub type Result<T> = std::result::Result<T, GitSvError>;
-
-// Usage avec contexte (src/error_display.rs)
-file.open(path).with_context(|| format!("Ouverture de {}", path))?
-```
-
-### Pattern ListSelection
-
-`ListSelection<T>` (dans `state/selection.rs`) est un wrapper générique
-autour de `Vec<T>` avec gestion de l'index sélectionné. Il remplace
-l'usage direct de `ratatui::widgets::ListState` dans l'état métier.
-
-```rust
-let mut list = ListSelection::with_items(items);
-list.select(0);
-let item = list.selected_item(); // Option<&T>
-list.move_down();
-list.move_up();
-```
-
-### Messages flash
-
-Les messages flash sont affichés dans la status bar pendant 3 secondes :
-```rust
-state.set_flash_message("Opération réussie ✓");
-// Vérification automatique dans EventHandler::run()
-state.check_flash_expired();
-```
-
-### Dialogue de confirmation
-
-Pour les actions destructives, utiliser `ConfirmAction` :
-```rust
-state.pending_confirmation = Some(ConfirmAction::DiscardFile(path));
-// L'utilisateur doit taper y/n
-// Le dispatcher handle AppAction::ConfirmAction / AppAction::CancelAction
-```
+- Le projet conserve une couche legacy autour du panneau de branches en overlay dans la vue graph, en parallele de `BranchesViewState`.
+- Plusieurs modules possedent encore des `#[allow(dead_code)]`, signe d'API en transition ou de code garde pour evolution future.
+- La formule Homebrew `homebrew/git_sv.rb` reste un squelette tant que les `sha256` ne sont pas renseignes.

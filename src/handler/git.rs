@@ -25,7 +25,6 @@ impl ActionHandler for GitHandler {
             GitAction::CommitPrompt => handle_commit_prompt(ctx.state),
             GitAction::StashPrompt => handle_stash_prompt(ctx.state),
             GitAction::MergePrompt => handle_merge_prompt(ctx.state),
-            GitAction::BranchList => handle_branch_list(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
@@ -336,16 +335,6 @@ fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
             state.set_flash_message(format!("Erreur chargement branches: {}", e));
         }
     }
-    Ok(())
-}
-
-// NOTE: Cette fonction est un stub car l'affichage de la liste des branches
-// est géré directement par la vue Branches (mode '3') via l'état local.
-// Le raccourci 'b' dans le graph view ouvre un overlay simple qui utilise
-// déjà la logique de branches_view.rs. Une implémentation complète nécessiterait
-// un widget popup dédié qui n'est pas prioritaire pour le MVP.
-#[allow(dead_code)]
-fn handle_branch_list(_state: &mut AppState) -> Result<()> {
     Ok(())
 }
 

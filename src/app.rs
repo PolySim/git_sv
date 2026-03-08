@@ -78,9 +78,3 @@ impl App {
         result
     }
 }
-
-// Ré-export des types publiquement utilisés
-pub use crate::state::{
-    BottomLeftMode, BranchesFocus, BranchesSection, BranchesViewState, InputAction, StagingFocus,
-    StagingState,
-};

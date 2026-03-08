@@ -995,12 +995,6 @@ mod tests {
         let line = build_commit_line(row, false, 80, 2);
 
         // Trouver les spans de l'auteur et de la date
-        let author_span = line
-            .spans
-            .iter()
-            .find(|s| s.content.contains("Alice"))
-            .expect("Devrait trouver le span de l'auteur");
-
         // La date est au format relatif français (ex: "il y a X ...")
         // Elle devrait être dans un span séparé après l'auteur
         let author_idx = line

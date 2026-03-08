@@ -8,9 +8,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{StagingFocus, StagingState};
 use crate::git::repo::StatusEntry;
 use crate::i18n::{text, text_owned};
+use crate::state::{StagingFocus, StagingState};
 use crate::ui::common::StatusBarConfig;
 use crate::ui::theme::{current_theme, Theme};
 

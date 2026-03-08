@@ -8,8 +8,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::BottomLeftMode;
 use crate::i18n::text;
+use crate::state::BottomLeftMode;
 use crate::ui::theme::current_theme;
 
 pub struct HelpBarRenderContext {

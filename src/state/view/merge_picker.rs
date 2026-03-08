@@ -1,7 +1,5 @@
 //! État du sélecteur de branche pour le merge.
 
-#![allow(dead_code)]
-
 use crate::state::selection::ListSelection;
 
 /// État du sélecteur de branche pour le merge.
@@ -20,11 +18,6 @@ impl MergePickerState {
             branches: ListSelection::with_items(branches),
             is_active: true,
         }
-    }
-
-    /// Branche actuellement sélectionnée.
-    pub fn selected_branch(&self) -> Option<&String> {
-        self.branches.selected_item()
     }
 
     /// Index de la branche sélectionnée (compatibilité ascendante).

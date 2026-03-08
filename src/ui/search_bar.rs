@@ -1,7 +1,5 @@
 //! Barre de recherche pour la recherche de commits.
 
-#![allow(dead_code)]
-
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -103,9 +101,4 @@ pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
         .style(Style::default().bg(theme.background));
 
     frame.render_widget(paragraph, area);
-}
-
-/// Calcule la hauteur nécessaire pour la barre de recherche.
-pub fn height() -> u16 {
-    3 // 1 ligne de contenu + 2 bordures
 }

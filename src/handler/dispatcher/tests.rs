@@ -1,7 +1,7 @@
 use super::*;
 use crate::git::branch::BranchInfo;
 use crate::git::repo::GitRepo;
-use crate::state::action::{GitAction, NavigationAction, SearchAction};
+use crate::state::action::{NavigationAction, SearchAction};
 use crate::state::{BranchesSection, SelectedBranch};
 use crate::test_utils::ui_driver::UiTestHarness;
 use tempfile::TempDir;

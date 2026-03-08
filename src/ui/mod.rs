@@ -11,7 +11,6 @@ pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;
 pub mod filter_popup;
-pub mod graph_legend;
 pub mod graph_view;
 pub mod help_bar;
 pub mod help_overlay;

@@ -7,7 +7,6 @@ use std::time::SystemTime;
 
 /// Information sur une ligne d'un fichier avec son auteur et commit.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct BlameLine {
     /// Numéro de ligne (1-indexed).
     pub line_num: usize,
@@ -18,6 +17,7 @@ pub struct BlameLine {
     /// Nom de l'auteur.
     pub author: String,
     /// Email de l'auteur.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub author_email: String,
     /// Timestamp du commit.
     pub timestamp: SystemTime,

@@ -188,33 +188,9 @@ impl AppState {
         self.diff_cache.clear_working_directory();
     }
 
-    /// L'état nécessite-t-il un refresh?
-    #[allow(dead_code)]
-    pub fn is_dirty(&self) -> bool {
-        self.dirty
-    }
-
-    /// Marque l'état comme propre.
-    #[allow(dead_code)]
-    pub fn mark_clean(&mut self) {
-        self.dirty = false;
-    }
-
-    /// Alias de mark_clean pour compatibilité.
-    #[allow(dead_code)]
-    pub fn clear_dirty(&mut self) {
-        self.mark_clean();
-    }
-
     /// Définit un message flash.
     pub fn set_flash_message(&mut self, message: impl Into<String>) {
         self.flash_message = Some((message.into(), Instant::now()));
-    }
-
-    /// Efface le message flash.
-    #[allow(dead_code)]
-    pub fn clear_flash_message(&mut self) {
-        self.flash_message = None;
     }
 
     /// Vérifie si le message flash a expiré et le supprime le cas échéant.
@@ -230,50 +206,9 @@ impl AppState {
     pub fn current_flash_message(&self) -> Option<&str> {
         self.flash_message.as_ref().map(|(msg, _)| msg.as_str())
     }
-
-    // ═══════════════════════════════════════════════════
-    // Accesseurs vers l'état du graphe (délégation à graph_view)
-    // ═══════════════════════════════════════════════════
-
-    /// Retourne l'index du commit sélectionné.
-    #[allow(dead_code)]
-    pub fn selected_index(&self) -> usize {
-        self.graph_view.selected_index()
-    }
-
     /// Retourne le commit actuellement sélectionné.
     pub fn selected_commit(&self) -> Option<&crate::git::graph::CommitNode> {
         self.graph_view.selected_commit()
-    }
-
-    /// Retourne les lignes du graphe.
-    #[allow(dead_code)]
-    pub fn graph_rows(&self) -> &[crate::git::graph::GraphRow] {
-        &self.graph_view.rows.items
-    }
-
-    /// Retourne le nombre de commits dans le graphe.
-    #[allow(dead_code)]
-    pub fn graph_len(&self) -> usize {
-        self.graph_view.len()
-    }
-
-    /// Le graphe est-il vide ?
-    #[allow(dead_code)]
-    pub fn graph_is_empty(&self) -> bool {
-        self.graph_view.is_empty()
-    }
-
-    /// Retourne l'index visuel pour ratatui.
-    #[allow(dead_code)]
-    pub fn visual_index(&self) -> usize {
-        self.graph_view.visual_index()
-    }
-
-    /// Retourne une référence mutable vers l'état de la liste ratatui.
-    #[allow(dead_code)]
-    pub fn list_state_mut(&mut self) -> &mut ratatui::widgets::ListState {
-        &mut self.graph_view.list_state
     }
 
     /// Remplace le graphe et met à jour l'état.
@@ -294,12 +229,6 @@ impl AppState {
             self.graph_view.commit_files.clear();
             self.graph_view.file_selected_index = 0;
         }
-    }
-
-    /// Sélectionne un fichier par son index.
-    #[allow(dead_code)]
-    pub fn select_file(&mut self, index: usize) {
-        self.graph_view.select_file(index);
     }
 }
 
@@ -336,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn test_selected_index_delegation() {
+    fn test_selected_commit_uses_graph_view_selection() {
         let mut state = AppState::new(
             GitRepo::open(".").unwrap_or_else(|_| {
                 let temp_dir = tempfile::TempDir::new().unwrap();
@@ -361,12 +290,16 @@ mod tests {
         state.graph_view.rows = ListSelection::with_items(create_test_graph(5));
         state.graph_view.rows.select(2);
 
-        // La délégation devrait fonctionner
-        assert_eq!(state.selected_index(), 2);
+        assert_eq!(
+            state
+                .selected_commit()
+                .map(|commit| commit.message.as_str()),
+            Some("Commit 2")
+        );
     }
 
     #[test]
-    fn test_graph_len_delegation() {
+    fn test_replace_graph_updates_graph_view() {
         let mut state = AppState::new(
             GitRepo::open(".").unwrap_or_else(|_| {
                 let temp_dir = tempfile::TempDir::new().unwrap();
@@ -388,14 +321,13 @@ mod tests {
         )
         .unwrap();
 
-        state.graph_view.rows = ListSelection::with_items(create_test_graph(10));
+        state.replace_graph(create_test_graph(10));
 
-        // La délégation devrait fonctionner
-        assert_eq!(state.graph_len(), 10);
+        assert_eq!(state.graph_view.len(), 10);
     }
 
     #[test]
-    fn test_visual_index_empty_graph() {
+    fn test_graph_view_visual_index_empty_graph() {
         let state = AppState::new(
             GitRepo::open(".").unwrap_or_else(|_| {
                 let temp_dir = tempfile::TempDir::new().unwrap();
@@ -417,7 +349,6 @@ mod tests {
         )
         .unwrap();
 
-        // Graphe vide = index visuel 0
-        assert_eq!(state.visual_index(), 0);
+        assert_eq!(state.graph_view.visual_index(), 0);
     }
 }

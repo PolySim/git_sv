@@ -11,11 +11,6 @@ pub struct FilterHandler;
 impl ActionHandler for FilterHandler {
     type Action = FilterAction;
 
-    fn can_handle(&self, state: &AppState, _action: &FilterAction) -> bool {
-        // Le filtre ne peut être utilisé qu'en mode Graph
-        state.view_mode == crate::state::ViewMode::Graph
-    }
-
     fn handle(&mut self, ctx: &mut HandlerContext, action: FilterAction) -> Result<()> {
         match action {
             FilterAction::Open => handle_open(ctx.state),

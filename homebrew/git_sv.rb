@@ -4,6 +4,8 @@ class GitSv < Formula
   version "0.1.0"
   license "MIT"
 
+  disable! date: "2026-03-08", because: "release tarball checksums are placeholders and must be filled before publishing"
+
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/PolySim/git_sv/releases/download/v0.1.0/git_sv-v0.1.0-aarch64-apple-darwin.tar.gz"

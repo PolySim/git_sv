@@ -1,7 +1,5 @@
 //! État et logique de filtrage pour le graph de commits.
 
-#![allow(dead_code)]
-
 use crate::git::commit::CommitInfo;
 
 /// Filtres applicables sur le graph de commits.
@@ -186,17 +184,6 @@ impl FilterPopupState {
             FilterField::Path => FilterField::DateTo,
             FilterField::Message => FilterField::Path,
         };
-    }
-
-    /// Retourne la valeur du champ actuellement sélectionné.
-    pub fn current_input(&self) -> &String {
-        match self.selected_field {
-            FilterField::Author => &self.author_input,
-            FilterField::DateFrom => &self.date_from_input,
-            FilterField::DateTo => &self.date_to_input,
-            FilterField::Path => &self.path_input,
-            FilterField::Message => &self.message_input,
-        }
     }
 
     /// Retourne une référence mutable vers la valeur du champ actuellement sélectionné.

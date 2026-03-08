@@ -1,7 +1,5 @@
 //! État du sélecteur de type de reset.
 
-#![allow(dead_code)]
-
 use git2::Oid;
 
 /// État du sélecteur de type de reset.
@@ -29,11 +27,6 @@ impl ResetPickerState {
             is_active: true,
             selected_index: 0,
         }
-    }
-
-    /// Bascule entre les options (Soft/Hard).
-    pub fn toggle(&mut self) {
-        self.selected_index = if self.selected_index == 0 { 1 } else { 0 };
     }
 
     /// Retourne true si Soft est sélectionné.

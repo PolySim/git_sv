@@ -1,7 +1,5 @@
 //! Barre de navigation entre les vues principales.
 
-#![allow(dead_code)]
-
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -104,56 +102,4 @@ pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
     );
 
     frame.render_widget(paragraph, area);
-}
-
-/// Rend une version compacte de la barre de navigation (pour les status bar).
-pub fn render_compact(current_view: ViewMode, unresolved_conflicts: usize) -> Line<'static> {
-    let theme = current_theme();
-    let has_conflicts = unresolved_conflicts > 0;
-
-    let mut tabs: Vec<(&str, ViewMode)> = vec![
-        (text("1:Graphe", "1:Graph"), ViewMode::Graph),
-        ("2:Staging", ViewMode::Staging),
-        ("3:Branches", ViewMode::Branches),
-    ];
-
-    // Ajouter l'onglet Conflits s'il y a des conflits
-    // Note: on n'affiche pas le nombre en mode compact pour garder la simplicité
-    if has_conflicts {
-        tabs.push((text("4:Conflits", "4:Conflicts"), ViewMode::Conflicts));
-    }
-
-    let mut spans: Vec<Span> = Vec::new();
-
-    for (i, (label, mode)) in tabs.iter().enumerate() {
-        let is_active = *mode == current_view;
-        let is_conflicts = *mode == ViewMode::Conflicts;
-
-        let style = if is_active {
-            if is_conflicts {
-                Style::default()
-                    .fg(theme.error)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD)
-            }
-        } else if is_conflicts {
-            Style::default().fg(theme.error)
-        } else {
-            Style::default().fg(theme.text_secondary)
-        };
-
-        spans.push(Span::styled(*label, style));
-
-        if i < tabs.len() - 1 {
-            spans.push(Span::styled(
-                " | ",
-                Style::default().fg(theme.border_inactive),
-            ));
-        }
-    }
-
-    Line::from(spans)
 }

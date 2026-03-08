@@ -8,9 +8,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{BranchesFocus, BranchesSection, BranchesViewState, InputAction};
 use crate::i18n::text;
-use crate::state::SelectedBranch;
+use crate::state::{
+    BranchesFocus, BranchesSection, BranchesViewState, InputAction, SelectedBranch,
+};
 use crate::ui::common::{centered_rect, StatusBarConfig};
 use crate::ui::theme::current_theme;
 use crate::utils::time::format_relative_time;
