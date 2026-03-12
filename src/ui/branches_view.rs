@@ -2,7 +2,7 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
@@ -38,13 +38,15 @@ fn render_detail_panel(
     scroll_offset: u16,
     area: Rect,
 ) {
+    let theme = current_theme();
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
                 .title(text(" Detail ", " Detail "))
                 .borders(Borders::ALL),
         )
-        .scroll((scroll_offset, 0));
+        .scroll((scroll_offset, 0))
+        .style(Style::default().fg(theme.text_normal).bg(theme.background));
     frame.render_widget(paragraph, area);
 }
 
@@ -67,7 +69,8 @@ fn render_selection_list<'a>(
             Style::default()
                 .bg(theme.selection_bg)
                 .add_modifier(Modifier::BOLD),
-        );
+        )
+        .style(Style::default().fg(theme.text_normal).bg(theme.background));
 
     let mut list_state = ListState::default();
     list_state.select(Some(selected));
@@ -310,7 +313,7 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
                 'M' => theme.warning,
                 'D' => theme.error,
                 'R' => theme.primary,
-                _ => Color::Reset,
+                _ => theme.text_secondary,
             };
             let is_selected = i == state.stash_file_selected;
             let prefix = if is_selected { "→ " } else { "  " };
@@ -426,11 +429,13 @@ fn render_tabs(frame: &mut Frame, active: &BranchesSection, area: Rect) {
             Style::default().fg(theme.text_secondary)
         };
         spans.push(Span::styled(format!(" {} ", label), style));
-        spans.push(Span::raw("  "));
+        spans.push(Span::styled("  ", Style::default().fg(theme.text_normal)));
     }
 
     let line = Line::from(spans);
-    frame.render_widget(Paragraph::new(line), area);
+    let paragraph =
+        Paragraph::new(line).style(Style::default().fg(theme.text_normal).bg(theme.background));
+    frame.render_widget(paragraph, area);
 }
 
 /// Rend la liste des branches.
@@ -664,12 +669,14 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
         None => text(" Saisie ", " Input "),
     };
 
-    let paragraph = Paragraph::new(state.input_text.as_str()).block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.warning)),
-    );
+    let paragraph = Paragraph::new(state.input_text.as_str())
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.warning)),
+        )
+        .style(Style::default().fg(theme.text_normal).bg(theme.background));
 
     frame.render_widget(paragraph, popup);
 

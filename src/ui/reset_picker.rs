@@ -127,7 +127,7 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.warning)),
         )
-        .style(Style::default().bg(theme.background).fg(theme.text_normal))
+        .style(Style::default().fg(theme.text_normal).bg(theme.background))
         .alignment(Alignment::Left);
 
     frame.render_widget(paragraph, popup_area);

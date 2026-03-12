@@ -7,12 +7,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::i18n::Language;
 
+/// Mode de thème de l'application.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    /// Thème sombre.
+    #[default]
+    Dark,
+    /// Thème clair.
+    Light,
+}
+
 /// Configuration utilisateur de `git_sv`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// Langue de l'interface.
     #[serde(default)]
     pub language: Language,
+    /// Thème de couleurs (dark ou light).
+    #[serde(default)]
+    pub theme: ThemeMode,
 }
 
 impl AppConfig {

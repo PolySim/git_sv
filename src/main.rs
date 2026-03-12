@@ -99,6 +99,7 @@ enum Commands {
 fn main() -> anyhow::Result<()> {
     let config = AppConfig::load().unwrap_or_default();
     crate::i18n::set_language(config.language);
+    crate::ui::theme::init_theme(config.theme);
 
     let cli = Cli::parse();
 
