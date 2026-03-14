@@ -54,14 +54,14 @@ impl StagingState {
     // ═══════════════════════════════════════════════════
 
     /// Accès aux fichiers stagés (compatibilité).
-    pub fn staged_files(&self) -> &Vec<StatusEntry> {
-        &self.staged.items
+    pub fn staged_files(&self) -> &[StatusEntry] {
+        self.staged.items()
     }
 
     /// Accès mutable aux fichiers stagés (compatibilité).
     #[allow(dead_code)]
-    pub fn staged_files_mut(&mut self) -> &mut Vec<StatusEntry> {
-        &mut self.staged.items
+    pub fn staged_files_mut(&mut self) -> &mut [StatusEntry] {
+        self.staged.items_mut()
     }
 
     /// Définit les fichiers stagés (compatibilité).
@@ -70,14 +70,14 @@ impl StagingState {
     }
 
     /// Accès aux fichiers non stagés (compatibilité).
-    pub fn unstaged_files(&self) -> &Vec<StatusEntry> {
-        &self.unstaged.items
+    pub fn unstaged_files(&self) -> &[StatusEntry] {
+        self.unstaged.items()
     }
 
     /// Accès mutable aux fichiers non stagés (compatibilité).
     #[allow(dead_code)]
-    pub fn unstaged_files_mut(&mut self) -> &mut Vec<StatusEntry> {
-        &mut self.unstaged.items
+    pub fn unstaged_files_mut(&mut self) -> &mut [StatusEntry] {
+        self.unstaged.items_mut()
     }
 
     /// Définit les fichiers non stagés (compatibilité).

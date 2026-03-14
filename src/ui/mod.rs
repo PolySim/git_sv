@@ -267,7 +267,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         // Rendre le graphe avec emprunt mutable de list_state seulement
         let list_state = &mut state.graph_view.list_state;
         // Emprunter les rows de manière séparée
-        let rows = &state.graph_view.rows.items;
+        let rows = state.graph_view.rows.items();
 
         // Extraire les infos de pagination
         let loaded_count = state.graph_view.loaded_count;
@@ -367,7 +367,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         state.graph_view.diff_total_lines = total_lines;
     } else {
         // Mode détail (pas de diff visible)
-        let rows = &state.graph_view.rows.items;
+        let rows = state.graph_view.rows.items();
 
         detail_view::render(
             frame,

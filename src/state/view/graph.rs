@@ -125,7 +125,7 @@ impl GraphViewState {
 
         // Chercher si le commit existe encore
         if let Some(oid) = current_oid {
-            if let Some(new_index) = self.rows.items.iter().position(|row| row.node.oid == oid) {
+            if let Some(new_index) = self.rows.items().iter().position(|row| row.node.oid == oid) {
                 // Le commit existe encore, sélectionner son nouvel index
                 self.rows.select(new_index);
             } else {
@@ -362,11 +362,11 @@ impl GraphViewState {
         let current_index = self.selected_index();
 
         // Étendre le graphe avec les nouveaux commits
-        self.rows.items.extend(additional_rows);
+        self.rows.extend(additional_rows);
 
         // Restaurer la sélection (l'index devrait être le même car on ajoute à la fin)
         if let Some(oid) = current_oid {
-            if let Some(new_index) = self.rows.items.iter().position(|row| row.node.oid == oid) {
+            if let Some(new_index) = self.rows.items().iter().position(|row| row.node.oid == oid) {
                 self.rows.select(new_index);
             } else {
                 // Le commit n'a pas été trouvé, utiliser l'ancien index

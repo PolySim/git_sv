@@ -1,12 +1,12 @@
 //! Gestion générique de sélection dans une liste avec scroll.
 
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 /// Gère la sélection et le scroll dans une liste d'éléments.
 #[derive(Debug, Clone, Default)]
 pub struct ListSelection<T> {
-    /// Éléments de la liste (accessible pour compatibilité interne).
-    pub(crate) items: Vec<T>,
+    /// Éléments de la liste.
+    items: Vec<T>,
     selected: usize,
     scroll_offset: usize,
     visible_height: usize,
@@ -46,6 +46,58 @@ impl<T> ListSelection<T> {
         if self.selected >= self.items.len() && !self.items.is_empty() {
             self.selected = self.items.len() - 1;
         }
+        self.adjust_scroll();
+    }
+
+    /// Ajoute un élément à la fin et ajuste le scroll.
+    pub fn push(&mut self, item: T) {
+        self.items.push(item);
+        self.adjust_scroll();
+    }
+
+    /// Étend la liste et ajuste le scroll.
+    pub fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        self.items.extend(iter);
+        self.adjust_scroll();
+    }
+
+    /// Vide la liste et remet la sélection à zéro.
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.selected = 0;
+        self.scroll_offset = 0;
+    }
+
+    /// Accès immutable aux éléments.
+    pub fn items(&self) -> &[T] {
+        &self.items
+    }
+
+    /// Accès mutable aux éléments sans modifier la taille.
+    pub fn items_mut(&mut self) -> &mut [T] {
+        &mut self.items
+    }
+
+    /// Retient uniquement les éléments satisfaisant le prédicat.
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        self.items.retain(f);
+
+        if self.items.is_empty() {
+            self.selected = 0;
+            self.scroll_offset = 0;
+            return;
+        }
+
+        if self.selected >= self.items.len() {
+            self.selected = self.items.len() - 1;
+        }
+
         self.adjust_scroll();
     }
 
@@ -157,12 +209,6 @@ impl<T> Deref for ListSelection<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.items
-    }
-}
-
-impl<T> DerefMut for ListSelection<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.items
     }
 }
 

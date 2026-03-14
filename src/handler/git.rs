@@ -273,7 +273,7 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
                 if let Some(index) = state
                     .graph_view
                     .rows
-                    .items
+                    .items()
                     .iter()
                     .position(|row| row.node.oid == target_oid)
                 {
