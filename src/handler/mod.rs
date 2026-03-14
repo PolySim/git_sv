@@ -191,38 +191,27 @@ impl EventHandler {
 
     /// Traite le résultat d'une opération en arrière-plan.
     fn handle_background_result(&mut self, result: BackgroundResult) -> Result<()> {
-        use crate::handler::background::PullBackgroundResult;
+        use crate::git::conflict::MergeResult;
+        use crate::git::remote::flash_message_for_pull_result;
         use crate::state::ConflictsState;
 
         self.state.clear_loading();
 
         match result {
-            BackgroundResult::Push(Ok(msg)) => {
-                self.state.set_flash_message(msg);
+            BackgroundResult::Push(Ok(success)) => {
+                self.state.set_flash_message(success.flash_message());
                 self.state.mark_dirty();
             }
             BackgroundResult::Push(Err(err)) => {
                 self.state
                     .set_flash_message(format!("Erreur push : {}", err));
             }
-            BackgroundResult::Pull(pull_result) => {
-                match pull_result {
-                    PullBackgroundResult::UpToDate => {
-                        self.state.set_flash_message("Déjà à jour ✓".to_string());
-                    }
-                    PullBackgroundResult::FastForward => {
-                        self.state
-                            .set_flash_message("Pull (fast-forward) réussi ✓".to_string());
-                        self.state.mark_dirty();
-                    }
-                    PullBackgroundResult::Success => {
-                        self.state.set_flash_message("Pull réussi ✓".to_string());
-                        self.state.mark_dirty();
-                    }
-                    PullBackgroundResult::Conflicts => {
+            BackgroundResult::Pull(Ok(pull_result)) => match pull_result {
+                MergeResult::Conflicts(files) => {
+                    if files.is_empty() {
                         // Détecter les fichiers en conflit dans le thread principal
                         match crate::git::conflict::list_conflict_files(&self.state.repo.repo) {
-                            Ok(files) => {
+                            Ok(detected_files) => {
                                 let ours_name = crate::git::conflict::get_current_branch_name(
                                     &self.state.repo.repo,
                                 );
@@ -234,7 +223,7 @@ impl EventHandler {
                                         .unwrap_or_else(|| "HEAD".to_string())
                                 );
                                 self.state.open_conflicts(ConflictsState::new(
-                                    files,
+                                    detected_files,
                                     "Pull depuis origin".to_string(),
                                     ours_name,
                                     theirs_name,
@@ -250,15 +239,42 @@ impl EventHandler {
                                 ));
                             }
                         }
-                    }
-                    PullBackgroundResult::Error(err) => {
-                        self.state
-                            .set_flash_message(format!("Erreur pull : {}", err));
+                    } else {
+                        let ours_name =
+                            crate::git::conflict::get_current_branch_name(&self.state.repo.repo);
+                        let theirs_name = format!(
+                            "origin/{}",
+                            self.state
+                                .current_branch
+                                .clone()
+                                .unwrap_or_else(|| "HEAD".to_string())
+                        );
+                        self.state.open_conflicts(ConflictsState::new(
+                            files,
+                            "Pull depuis origin".to_string(),
+                            ours_name,
+                            theirs_name,
+                        ));
+                        self.state.set_flash_message(
+                            "Conflits lors du pull - résolution requise".to_string(),
+                        );
                     }
                 }
+                other => {
+                    if let Some(message) = flash_message_for_pull_result(&other) {
+                        self.state.set_flash_message(message);
+                    }
+                    if !matches!(other, MergeResult::UpToDate) {
+                        self.state.mark_dirty();
+                    }
+                }
+            },
+            BackgroundResult::Pull(Err(err)) => {
+                self.state
+                    .set_flash_message(format!("Erreur pull : {}", err));
             }
-            BackgroundResult::Fetch(Ok(msg)) => {
-                self.state.set_flash_message(msg);
+            BackgroundResult::Fetch(Ok(success)) => {
+                self.state.set_flash_message(success.flash_message());
                 self.state.mark_dirty();
             }
             BackgroundResult::Fetch(Err(err)) => {

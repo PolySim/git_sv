@@ -19,6 +19,14 @@ pub enum GitSvError {
     #[error("Erreur réseau : {message}")]
     NetworkError { message: String },
 
+    /// HEAD détachée, l'opération nécessite une branche.
+    #[error("HEAD détachée. L'opération '{operation}' nécessite une branche active")]
+    DetachedHead { operation: &'static str },
+
+    /// Des conflits ont été détectés pendant l'opération distante.
+    #[error("Conflits détectés pendant '{operation}'")]
+    RemoteConflict { operation: &'static str },
+
     /// Aucun remote configuré
     #[error("Aucun remote configuré. Ajoutez un remote avec : git remote add origin <url>")]
     NoRemoteConfigured,

@@ -7,30 +7,18 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-/// Résultat détaillé d'un pull en arrière-plan.
-#[derive(Debug)]
-pub enum PullBackgroundResult {
-    /// Déjà à jour
-    UpToDate,
-    /// Fast-forward réussi
-    FastForward,
-    /// Merge réussi
-    Success,
-    /// Conflits détectés.
-    Conflicts,
-    /// Erreur (message d'erreur)
-    Error(String),
-}
+use crate::git::conflict::MergeResult;
+use crate::git::remote::{FetchSuccess, PushSuccess};
 
 /// Résultat d'une opération en arrière-plan.
 #[derive(Debug)]
 pub enum BackgroundResult {
-    /// Push terminé (message de succès ou erreur)
-    Push(Result<String, String>),
-    /// Pull terminé (résultat détaillé)
-    Pull(PullBackgroundResult),
-    /// Fetch terminé (message de succès ou erreur)
-    Fetch(Result<String, String>),
+    /// Push terminé
+    Push(Result<PushSuccess, String>),
+    /// Pull terminé
+    Pull(Result<MergeResult, String>),
+    /// Fetch terminé
+    Fetch(Result<FetchSuccess, String>),
 }
 
 /// Gestionnaire des opérations en arrière-plan.
@@ -65,36 +53,9 @@ impl BackgroundRunner {
     pub fn spawn_pull(&self, repo_path: PathBuf, _branch_name: String) {
         let tx = self.sender.clone();
         thread::spawn(move || {
-            // Utiliser la version CLI car git2::Repository n'est pas Send
-            match crate::git::remote::pull_current_branch_cli_path(&repo_path) {
-                Ok(msg) => {
-                    // Analyser le message pour déterminer le type de résultat
-                    let result =
-                        if msg.contains("déjà à jour") || msg.contains("Already up to date") {
-                            PullBackgroundResult::UpToDate
-                        } else if msg.contains("fast-forward") || msg.contains("Fast-forward") {
-                            PullBackgroundResult::FastForward
-                        } else {
-                            PullBackgroundResult::Success
-                        };
-                    let _ = tx.send(BackgroundResult::Pull(result));
-                }
-                Err(e) => {
-                    let err_str = e.to_string();
-                    // Vérifier si c'est une erreur de conflit
-                    if err_str.contains("conflit")
-                        || err_str.contains("conflict")
-                        || err_str.contains("CONFLIT")
-                        || err_str.contains("CONFLICT")
-                    {
-                        // Signaler qu'il y a des conflits - la détection détaillée se fera dans le thread principal
-                        let _ = tx.send(BackgroundResult::Pull(PullBackgroundResult::Conflicts));
-                    } else {
-                        let _ =
-                            tx.send(BackgroundResult::Pull(PullBackgroundResult::Error(err_str)));
-                    }
-                }
-            }
+            let result = crate::git::remote::pull_current_branch_cli_path(&repo_path)
+                .map_err(|e| e.to_string());
+            let _ = tx.send(BackgroundResult::Pull(result));
         });
     }
 
@@ -102,13 +63,8 @@ impl BackgroundRunner {
     pub fn spawn_fetch(&self, repo_path: PathBuf) {
         let tx = self.sender.clone();
         thread::spawn(move || {
-            // Utiliser la version CLI car git2::Repository n'est pas Send
             let result = crate::git::remote::fetch_all_cli_path(&repo_path);
-            let _ = tx.send(BackgroundResult::Fetch(
-                result
-                    .map(|_| "Fetch réussi ✓".to_string())
-                    .map_err(|e| e.to_string()),
-            ));
+            let _ = tx.send(BackgroundResult::Fetch(result.map_err(|e| e.to_string())));
         });
     }
 
@@ -127,22 +83,27 @@ impl Default for BackgroundRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::remote::types::{flash_message_for_pull_result, FetchSuccess, PushSuccess};
 
     #[test]
-    fn test_pull_background_result_variants() {
-        // Vérifier que tous les variants peuvent être créés
-        let up_to_date = PullBackgroundResult::UpToDate;
-        let fast_forward = PullBackgroundResult::FastForward;
-        let success = PullBackgroundResult::Success;
-        let conflicts = PullBackgroundResult::Conflicts;
-        let error = PullBackgroundResult::Error("test error".to_string());
+    fn test_structured_background_result_variants() {
+        let push = BackgroundResult::Push(Ok(PushSuccess {
+            branch_name: "main".to_string(),
+            remote_name: "origin".to_string(),
+            force: false,
+            upstream_set: false,
+        }));
+        let pull = BackgroundResult::Pull(Ok(MergeResult::UpToDate));
+        let fetch = BackgroundResult::Fetch(Ok(FetchSuccess {
+            remote_name: "origin".to_string(),
+        }));
 
-        // Vérifier le debug format
-        assert!(format!("{:?}", up_to_date).contains("UpToDate"));
-        assert!(format!("{:?}", fast_forward).contains("FastForward"));
-        assert!(format!("{:?}", success).contains("Success"));
-        assert!(format!("{:?}", conflicts).contains("Conflicts"));
-        assert!(format!("{:?}", error).contains("Error"));
+        assert!(matches!(push, BackgroundResult::Push(Ok(_))));
+        assert!(matches!(
+            pull,
+            BackgroundResult::Pull(Ok(MergeResult::UpToDate))
+        ));
+        assert!(matches!(fetch, BackgroundResult::Fetch(Ok(_))));
     }
 
     #[test]
@@ -154,16 +115,28 @@ mod tests {
 
     #[test]
     fn test_background_result_pull_complete() {
-        let result = BackgroundResult::Pull(PullBackgroundResult::UpToDate);
+        let result = BackgroundResult::Pull(Ok(MergeResult::UpToDate));
         assert!(matches!(
             result,
-            BackgroundResult::Pull(PullBackgroundResult::UpToDate)
+            BackgroundResult::Pull(Ok(MergeResult::UpToDate))
         ));
 
-        let result = BackgroundResult::Pull(PullBackgroundResult::Conflicts);
+        let result = BackgroundResult::Pull(Ok(MergeResult::Conflicts(Vec::new())));
         assert!(matches!(
             result,
-            BackgroundResult::Pull(PullBackgroundResult::Conflicts)
+            BackgroundResult::Pull(Ok(MergeResult::Conflicts(_)))
         ));
+    }
+
+    #[test]
+    fn test_flash_message_for_structured_pull_result() {
+        assert_eq!(
+            flash_message_for_pull_result(&MergeResult::FastForward),
+            Some("Pull (fast-forward) réussi ✓".to_string())
+        );
+        assert_eq!(
+            flash_message_for_pull_result(&MergeResult::Conflicts(Vec::new())),
+            None
+        );
     }
 }

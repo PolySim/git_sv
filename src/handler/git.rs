@@ -34,8 +34,8 @@ impl ActionHandler for GitHandler {
 fn handle_push(state: &mut AppState) -> Result<()> {
     match crate::git::remote::has_remote(&state.repo.repo) {
         Ok(true) => match crate::git::remote::push_current_branch(&state.repo.repo) {
-            Ok(msg) => {
-                state.set_flash_message(format!("{} ✓", msg));
+            Ok(success) => {
+                state.set_flash_message(success.flash_message());
             }
             Err(e) => {
                 state.set_flash_message(format!("Erreur lors du push: {}", e));
@@ -54,8 +54,8 @@ fn handle_push(state: &mut AppState) -> Result<()> {
 fn handle_force_push(state: &mut AppState) -> Result<()> {
     match crate::git::remote::has_remote(&state.repo.repo) {
         Ok(true) => match crate::git::remote::force_push_current_branch(&state.repo.repo) {
-            Ok(msg) => {
-                state.set_flash_message(format!("{} ✓", msg));
+            Ok(success) => {
+                state.set_flash_message(success.flash_message());
             }
             Err(e) => {
                 state.set_flash_message(format!("Erreur lors du force push: {}", e));
@@ -73,19 +73,26 @@ fn handle_force_push(state: &mut AppState) -> Result<()> {
 
 fn handle_pull(state: &mut AppState) -> Result<()> {
     use crate::git::conflict::MergeResult;
+    use crate::git::remote::flash_message_for_pull_result;
     use crate::state::ConflictsState;
 
     match crate::git::remote::has_remote(&state.repo.repo) {
         Ok(true) => match crate::git::remote::pull_current_branch_with_result(&state.repo.repo) {
             Ok(MergeResult::UpToDate) => {
-                state.set_flash_message("Déjà à jour ✓".to_string());
+                state.set_flash_message(
+                    flash_message_for_pull_result(&MergeResult::UpToDate).unwrap(),
+                );
             }
             Ok(MergeResult::FastForward) => {
-                state.set_flash_message("Pull (fast-forward) réussi ✓".to_string());
+                state.set_flash_message(
+                    flash_message_for_pull_result(&MergeResult::FastForward).unwrap(),
+                );
                 state.mark_dirty();
             }
             Ok(MergeResult::Success) => {
-                state.set_flash_message("Pull réussi ✓".to_string());
+                state.set_flash_message(
+                    flash_message_for_pull_result(&MergeResult::Success).unwrap(),
+                );
                 state.mark_dirty();
             }
             Ok(MergeResult::Conflicts(files)) => {
@@ -124,7 +131,11 @@ fn handle_fetch(state: &mut AppState) -> Result<()> {
     match crate::git::remote::has_remote(&state.repo.repo) {
         Ok(true) => match crate::git::remote::fetch_all(&state.repo.repo) {
             Ok(_) => {
-                state.set_flash_message("Fetch réussi ✓".to_string());
+                let remote_name = crate::git::remote::get_default_remote(&state.repo.repo)
+                    .unwrap_or_else(|_| "origin".to_string());
+                state.set_flash_message(
+                    crate::git::remote::FetchSuccess { remote_name }.flash_message(),
+                );
                 state.mark_dirty();
             }
             Err(e) => {
