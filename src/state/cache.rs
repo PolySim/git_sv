@@ -1,156 +1,10 @@
 //! Cache LRU pour les diffs de fichiers et lazy loading.
 
-#![allow(dead_code)]
-
 use git2::Oid;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
 use crate::git::diff::FileDiff;
-
-/// État d'un diff chargé paresseusement.
-#[derive(Debug, Clone, Default)]
-pub enum LazyDiff {
-    /// Non chargé encore.
-    #[default]
-    NotLoaded,
-    /// En cours de chargement.
-    Loading,
-    /// Chargé avec succès.
-    Loaded(FileDiff),
-    /// Erreur de chargement.
-    Error(String),
-}
-
-impl LazyDiff {
-    /// Crée un nouvel état NotLoaded.
-    pub fn new() -> Self {
-        Self::NotLoaded
-    }
-
-    /// Récupère le diff s'il est chargé, ou le charge via le loader fourni.
-    pub fn get_or_load<F>(&mut self, loader: F) -> Option<&FileDiff>
-    where
-        F: FnOnce() -> crate::error::Result<FileDiff>,
-    {
-        if matches!(self, LazyDiff::NotLoaded) {
-            *self = LazyDiff::Loading;
-            match loader() {
-                Ok(diff) => *self = LazyDiff::Loaded(diff),
-                Err(e) => *self = LazyDiff::Error(e.to_string()),
-            }
-        }
-
-        match self {
-            LazyDiff::Loaded(diff) => Some(diff),
-            _ => None,
-        }
-    }
-
-    /// Force le rechargement du diff.
-    pub fn reload<F>(&mut self, loader: F) -> Option<&FileDiff>
-    where
-        F: FnOnce() -> crate::error::Result<FileDiff>,
-    {
-        *self = LazyDiff::NotLoaded;
-        self.get_or_load(loader)
-    }
-
-    /// Vérifie si le diff est chargé.
-    pub fn is_loaded(&self) -> bool {
-        matches!(self, LazyDiff::Loaded(_))
-    }
-
-    /// Vérifie si le diff est en cours de chargement.
-    pub fn is_loading(&self) -> bool {
-        matches!(self, LazyDiff::Loading)
-    }
-
-    /// Récupère le diff si chargé (sans tenter de charger).
-    pub fn get(&self) -> Option<&FileDiff> {
-        match self {
-            LazyDiff::Loaded(diff) => Some(diff),
-            _ => None,
-        }
-    }
-
-    /// Réinitialise l'état à NotLoaded.
-    pub fn reset(&mut self) {
-        *self = LazyDiff::NotLoaded;
-    }
-}
-
-/// État d'un blame chargé paresseusement.
-#[derive(Debug, Clone, Default)]
-pub enum LazyBlame {
-    /// Non chargé encore.
-    #[default]
-    NotLoaded,
-    /// En cours de chargement.
-    Loading,
-    /// Chargé avec succès.
-    Loaded(crate::git::blame::FileBlame),
-    /// Erreur de chargement.
-    Error(String),
-}
-
-impl LazyBlame {
-    /// Crée un nouvel état NotLoaded.
-    pub fn new() -> Self {
-        Self::NotLoaded
-    }
-
-    /// Récupère le blame s'il est chargé, ou le charge via le loader fourni.
-    pub fn get_or_load<F>(&mut self, loader: F) -> Option<&crate::git::blame::FileBlame>
-    where
-        F: FnOnce() -> crate::error::Result<crate::git::blame::FileBlame>,
-    {
-        if matches!(self, LazyBlame::NotLoaded) {
-            *self = LazyBlame::Loading;
-            match loader() {
-                Ok(blame) => *self = LazyBlame::Loaded(blame),
-                Err(e) => *self = LazyBlame::Error(e.to_string()),
-            }
-        }
-
-        match self {
-            LazyBlame::Loaded(blame) => Some(blame),
-            _ => None,
-        }
-    }
-
-    /// Force le rechargement du blame.
-    pub fn reload<F>(&mut self, loader: F) -> Option<&crate::git::blame::FileBlame>
-    where
-        F: FnOnce() -> crate::error::Result<crate::git::blame::FileBlame>,
-    {
-        *self = LazyBlame::NotLoaded;
-        self.get_or_load(loader)
-    }
-
-    /// Vérifie si le blame est chargé.
-    pub fn is_loaded(&self) -> bool {
-        matches!(self, LazyBlame::Loaded(_))
-    }
-
-    /// Vérifie si le blame est en cours de chargement.
-    pub fn is_loading(&self) -> bool {
-        matches!(self, LazyBlame::Loading)
-    }
-
-    /// Récupère le blame si chargé (sans tenter de charger).
-    pub fn get(&self) -> Option<&crate::git::blame::FileBlame> {
-        match self {
-            LazyBlame::Loaded(blame) => Some(blame),
-            _ => None,
-        }
-    }
-
-    /// Réinitialise l'état à NotLoaded.
-    pub fn reset(&mut self) {
-        *self = LazyBlame::NotLoaded;
-    }
-}
 
 /// Clé de cache pour un diff.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -162,6 +16,7 @@ pub struct DiffCacheKey {
 }
 
 impl DiffCacheKey {
+    #[cfg(test)]
     pub fn new(commit_oid: Oid, file_path: impl Into<String>) -> Self {
         Self {
             commit_oid,
@@ -209,13 +64,9 @@ impl DiffCache {
     }
 
     /// Vérifie si une clé est présente.
+    #[cfg(test)]
     pub fn contains(&self, key: &DiffCacheKey) -> bool {
         self.cache.contains(key)
-    }
-
-    /// Vide le cache complètement.
-    pub fn clear(&mut self) {
-        self.cache.clear();
     }
 
     /// Invalide toutes les entrées du working directory.
@@ -240,16 +91,13 @@ impl DiffCache {
     }
 
     /// Nombre d'entrées dans le cache.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.cache.len()
     }
 
-    /// Le cache est-il vide?
-    pub fn is_empty(&self) -> bool {
-        self.cache.is_empty()
-    }
-
     /// Capacité du cache.
+    #[cfg(test)]
     pub fn capacity(&self) -> usize {
         self.cache.cap().get()
     }

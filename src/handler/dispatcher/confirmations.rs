@@ -6,10 +6,9 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
     use crate::git::conflict::MergeResult;
     use crate::ui::confirm_dialog::ConfirmAction;
 
-    if let Some(confirm_action) = ctx.state.pending_confirmation.clone() {
+    if let Some(confirm_action) = ctx.state.pending_confirmation.take() {
         match confirm_action {
             ConfirmAction::DiscardAll => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::discard::discard_all(&ctx.state.repo.repo) {
                     ctx.state.set_flash_message(format!("Erreur: {}", e));
                 } else {
@@ -19,7 +18,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 ctx.state.mark_dirty();
             }
             ConfirmAction::DiscardFile(path) => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::discard::discard_file(&ctx.state.repo.repo, &path) {
                     ctx.state.set_flash_message(format!("Erreur: {}", e));
                 } else {
@@ -28,7 +26,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 ctx.state.mark_dirty();
             }
             ConfirmAction::BranchDelete(name) => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::branch::delete_branch(&ctx.state.repo.repo, &name) {
                     ctx.state.set_flash_message(format!("Erreur: {}", e));
                 } else {
@@ -38,7 +35,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 ctx.state.mark_dirty();
             }
             ConfirmAction::AbortMerge => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::conflict::abort_merge(&ctx.state.repo.repo) {
                     ctx.state.set_flash_message(format!("Erreur: {}", e));
                 } else {
@@ -49,7 +45,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 ctx.state.mark_dirty();
             }
             ConfirmAction::ResetSoft(oid) => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::commit::reset_to_commit(
                     &ctx.state.repo.repo,
                     oid,
@@ -64,7 +59,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 }
             }
             ConfirmAction::ResetHard(oid) => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::commit::reset_to_commit(
                     &ctx.state.repo.repo,
                     oid,
@@ -79,7 +73,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 }
             }
             ConfirmAction::StashDrop(index) => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::stash::drop_stash(&mut ctx.state.repo.repo, index) {
                     ctx.state
                         .set_flash_message(format!("Erreur suppression stash: {}", e));
@@ -90,7 +83,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 }
             }
             ConfirmAction::WorktreeRemove(name) => {
-                ctx.state.close_confirmation();
                 if let Err(e) = crate::git::worktree::remove_worktree(&ctx.state.repo.repo, &name) {
                     ctx.state
                         .set_flash_message(format!("Erreur suppression worktree: {}", e));
@@ -101,7 +93,6 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 }
             }
             ConfirmAction::CherryPick(oid) => {
-                ctx.state.close_confirmation();
                 match crate::git::commit::cherry_pick_with_result(&ctx.state.repo.repo, oid) {
                     Ok(MergeResult::Success) => {
                         ctx.state

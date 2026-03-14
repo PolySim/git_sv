@@ -1,7 +1,5 @@
 //! Fonctions utilitaires git (helpers internes).
 
-#![allow(dead_code)]
-
 use crate::error::{GitSvError, Result};
 
 /// Macro pour wrapper les opérations git avec contexte
@@ -16,6 +14,7 @@ macro_rules! git_op {
 }
 
 /// Wrapper générique pour les opérations git qui retournent Result
+#[allow(dead_code)] // Prevu pour usage futur.
 pub fn with_error_context<T, E: std::fmt::Display>(
     result: std::result::Result<T, E>,
     operation: &'static str,
@@ -27,6 +26,7 @@ pub fn with_error_context<T, E: std::fmt::Display>(
 }
 
 /// Helper pour les opérations git optionnelles (retournent Option)
+#[allow(dead_code)] // Prevu pour usage futur.
 pub fn with_optional_context<T, E: std::fmt::Display>(
     result: std::result::Result<Option<T>, E>,
     operation: &'static str,
