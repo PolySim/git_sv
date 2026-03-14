@@ -127,5 +127,7 @@ fn handle_clear(state: &mut AppState) -> Result<()> {
 
 fn reset_graph_pagination(state: &mut AppState) {
     state.graph_view.reset_pagination();
-    state.dirty = matches!(state.view_mode, ViewMode::Graph);
+    if matches!(state.view_mode, ViewMode::Graph) {
+        state.schedule_refresh();
+    }
 }

@@ -66,28 +66,17 @@ impl ActionDispatcher {
 
             // Actions simples
             AppAction::Quit => {
-                ctx.state.should_quit = true;
+                ctx.state.request_quit();
                 Ok(())
             }
 
             AppAction::Refresh => {
-                ctx.state.dirty = true;
+                ctx.state.schedule_refresh();
                 Ok(())
             }
 
             AppAction::ToggleHelp => {
-                if ctx.state.view_mode == ViewMode::Help {
-                    // Retour à la vue précédente
-                    ctx.state.view_mode = ctx
-                        .state
-                        .previous_view_mode
-                        .take()
-                        .unwrap_or(ViewMode::Graph);
-                } else {
-                    // Sauvegarder la vue courante et passer en mode Help
-                    ctx.state.previous_view_mode = Some(ctx.state.view_mode);
-                    ctx.state.view_mode = ViewMode::Help;
-                }
+                ctx.state.toggle_help();
                 Ok(())
             }
 
@@ -97,8 +86,7 @@ impl ActionDispatcher {
             }
 
             AppAction::SwitchView(view_mode) => {
-                ctx.state.view_mode = view_mode;
-                ctx.state.dirty = true;
+                ctx.state.enter_view(view_mode);
                 Ok(())
             }
 
@@ -175,11 +163,13 @@ impl ActionDispatcher {
                 if let Some(ref reset) = ctx.state.reset_picker {
                     let oid = reset.target_oid;
                     if reset.is_soft_selected() {
-                        ctx.state.pending_confirmation =
-                            Some(crate::ui::confirm_dialog::ConfirmAction::ResetSoft(oid));
+                        ctx.state.open_confirmation(
+                            crate::ui::confirm_dialog::ConfirmAction::ResetSoft(oid),
+                        );
                     } else {
-                        ctx.state.pending_confirmation =
-                            Some(crate::ui::confirm_dialog::ConfirmAction::ResetHard(oid));
+                        ctx.state.open_confirmation(
+                            crate::ui::confirm_dialog::ConfirmAction::ResetHard(oid),
+                        );
                     }
                     ctx.state.reset_picker = None;
                 }
@@ -194,7 +184,7 @@ impl ActionDispatcher {
             // Confirmations
             AppAction::ConfirmAction => confirmations::handle_confirm_action(&mut ctx),
             AppAction::CancelAction => {
-                ctx.state.pending_confirmation = None;
+                ctx.state.close_confirmation();
                 Ok(())
             }
 

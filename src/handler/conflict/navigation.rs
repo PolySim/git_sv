@@ -474,8 +474,8 @@ pub(super) fn handle_finalize_merge(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Conflicts {
         match crate::git::conflict::finalize_merge(&state.repo.repo, "Merge finalisé") {
             Ok(_) => {
-                state.conflicts_state = None;
-                state.view_mode = ViewMode::Graph;
+                state.clear_conflicts();
+                state.enter_view(ViewMode::Graph);
                 state.mark_dirty();
                 state.set_flash_message("Merge finalisé ✓".to_string());
             }
@@ -491,8 +491,8 @@ pub(super) fn handle_abort_merge(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Conflicts {
         match crate::git::conflict::abort_merge(&state.repo.repo) {
             Ok(_) => {
-                state.conflicts_state = None;
-                state.view_mode = ViewMode::Staging;
+                state.clear_conflicts();
+                state.enter_view(ViewMode::Staging);
                 state.mark_dirty();
                 state.set_flash_message("Merge annulé".to_string());
             }

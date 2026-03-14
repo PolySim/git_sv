@@ -438,7 +438,7 @@ pub(super) fn handle_edit_newline(state: &mut AppState) -> Result<()> {
 
 pub(super) fn handle_leave_view(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Conflicts {
-        state.view_mode = ViewMode::Staging;
+        state.enter_view(ViewMode::Staging);
     }
     Ok(())
 }

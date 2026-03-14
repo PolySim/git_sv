@@ -156,7 +156,7 @@ fn handle_cherry_pick(state: &mut AppState) -> Result<()> {
         return Ok(());
     };
 
-    state.pending_confirmation = Some(ConfirmAction::CherryPick(commit_oid));
+    state.open_confirmation(ConfirmAction::CherryPick(commit_oid));
 
     Ok(())
 }
@@ -225,8 +225,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
     match crate::git::blame::blame_file(&state.repo.repo, commit_oid, &file_path) {
         Ok(blame) => {
             blame_state.blame = Some(blame);
-            state.blame_state = Some(blame_state);
-            state.view_mode = ViewMode::Blame;
+            state.open_blame(blame_state);
         }
         Err(e) => {
             state.set_flash_message(format!("Erreur lors du blame: {}", e));
@@ -238,8 +237,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
 
 fn handle_close_blame(state: &mut AppState) -> Result<()> {
     if matches!(state.view_mode, ViewMode::Blame) {
-        state.blame_state = None;
-        state.view_mode = ViewMode::Graph;
+        state.close_blame();
     }
     Ok(())
 }
@@ -255,8 +253,7 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
                 let target_oid = line.commit_oid;
 
                 // Retour à la vue graph
-                state.blame_state = None;
-                state.view_mode = ViewMode::Graph;
+                state.close_blame();
 
                 // Chercher le commit dans le graphe en utilisant l'API unifiée
                 if let Some(index) = state
@@ -281,7 +278,7 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
 
 fn handle_commit_prompt(state: &mut AppState) -> Result<()> {
     // Basculer en vue Staging avec le focus sur le message de commit
-    state.view_mode = ViewMode::Staging;
+    state.enter_view(ViewMode::Staging);
     state.staging_state.is_committing = true;
     state.staging_state.focus = StagingFocus::CommitMessage;
     state.staging_state.commit_message.clear();
@@ -370,7 +367,7 @@ fn handle_abort_merge(state: &mut AppState) -> Result<()> {
     }
 
     // Demander confirmation via le dialogue existant
-    state.pending_confirmation = Some(crate::ui::confirm_dialog::ConfirmAction::AbortMerge);
+    state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::AbortMerge);
 
     Ok(())
 }

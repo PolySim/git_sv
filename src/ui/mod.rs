@@ -110,7 +110,7 @@ fn render_graph_overlays(frame: &mut Frame, state: &AppState) {
 
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, state: &mut AppState) {
-    state.screen_area = frame.area();
+    state.update_screen_area(frame.area());
 
     // Dispatcher le rendu selon le mode de vue
     match state.view_mode {

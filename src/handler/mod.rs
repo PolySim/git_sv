@@ -23,7 +23,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
 
 use crate::error::Result;
-use crate::state::{AppState, ViewMode};
+use crate::state::AppState;
 use crate::ui;
 use crate::ui::input::handle_input_with_timeout;
 use crate::watcher::GitWatcher;
@@ -75,7 +75,7 @@ impl EventHandler {
 
             // Vérifier les changements dans le repository git (auto-refresh)
             if self.watcher.check_changed()? {
-                self.state.dirty = true;
+                self.state.schedule_refresh();
             }
 
             // Input avec timeout adaptatif
@@ -94,7 +94,7 @@ impl EventHandler {
             if self.state.loading_spinner.is_some() {
                 match action {
                     Some(crate::state::AppAction::Quit) => {
-                        self.state.should_quit = true;
+                        self.state.request_quit();
                     }
                     _ => {
                         // Ignorer les autres inputs pendant le chargement
@@ -147,10 +147,7 @@ impl EventHandler {
 
     /// Lance un push en arrière-plan avec spinner.
     fn handle_push_background(&mut self) -> Result<()> {
-        // Activer le spinner
-        self.state.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(
-            "Push en cours...".to_string(),
-        ));
+        self.state.set_loading("Push en cours...");
 
         // Lancer l'opération en arrière-plan
         let repo_path = std::path::PathBuf::from(&self.state.repo_path);
@@ -161,9 +158,7 @@ impl EventHandler {
 
     /// Lance un force push en arrière-plan avec spinner.
     fn handle_force_push_background(&mut self) -> Result<()> {
-        self.state.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(
-            "Force push en cours...".to_string(),
-        ));
+        self.state.set_loading("Force push en cours...");
 
         let repo_path = std::path::PathBuf::from(&self.state.repo_path);
         self.background.spawn_push(repo_path, true);
@@ -173,10 +168,7 @@ impl EventHandler {
 
     /// Lance un pull en arrière-plan avec spinner.
     fn handle_pull_background(&mut self) -> Result<()> {
-        // Activer le spinner
-        self.state.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(
-            "Pull en cours...".to_string(),
-        ));
+        self.state.set_loading("Pull en cours...");
 
         // Lancer l'opération en arrière-plan
         let repo_path = std::path::PathBuf::from(&self.state.repo_path);
@@ -188,10 +180,7 @@ impl EventHandler {
 
     /// Lance un fetch en arrière-plan avec spinner.
     fn handle_fetch_background(&mut self) -> Result<()> {
-        // Activer le spinner
-        self.state.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(
-            "Fetch en cours...".to_string(),
-        ));
+        self.state.set_loading("Fetch en cours...");
 
         // Lancer l'opération en arrière-plan
         let repo_path = std::path::PathBuf::from(&self.state.repo_path);
@@ -205,8 +194,7 @@ impl EventHandler {
         use crate::handler::background::PullBackgroundResult;
         use crate::state::ConflictsState;
 
-        // Désactiver le spinner
-        self.state.loading_spinner = None;
+        self.state.clear_loading();
 
         match result {
             BackgroundResult::Push(Ok(msg)) => {
@@ -245,13 +233,12 @@ impl EventHandler {
                                         .clone()
                                         .unwrap_or_else(|| "HEAD".to_string())
                                 );
-                                self.state.conflicts_state = Some(ConflictsState::new(
+                                self.state.open_conflicts(ConflictsState::new(
                                     files,
                                     "Pull depuis origin".to_string(),
                                     ours_name,
                                     theirs_name,
                                 ));
-                                self.state.view_mode = ViewMode::Conflicts;
                                 self.state.set_flash_message(
                                     "Conflits lors du pull - résolution requise".to_string(),
                                 );

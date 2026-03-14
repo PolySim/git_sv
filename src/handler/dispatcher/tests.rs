@@ -91,6 +91,21 @@ fn test_dispatch_switch_view() {
 }
 
 #[test]
+fn test_dispatch_switch_view_sets_dirty_via_helper() {
+    let (dir, repo) = setup_test_repo();
+    let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+    state.dirty = false;
+    let mut dispatcher = ActionDispatcher::new();
+
+    dispatcher
+        .dispatch(&mut state, AppAction::SwitchView(ViewMode::Branches))
+        .unwrap();
+
+    assert_eq!(state.view_mode, ViewMode::Branches);
+    assert!(state.dirty);
+}
+
+#[test]
 fn test_dispatch_navigation_action() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();

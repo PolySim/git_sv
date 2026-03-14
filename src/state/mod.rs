@@ -175,6 +175,85 @@ impl AppState {
         self.diff_cache.clear_working_directory();
     }
 
+    /// Planifie un rafraichissement sans invalider explicitement le cache diff.
+    pub fn schedule_refresh(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Met a jour la zone d'ecran connue apres rendu.
+    pub fn update_screen_area(&mut self, area: Rect) {
+        self.screen_area = area;
+    }
+
+    /// Bascule vers une vue et planifie un rafraichissement.
+    pub fn enter_view(&mut self, view_mode: ViewMode) {
+        self.view_mode = view_mode;
+        self.schedule_refresh();
+    }
+
+    /// Bascule l'overlay d'aide en preservant la vue precedente.
+    pub fn toggle_help(&mut self) {
+        if self.view_mode == ViewMode::Help {
+            self.leave_help();
+        } else {
+            self.previous_view_mode = Some(self.view_mode);
+            self.view_mode = ViewMode::Help;
+        }
+    }
+
+    /// Quitte la vue d'aide et restaure la vue precedente.
+    pub fn leave_help(&mut self) {
+        self.view_mode = self.previous_view_mode.take().unwrap_or(ViewMode::Graph);
+    }
+
+    /// Ouvre une confirmation modale.
+    pub fn open_confirmation(&mut self, action: crate::ui::confirm_dialog::ConfirmAction) {
+        self.pending_confirmation = Some(action);
+    }
+
+    /// Ferme la confirmation modale courante.
+    pub fn close_confirmation(&mut self) {
+        self.pending_confirmation = None;
+    }
+
+    /// Active le spinner de chargement.
+    pub fn set_loading(&mut self, message: impl Into<String>) {
+        self.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(message.into()));
+    }
+
+    /// Desactive le spinner de chargement.
+    pub fn clear_loading(&mut self) {
+        self.loading_spinner = None;
+    }
+
+    /// Demande la fermeture de l'application.
+    pub fn request_quit(&mut self) {
+        self.should_quit = true;
+    }
+
+    /// Ouvre la vue blame avec son etat.
+    pub fn open_blame(&mut self, blame_state: BlameState) {
+        self.blame_state = Some(blame_state);
+        self.view_mode = ViewMode::Blame;
+    }
+
+    /// Ferme la vue blame et revient au graphe.
+    pub fn close_blame(&mut self) {
+        self.blame_state = None;
+        self.view_mode = ViewMode::Graph;
+    }
+
+    /// Ouvre la vue conflits avec son etat.
+    pub fn open_conflicts(&mut self, conflicts_state: ConflictsState) {
+        self.conflicts_state = Some(conflicts_state);
+        self.view_mode = ViewMode::Conflicts;
+    }
+
+    /// Ferme la vue conflits sans changer d'autre etat.
+    pub fn clear_conflicts(&mut self) {
+        self.conflicts_state = None;
+    }
+
     /// Définit un message flash.
     pub fn set_flash_message(&mut self, message: impl Into<String>) {
         self.flash_message = Some((message.into(), Instant::now()));
@@ -477,6 +556,42 @@ mod tests {
         .unwrap();
 
         assert_eq!(state.graph_view.visual_index(), 0);
+    }
+
+    #[test]
+    fn test_toggle_help_roundtrip() {
+        let (_temp_dir, mut state) = create_test_state();
+        state.view_mode = ViewMode::Branches;
+
+        state.toggle_help();
+        assert_eq!(state.view_mode, ViewMode::Help);
+        assert_eq!(state.previous_view_mode, Some(ViewMode::Branches));
+
+        state.toggle_help();
+        assert_eq!(state.view_mode, ViewMode::Branches);
+        assert_eq!(state.previous_view_mode, None);
+    }
+
+    #[test]
+    fn test_confirmation_helpers() {
+        let (_temp_dir, mut state) = create_test_state();
+
+        state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+        assert!(state.pending_confirmation.is_some());
+
+        state.close_confirmation();
+        assert!(state.pending_confirmation.is_none());
+    }
+
+    #[test]
+    fn test_loading_helpers() {
+        let (_temp_dir, mut state) = create_test_state();
+
+        state.set_loading("Chargement");
+        assert!(state.loading_spinner.is_some());
+
+        state.clear_loading();
+        assert!(state.loading_spinner.is_none());
     }
 
     #[test]
