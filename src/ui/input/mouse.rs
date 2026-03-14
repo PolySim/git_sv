@@ -130,7 +130,7 @@ fn handle_modal_click(
 ) -> Option<AppAction> {
     use crate::ui::common::centered_rect;
 
-    if state.pending_confirmation.is_some() {
+    if state.ui.pending_confirmation.is_some() {
         let popup = centered_rect(60, 30, state.screen_area);
         if hit.relative_x >= popup.x && hit.relative_x < popup.x + popup.width {
             // Ligne des boutons approximative en bas du popup.

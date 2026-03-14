@@ -63,7 +63,7 @@ impl EventHandler {
             terminal.draw(|frame| {
                 ui::render(frame, &mut self.state);
                 // Si un spinner est actif, le rendre en overlay
-                if let Some(spinner) = &mut self.state.loading_spinner {
+                if let Some(spinner) = &mut self.state.ui.loading_spinner {
                     crate::ui::loading::render_overlay(frame, spinner, frame.area());
                 }
             })?;
@@ -80,9 +80,9 @@ impl EventHandler {
 
             // Input avec timeout adaptatif
             // Timeout court (80ms) quand le spinner est actif pour une animation fluide
-            let timeout_ms = if self.state.loading_spinner.is_some() {
+            let timeout_ms = if self.state.ui.loading_spinner.is_some() {
                 80
-            } else if self.state.flash_message.is_some() {
+            } else if self.state.ui.flash_message.is_some() {
                 100
             } else {
                 250
@@ -91,7 +91,7 @@ impl EventHandler {
             let action = handle_input_with_timeout(&self.state, timeout_ms)?;
 
             // Pendant le loading, ignorer les actions sauf Quit
-            if self.state.loading_spinner.is_some() {
+            if self.state.ui.loading_spinner.is_some() {
                 match action {
                     Some(crate::state::AppAction::Quit) => {
                         self.state.request_quit();
@@ -105,7 +105,7 @@ impl EventHandler {
                 self.dispatch_with_background(action)?;
             }
 
-            if self.state.should_quit {
+            if self.state.ui.should_quit {
                 break;
             }
 

@@ -32,13 +32,14 @@ macro_rules! assert_flash_contains {
     ($state:expr, $text:expr) => {
         assert!(
             $state
+                .ui
                 .flash_message
                 .as_ref()
                 .map(|(m, _)| m.contains($text))
                 .unwrap_or(false),
             "Le message flash devrait contenir '{}' mais est {:?}",
             $text,
-            $state.flash_message
+            $state.ui.flash_message
         );
     };
 }

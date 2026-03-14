@@ -48,12 +48,12 @@ fn has_blocking_modal(state: &AppState) -> bool {
             .reset_picker
             .as_ref()
             .is_some_and(|picker| picker.is_active)
-        || state.pending_confirmation.is_some()
+        || state.ui.pending_confirmation.is_some()
 }
 
 fn has_blocking_text_input(state: &AppState) -> bool {
     state.search_state.is_active
-        || state.filter_popup.is_open
+        || state.filters.filter_popup.is_open
         || (state.view_mode == ViewMode::Staging
             && state.staging_state.focus == StagingFocus::CommitMessage)
         || (state.view_mode == ViewMode::Branches
@@ -82,7 +82,7 @@ fn map_modal_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return map_reset_picker_key(key);
     }
 
-    if state.pending_confirmation.is_some() {
+    if state.ui.pending_confirmation.is_some() {
         return map_confirmation_key(key);
     }
 
@@ -94,7 +94,7 @@ fn map_text_input_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return map_search_key(key);
     }
 
-    if state.filter_popup.is_open {
+    if state.filters.filter_popup.is_open {
         return map_filter_popup_key(key);
     }
 
@@ -263,7 +263,7 @@ fn map_graph_ctrl_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             Some(AppAction::Navigation(NavigationAction::ScrollDiffPageUp))
         }
         KeyCode::Char('u') => Some(AppAction::Navigation(NavigationAction::PageUp)),
-        KeyCode::Char('r') if state.graph_filter.is_active() => {
+        KeyCode::Char('r') if state.filters.graph_filter.is_active() => {
             Some(AppAction::Filter(FilterAction::Clear))
         }
         _ => None,
@@ -356,7 +356,7 @@ fn map_graph_root_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('B') => Some(AppAction::Git(GitAction::OpenBlame)),
         KeyCode::Char('x') => Some(AppAction::Git(GitAction::CherryPick)),
         KeyCode::Char('R') => Some(AppAction::Git(GitAction::ResetPrompt)),
-        KeyCode::Char('A') if state.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
+        KeyCode::Char('A') if state.ui.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
         KeyCode::Char('L') => Some(AppAction::LoadMoreHistory),
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
         KeyCode::Char('r') => Some(AppAction::Refresh),
@@ -448,7 +448,7 @@ fn map_staging_global_key(key: KeyEvent, state: &AppState) -> Option<AppAction> 
         KeyCode::Char('y') => Some(AppAction::CopyPanelContent),
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),
         KeyCode::Char('P') => Some(AppAction::Git(GitAction::Push)),
-        KeyCode::Char('A') if state.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
+        KeyCode::Char('A') if state.ui.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
         _ => None,
     }
 }
@@ -472,7 +472,9 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('D') => Some(AppAction::Staging(StagingAction::DiscardAll)),
             KeyCode::Tab => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
-            KeyCode::Char('A') if !state.is_merging => Some(AppAction::Git(GitAction::AmendCommit)),
+            KeyCode::Char('A') if !state.ui.is_merging => {
+                Some(AppAction::Git(GitAction::AmendCommit))
+            }
             _ if key.modifiers.contains(KeyModifiers::CONTROL)
                 && key.code == KeyCode::Char('S') =>
             {
@@ -494,7 +496,9 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('U') => Some(AppAction::Staging(StagingAction::UnstageAll)),
             KeyCode::Tab => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
-            KeyCode::Char('A') if !state.is_merging => Some(AppAction::Git(GitAction::AmendCommit)),
+            KeyCode::Char('A') if !state.ui.is_merging => {
+                Some(AppAction::Git(GitAction::AmendCommit))
+            }
             _ => None,
         },
         StagingFocus::Diff => match key.code {
@@ -512,7 +516,9 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             }
             KeyCode::Tab | KeyCode::Esc => Some(AppAction::Staging(StagingAction::SwitchFocus)),
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
-            KeyCode::Char('A') if !state.is_merging => Some(AppAction::Git(GitAction::AmendCommit)),
+            KeyCode::Char('A') if !state.ui.is_merging => {
+                Some(AppAction::Git(GitAction::AmendCommit))
+            }
             KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
             _ => None,
         },

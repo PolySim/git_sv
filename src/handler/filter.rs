@@ -27,32 +27,33 @@ impl ActionHandler for FilterHandler {
 }
 
 fn handle_open(state: &mut AppState) -> Result<()> {
-    state.filter_popup.open(&state.graph_filter);
+    let current_filter = state.filters.graph_filter.clone();
+    state.filters.filter_popup.open(&current_filter);
     Ok(())
 }
 
 fn handle_close(state: &mut AppState) -> Result<()> {
-    state.filter_popup.close();
+    state.filters.filter_popup.close();
     Ok(())
 }
 
 fn handle_next_field(state: &mut AppState) -> Result<()> {
-    state.filter_popup.next_field();
+    state.filters.filter_popup.next_field();
     Ok(())
 }
 
 fn handle_previous_field(state: &mut AppState) -> Result<()> {
-    state.filter_popup.previous_field();
+    state.filters.filter_popup.previous_field();
     Ok(())
 }
 
 fn handle_insert_char(state: &mut AppState, c: char) -> Result<()> {
-    state.filter_popup.current_input_mut().push(c);
+    state.filters.filter_popup.current_input_mut().push(c);
     Ok(())
 }
 
 fn handle_delete_char(state: &mut AppState) -> Result<()> {
-    let input = state.filter_popup.current_input_mut();
+    let input = state.filters.filter_popup.current_input_mut();
     if !input.is_empty() {
         input.pop();
     }
@@ -61,10 +62,11 @@ fn handle_delete_char(state: &mut AppState) -> Result<()> {
 
 fn handle_apply(state: &mut AppState) -> Result<()> {
     // Appliquer les valeurs du popup au filtre
-    state.filter_popup.apply_to_filter(&mut state.graph_filter);
+    let popup_state = state.filters.filter_popup.clone();
+    popup_state.apply_to_filter(&mut state.filters.graph_filter);
 
     // Fermer le popup
-    state.filter_popup.close();
+    state.filters.filter_popup.close();
 
     // Réinitialiser l'état de recherche (les résultats sont périmés après filtrage)
     state.search_state.results.clear();
@@ -76,18 +78,20 @@ fn handle_apply(state: &mut AppState) -> Result<()> {
     reset_graph_pagination(state);
 
     // Afficher un message si des filtres sont actifs
-    if state.graph_filter.is_active() {
+    if state.filters.graph_filter.is_active() {
         let mut parts = Vec::new();
-        if state.graph_filter.author.is_some() {
+        if state.filters.graph_filter.author.is_some() {
             parts.push("auteur");
         }
-        if state.graph_filter.date_from.is_some() || state.graph_filter.date_to.is_some() {
+        if state.filters.graph_filter.date_from.is_some()
+            || state.filters.graph_filter.date_to.is_some()
+        {
             parts.push("date");
         }
-        if state.graph_filter.path.is_some() {
+        if state.filters.graph_filter.path.is_some() {
             parts.push("chemin");
         }
-        if state.graph_filter.message.is_some() {
+        if state.filters.graph_filter.message.is_some() {
             parts.push("message");
         }
         state.set_flash_message(flash_success(format!(
@@ -103,17 +107,17 @@ fn handle_apply(state: &mut AppState) -> Result<()> {
 
 fn handle_clear(state: &mut AppState) -> Result<()> {
     // Effacer tous les filtres
-    state.graph_filter.clear();
+    state.filters.graph_filter.clear();
 
     // Vider aussi les inputs du popup
-    state.filter_popup.author_input.clear();
-    state.filter_popup.date_from_input.clear();
-    state.filter_popup.date_to_input.clear();
-    state.filter_popup.path_input.clear();
-    state.filter_popup.message_input.clear();
+    state.filters.filter_popup.author_input.clear();
+    state.filters.filter_popup.date_from_input.clear();
+    state.filters.filter_popup.date_to_input.clear();
+    state.filters.filter_popup.path_input.clear();
+    state.filters.filter_popup.message_input.clear();
 
     // Fermer le popup
-    state.filter_popup.close();
+    state.filters.filter_popup.close();
 
     // Réinitialiser l'état de recherche (les résultats sont périmés)
     state.search_state.results.clear();

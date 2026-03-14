@@ -260,7 +260,7 @@ fn hit_test_modals(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
     }
 
     // Confirmation dialog
-    if state.pending_confirmation.is_some() {
+    if state.ui.pending_confirmation.is_some() {
         return Some(HitTestResult {
             zone: ClickableZone::Modal,
             relative_x: x,
@@ -270,7 +270,7 @@ fn hit_test_modals(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
     }
 
     // Filter popup
-    if state.filter_popup.is_open {
+    if state.filters.filter_popup.is_open {
         return Some(HitTestResult {
             zone: ClickableZone::Modal,
             relative_x: x,

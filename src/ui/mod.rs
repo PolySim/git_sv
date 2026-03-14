@@ -84,7 +84,7 @@ fn render_global_overlays(frame: &mut Frame, state: &AppState) {
         }
     }
 
-    if let Some(ref action) = state.pending_confirmation {
+    if let Some(ref action) = state.ui.pending_confirmation {
         confirm_dialog::render(
             frame,
             confirm_dialog::ConfirmDialogRenderContext {
@@ -96,12 +96,12 @@ fn render_global_overlays(frame: &mut Frame, state: &AppState) {
 }
 
 fn render_graph_overlays(frame: &mut Frame, state: &AppState) {
-    if state.filter_popup.is_open {
+    if state.filters.filter_popup.is_open {
         filter_popup::render(
             frame,
             filter_popup::FilterPopupRenderContext {
-                popup_state: &state.filter_popup,
-                current_filter: &state.graph_filter,
+                popup_state: &state.filters.filter_popup,
+                current_filter: &state.filters.graph_filter,
                 area: frame.area(),
             },
         );
@@ -125,7 +125,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     current_branch: state.current_branch.as_deref(),
                     repo_path: &state.repo_path,
                     flash_message: state.current_flash_message(),
-                    is_merging: state.is_merging,
+                    is_merging: state.ui.is_merging,
                 },
             );
         }
@@ -140,7 +140,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                             current_branch: state.current_branch.as_deref(),
                             repo_path: &state.repo_path,
                             flash_message: state.current_flash_message(),
-                            is_merging: state.is_merging,
+                            is_merging: state.ui.is_merging,
                         },
                     );
                 }
@@ -232,8 +232,8 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
             current_branch: state.current_branch.as_deref(),
             status_entries: &state.status_entries,
             flash_message: state.current_flash_message(),
-            filter: &state.graph_filter,
-            is_merging: state.is_merging,
+            filter: &state.filters.graph_filter,
+            is_merging: state.ui.is_merging,
             area: layout.status_bar,
         },
     );
@@ -261,7 +261,7 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
     // Rendu du graphe (masqué en mode diff plein écran).
     if !is_diff_fullscreen {
         let is_graph_focused = state.focus == FocusPanel::Graph;
-        let filter_active = state.graph_filter.is_active();
+        let filter_active = state.filters.graph_filter.is_active();
         let current_branch = state.current_branch.clone();
 
         // Rendre le graphe avec emprunt mutable de list_state seulement
@@ -387,8 +387,8 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
             selected_index,
             total_commits: graph_len,
             bottom_left_mode: state.bottom_left_mode,
-            filter_active: state.graph_filter.is_active(),
-            is_merging: state.is_merging,
+            filter_active: state.filters.graph_filter.is_active(),
+            is_merging: state.ui.is_merging,
             area: layout.help_bar,
         },
     );

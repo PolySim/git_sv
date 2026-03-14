@@ -43,7 +43,7 @@ fn test_search_mode_ctrl_n_moves_to_next_result() {
 #[test]
 fn test_filter_popup_arrow_down_moves_to_next_field() {
     let mut state = create_test_state();
-    state.filter_popup.is_open = true;
+    state.filters.filter_popup.is_open = true;
 
     let action = map_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &state);
 

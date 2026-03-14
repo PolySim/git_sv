@@ -379,7 +379,7 @@ fn handle_reset_prompt(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_abort_merge(state: &mut AppState) -> Result<()> {
-    if !state.is_merging {
+    if !state.ui.is_merging {
         state.set_flash_message(flash_error_message("aucun merge en cours"));
         return Ok(());
     }

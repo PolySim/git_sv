@@ -26,6 +26,112 @@ pub const MAX_TOTAL_COMMITS: usize = 10000;
 /// Capacité du cache LRU pour les diffs (nombre d'entrées).
 const DIFF_CACHE_CAPACITY: usize = 50;
 
+/// État UI transient (messages flash, dialogues modaux, spinner).
+pub struct UiTransientState {
+    /// Message flash à afficher.
+    pub flash_message: Option<(String, Instant)>,
+
+    /// Action en attente de confirmation (dialogue modal).
+    pub pending_confirmation: Option<crate::ui::confirm_dialog::ConfirmAction>,
+
+    /// Spinner de chargément actif.
+    pub loading_spinner: Option<crate::ui::loading::LoadingSpinner>,
+
+    /// Indique si un merge est en cours (MERGE_HEAD existe).
+    pub is_merging: bool,
+
+    /// Flag pour quitter l'application.
+    pub should_quit: bool,
+}
+
+impl UiTransientState {
+    /// Crée un nouvel état UI transient.
+    pub fn new() -> Self {
+        Self {
+            flash_message: None,
+            pending_confirmation: None,
+            loading_spinner: None,
+            is_merging: false,
+            should_quit: false,
+        }
+    }
+
+    /// Ouvre une confirmation modale.
+    pub fn open_confirmation(&mut self, action: crate::ui::confirm_dialog::ConfirmAction) {
+        self.pending_confirmation = Some(action);
+    }
+
+    /// Ferme la confirmation modale courante.
+    pub fn close_confirmation(&mut self) {
+        self.pending_confirmation = None;
+    }
+
+    /// Active le spinner de chargement.
+    pub fn set_loading(&mut self, message: impl Into<String>) {
+        self.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(message.into()));
+    }
+
+    /// Désactive le spinner de chargement.
+    pub fn clear_loading(&mut self) {
+        self.loading_spinner = None;
+    }
+
+    /// Demande la fermeture de l'application.
+    pub fn request_quit(&mut self) {
+        self.should_quit = true;
+    }
+
+    /// Définit un message flash.
+    pub fn set_flash_message(&mut self, message: impl Into<String>) {
+        self.flash_message = Some((message.into(), Instant::now()));
+    }
+
+    /// Vérifie si le message flash a expiré et le supprime le cas échéant.
+    pub fn check_flash_expired(&mut self) {
+        if let Some((_, timestamp)) = &self.flash_message {
+            if timestamp.elapsed() > Duration::from_secs(3) {
+                self.flash_message = None;
+            }
+        }
+    }
+
+    /// Retourne le message flash actuel s'il n'a pas expiré.
+    pub fn current_flash_message(&self) -> Option<&str> {
+        self.flash_message.as_ref().map(|(msg, _)| msg.as_str())
+    }
+}
+
+impl Default for UiTransientState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// État des filtres du graphe.
+pub struct FilterState {
+    /// Filtres actifs sur le graph.
+    pub graph_filter: GraphFilter,
+
+    /// État du popup de filtre.
+    pub filter_popup: FilterPopupState,
+}
+
+impl FilterState {
+    /// Crée un nouvel état de filtres.
+    pub fn new() -> Self {
+        Self {
+            graph_filter: GraphFilter::new(),
+            filter_popup: FilterPopupState::new(),
+        }
+    }
+}
+
+impl Default for FilterState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// État principal de l'application.
 ///
 /// L'état du graphe et des sélections est centralisé dans `graph_view`.
@@ -100,37 +206,19 @@ pub struct AppState {
     pub reset_picker: Option<ResetPickerState>,
 
     // ═══════════════════════════════════════════════════
-    // UI transient
+    // Sous-structs groupées
     // ═══════════════════════════════════════════════════
-    /// Message flash à afficher.
-    pub flash_message: Option<(String, Instant)>,
+    /// État UI transient.
+    pub ui: UiTransientState,
 
-    /// Action en attente de confirmation (dialogue modal).
-    pub pending_confirmation: Option<crate::ui::confirm_dialog::ConfirmAction>,
-
-    /// Spinner de chargément actif.
-    pub loading_spinner: Option<crate::ui::loading::LoadingSpinner>,
-
-    /// Indique si un merge est en cours (MERGE_HEAD existe).
-    pub is_merging: bool,
-
-    /// Flag pour quitter l'application.
-    pub should_quit: bool,
+    /// État des filtres du graphe.
+    pub filters: FilterState,
 
     // ═══════════════════════════════════════════════════
     // Cache
     // ═══════════════════════════════════════════════════
     /// Cache des diffs.
     pub diff_cache: DiffCache,
-
-    // ═══════════════════════════════════════════════════
-    // Filtres pour le graph
-    // ═══════════════════════════════════════════════════
-    /// Filtres actifs sur le graph.
-    pub graph_filter: GraphFilter,
-
-    /// État du popup de filtre.
-    pub filter_popup: FilterPopupState,
 }
 
 impl AppState {
@@ -157,14 +245,9 @@ impl AppState {
             search_state: SearchState::default(),
             merge_picker: None,
             reset_picker: None,
-            flash_message: None,
-            pending_confirmation: None,
-            loading_spinner: None,
-            is_merging: false,
-            should_quit: false,
+            ui: UiTransientState::new(),
+            filters: FilterState::new(),
             diff_cache: DiffCache::new(DIFF_CACHE_CAPACITY),
-            graph_filter: GraphFilter::new(),
-            filter_popup: FilterPopupState::new(),
         };
 
         Ok(state)
@@ -210,27 +293,27 @@ impl AppState {
 
     /// Ouvre une confirmation modale.
     pub fn open_confirmation(&mut self, action: crate::ui::confirm_dialog::ConfirmAction) {
-        self.pending_confirmation = Some(action);
+        self.ui.open_confirmation(action);
     }
 
     /// Ferme la confirmation modale courante.
     pub fn close_confirmation(&mut self) {
-        self.pending_confirmation = None;
+        self.ui.close_confirmation();
     }
 
     /// Active le spinner de chargement.
     pub fn set_loading(&mut self, message: impl Into<String>) {
-        self.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(message.into()));
+        self.ui.set_loading(message);
     }
 
     /// Désactive le spinner de chargement.
     pub fn clear_loading(&mut self) {
-        self.loading_spinner = None;
+        self.ui.clear_loading();
     }
 
     /// Demande la fermeture de l'application.
     pub fn request_quit(&mut self) {
-        self.should_quit = true;
+        self.ui.request_quit();
     }
 
     /// Ouvre la vue blame avec son état.
@@ -258,21 +341,17 @@ impl AppState {
 
     /// Définit un message flash.
     pub fn set_flash_message(&mut self, message: impl Into<String>) {
-        self.flash_message = Some((message.into(), Instant::now()));
+        self.ui.set_flash_message(message);
     }
 
     /// Vérifie si le message flash a expiré et le supprime le cas échéant.
     pub fn check_flash_expired(&mut self) {
-        if let Some((_, timestamp)) = &self.flash_message {
-            if timestamp.elapsed() > Duration::from_secs(3) {
-                self.flash_message = None;
-            }
-        }
+        self.ui.check_flash_expired();
     }
 
     /// Retourne le message flash actuel s'il n'a pas expiré.
     pub fn current_flash_message(&self) -> Option<&str> {
-        self.flash_message.as_ref().map(|(msg, _)| msg.as_str())
+        self.ui.current_flash_message()
     }
     /// Retourne le commit actuellement sélectionné.
     pub fn selected_commit(&self) -> Option<&crate::git::graph::CommitNode> {
@@ -320,9 +399,9 @@ impl AppState {
     fn refresh_with_commit_limit(&mut self, commit_limit: usize) -> crate::error::Result<()> {
         self.current_branch = self.repo.current_branch().ok();
 
-        let (new_graph, can_load_more) = if self.graph_filter.is_active() {
+        let (new_graph, can_load_more) = if self.filters.graph_filter.is_active() {
             self.repo
-                .build_graph_filtered_with_more(commit_limit, &self.graph_filter)
+                .build_graph_filtered_with_more(commit_limit, &self.filters.graph_filter)
                 .unwrap_or_default()
         } else {
             self.repo
@@ -333,7 +412,7 @@ impl AppState {
         let graph_len = new_graph.len();
         self.replace_graph(new_graph);
 
-        let total = if self.graph_filter.is_active() {
+        let total = if self.filters.graph_filter.is_active() {
             None
         } else {
             self.repo.estimate_total_commits()
@@ -355,7 +434,7 @@ impl AppState {
             crate::handler::staging::load_staging_diff(self);
         }
 
-        self.is_merging = crate::git::conflict::is_merging(&self.repo.repo);
+        self.ui.is_merging = crate::git::conflict::is_merging(&self.repo.repo);
         self.dirty = false;
 
         Ok(())
@@ -579,10 +658,10 @@ mod tests {
         let (_temp_dir, mut state) = create_test_state();
 
         state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
-        assert!(state.pending_confirmation.is_some());
+        assert!(state.ui.pending_confirmation.is_some());
 
         state.close_confirmation();
-        assert!(state.pending_confirmation.is_none());
+        assert!(state.ui.pending_confirmation.is_none());
     }
 
     #[test]
@@ -590,10 +669,10 @@ mod tests {
         let (_temp_dir, mut state) = create_test_state();
 
         state.set_loading("Chargement");
-        assert!(state.loading_spinner.is_some());
+        assert!(state.ui.loading_spinner.is_some());
 
         state.clear_loading();
-        assert!(state.loading_spinner.is_none());
+        assert!(state.ui.loading_spinner.is_none());
     }
 
     #[test]
@@ -672,7 +751,7 @@ mod tests {
         commit_file(&state.repo.repo, "alpha.txt", "one\n", "Alpha commit");
         commit_file(&state.repo.repo, "beta.txt", "two\n", "Beta commit");
 
-        state.graph_filter.message = Some("Alpha".to_string());
+        state.filters.graph_filter.message = Some("Alpha".to_string());
         state.initialize_from_repo().unwrap();
 
         assert_eq!(state.graph_view.len(), 1);

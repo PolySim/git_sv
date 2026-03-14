@@ -38,7 +38,7 @@ fn test_dispatch_quit_action() {
 
     dispatcher.dispatch(&mut state, AppAction::Quit).unwrap();
 
-    assert!(state.should_quit);
+    assert!(state.ui.should_quit);
 }
 
 #[test]
@@ -160,7 +160,7 @@ fn test_dispatch_confirm_action() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
     use crate::ui::confirm_dialog::ConfirmAction;
-    state.pending_confirmation = Some(ConfirmAction::DiscardAll);
+    state.ui.pending_confirmation = Some(ConfirmAction::DiscardAll);
     let mut dispatcher = ActionDispatcher::new();
 
     dispatcher
@@ -168,7 +168,7 @@ fn test_dispatch_confirm_action() {
         .unwrap();
 
     // La confirmation devrait être consommée
-    assert!(state.pending_confirmation.is_none());
+    assert!(state.ui.pending_confirmation.is_none());
 }
 
 #[test]
@@ -176,14 +176,14 @@ fn test_dispatch_cancel_action() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
     use crate::ui::confirm_dialog::ConfirmAction;
-    state.pending_confirmation = Some(ConfirmAction::DiscardAll);
+    state.ui.pending_confirmation = Some(ConfirmAction::DiscardAll);
     let mut dispatcher = ActionDispatcher::new();
 
     dispatcher
         .dispatch(&mut state, AppAction::CancelAction)
         .unwrap();
 
-    assert!(state.pending_confirmation.is_none());
+    assert!(state.ui.pending_confirmation.is_none());
 }
 
 #[test]
@@ -350,13 +350,13 @@ fn test_ui_flow_discard_all_confirmation_roundtrip() {
     harness.send_char('2');
     harness.send_char('D');
     assert_eq!(
-        harness.state.pending_confirmation,
+        harness.state.ui.pending_confirmation,
         Some(crate::ui::confirm_dialog::ConfirmAction::DiscardAll)
     );
 
     harness.send_char('y');
 
-    assert!(harness.state.pending_confirmation.is_none());
+    assert!(harness.state.ui.pending_confirmation.is_none());
     assert_eq!(
         harness.state.current_flash_message(),
         Some("Modifications ignorées ✓")
@@ -405,7 +405,7 @@ fn test_ui_flow_search_then_filter_clears_search_state() {
     harness.send_enter();
 
     assert_eq!(
-        harness.state.graph_filter.message.as_deref(),
+        harness.state.filters.graph_filter.message.as_deref(),
         Some("feature")
     );
     assert!(!harness.state.search_state.is_active);

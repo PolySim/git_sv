@@ -101,7 +101,7 @@ pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
         return Ok(());
     }
 
-    let load_result = if ctx.state.graph_filter.is_active() {
+    let load_result = if ctx.state.filters.graph_filter.is_active() {
         load_more_filtered_history(ctx, target_count)
     } else {
         load_more_unfiltered_history(ctx, target_count)
@@ -151,7 +151,7 @@ fn load_more_filtered_history(ctx: &mut HandlerContext, target_count: usize) -> 
     match ctx
         .state
         .repo
-        .build_graph_filtered_with_more(target_count, &ctx.state.graph_filter)
+        .build_graph_filtered_with_more(target_count, &ctx.state.filters.graph_filter)
     {
         Ok((graph, has_more)) => {
             let graph_len = graph.len();

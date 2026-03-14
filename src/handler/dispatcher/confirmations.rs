@@ -7,7 +7,7 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
     use crate::git::conflict::MergeResult;
     use crate::ui::confirm_dialog::ConfirmAction;
 
-    if let Some(confirm_action) = ctx.state.pending_confirmation.take() {
+    if let Some(confirm_action) = ctx.state.ui.pending_confirmation.take() {
         match confirm_action {
             ConfirmAction::DiscardAll => {
                 if let Err(e) = crate::git::discard::discard_all(&ctx.state.repo.repo) {
@@ -42,7 +42,7 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 } else {
                     ctx.state.set_flash_message(flash_success("Merge annulé"));
                     ctx.state.conflicts_state = None;
-                    ctx.state.is_merging = false;
+                    ctx.state.ui.is_merging = false;
                 }
                 ctx.state.mark_dirty();
             }
