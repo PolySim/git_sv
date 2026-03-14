@@ -299,31 +299,7 @@ pub fn refresh_staging_with_entries(
     state: &mut AppState,
     all_entries: &[crate::git::repo::StatusEntry],
 ) -> Result<()> {
-    state.staging_state.set_staged_files(
-        all_entries
-            .iter()
-            .filter(|e| e.is_staged())
-            .cloned()
-            .collect(),
-    );
-
-    state.staging_state.set_unstaged_files(
-        all_entries
-            .iter()
-            .filter(|e| e.is_unstaged())
-            .cloned()
-            .collect(),
-    );
-
-    // Réajuster les sélections
-    if state.staging_state.unstaged_selected() >= state.staging_state.unstaged_files().len() {
-        let new_idx = state.staging_state.unstaged_files().len().saturating_sub(1);
-        state.staging_state.set_unstaged_selected(new_idx);
-    }
-    if state.staging_state.staged_selected() >= state.staging_state.staged_files().len() {
-        let new_idx = state.staging_state.staged_files().len().saturating_sub(1);
-        state.staging_state.set_staged_selected(new_idx);
-    }
+    state.apply_status_entries(all_entries.to_vec());
 
     load_staging_diff(state);
     Ok(())

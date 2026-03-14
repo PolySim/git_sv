@@ -217,6 +217,124 @@ impl AppState {
             self.graph_view.file_selected_index = 0;
         }
     }
+
+    /// Initialise l'etat a partir du repository.
+    ///
+    /// Invariants en sortie:
+    /// - la selection du graphe reste valide ;
+    /// - la pagination reflete les commits charges ;
+    /// - `status_entries` et `staging_state` sont synchronises ;
+    /// - le diff du commit ou du staging est coherent avec la vue active ;
+    pub fn initialize_from_repo(&mut self) -> crate::error::Result<()> {
+        self.refresh_with_commit_limit(INITIAL_COMMIT_COUNT)
+    }
+
+    /// Rafraichit l'etat courant a partir du repository, en preservant
+    /// le niveau de pagination deja charge quand c'est possible.
+    pub fn refresh_from_repo(&mut self) -> crate::error::Result<()> {
+        let commit_limit = self.graph_view.loaded_count.max(INITIAL_COMMIT_COUNT);
+        self.refresh_with_commit_limit(commit_limit)
+    }
+
+    fn refresh_with_commit_limit(&mut self, commit_limit: usize) -> crate::error::Result<()> {
+        self.current_branch = self.repo.current_branch().ok();
+
+        let (new_graph, can_load_more) = if self.graph_filter.is_active() {
+            self.repo
+                .build_graph_filtered_with_more(commit_limit, &self.graph_filter)
+                .unwrap_or_default()
+        } else {
+            self.repo
+                .build_graph_with_more(commit_limit)
+                .unwrap_or_default()
+        };
+
+        let graph_len = new_graph.len();
+        self.replace_graph(new_graph);
+
+        let total = if self.graph_filter.is_active() {
+            None
+        } else {
+            self.repo.estimate_total_commits()
+        };
+        self.graph_view
+            .update_pagination_state(graph_len, total, can_load_more);
+
+        self.refresh_commit_files();
+        self.refresh_selected_commit_diff();
+
+        let status_entries = self.repo.status().unwrap_or_default();
+        self.apply_status_entries(status_entries);
+
+        if self.view_mode == ViewMode::Branches {
+            self.refresh_branches_view_data();
+        }
+
+        if self.view_mode == ViewMode::Staging {
+            crate::handler::staging::load_staging_diff(self);
+        }
+
+        self.is_merging = crate::git::conflict::is_merging(&self.repo.repo);
+        self.dirty = false;
+
+        Ok(())
+    }
+
+    /// Synchronise `status_entries` et la vue staging a partir d'une seule lecture.
+    pub fn apply_status_entries(&mut self, status_entries: Vec<StatusEntry>) {
+        let staged_files = status_entries
+            .iter()
+            .filter(|entry| entry.is_staged())
+            .cloned()
+            .collect();
+        let unstaged_files = status_entries
+            .iter()
+            .filter(|entry| entry.is_unstaged())
+            .cloned()
+            .collect();
+
+        self.status_entries = status_entries;
+        self.staging_state.set_staged_files(staged_files);
+        self.staging_state.set_unstaged_files(unstaged_files);
+
+        if self.staging_state.unstaged_selected() >= self.staging_state.unstaged_files().len() {
+            let new_idx = self.staging_state.unstaged_files().len().saturating_sub(1);
+            self.staging_state.set_unstaged_selected(new_idx);
+        }
+
+        if self.staging_state.staged_selected() >= self.staging_state.staged_files().len() {
+            let new_idx = self.staging_state.staged_files().len().saturating_sub(1);
+            self.staging_state.set_staged_selected(new_idx);
+        }
+    }
+
+    fn refresh_selected_commit_diff(&mut self) {
+        if !self.graph_view.commit_files.is_empty() {
+            crate::handler::navigation::load_commit_file_diff(self);
+        } else {
+            self.graph_view.clear_file_diff();
+        }
+    }
+
+    fn refresh_branches_view_data(&mut self) {
+        match crate::git::branch::list_all_branches(&self.repo.repo) {
+            Ok((local, remote)) => {
+                self.branches_view_state.local_branches.set_items(local);
+                self.branches_view_state.remote_branches.set_items(remote);
+            }
+            Err(e) => {
+                self.set_flash_message(format!("Erreur chargement branches: {}", e));
+            }
+        }
+
+        if let Ok(worktrees) = crate::git::worktree::list_worktrees(&self.repo.repo) {
+            self.branches_view_state.worktrees.set_items(worktrees);
+        }
+
+        if let Ok(stashes) = crate::git::stash::list_stashes(&mut self.repo.repo) {
+            self.branches_view_state.stashes.set_items(stashes);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -224,8 +342,10 @@ mod tests {
     use super::*;
     use crate::git::graph::{CommitNode, GraphRow};
     use crate::git::repo::GitRepo;
+    use crate::git::tests::test_utils::commit_file;
     use crate::state::selection::ListSelection;
     use git2::Oid;
+    use std::path::Path;
 
     fn create_test_graph(size: usize) -> Vec<GraphRow> {
         (0..size)
@@ -249,6 +369,26 @@ mod tests {
                 },
             })
             .collect()
+    }
+
+    fn create_test_state() -> (tempfile::TempDir, AppState) {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = git2::Repository::init_opts(temp_dir.path(), &opts).unwrap();
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@test.com").unwrap();
+        let sig = git2::Signature::now("Test", "test@test.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
+        let state = AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
+        (temp_dir, state)
     }
 
     #[test]
@@ -337,5 +477,94 @@ mod tests {
         .unwrap();
 
         assert_eq!(state.graph_view.visual_index(), 0);
+    }
+
+    #[test]
+    fn test_refresh_from_repo_preserves_selection() {
+        let (temp_dir, mut state) = create_test_state();
+        commit_file(&state.repo.repo, "a.txt", "one\n", "Commit A");
+        commit_file(&state.repo.repo, "b.txt", "two\n", "Commit B");
+
+        state.initialize_from_repo().unwrap();
+        state.graph_view.select_commit(1);
+
+        let selected_oid = state.selected_commit().map(|commit| commit.oid).unwrap();
+
+        std::fs::write(temp_dir.path().join("scratch.txt"), "scratch\n").unwrap();
+        state.refresh_from_repo().unwrap();
+
+        assert_eq!(
+            state.selected_commit().map(|commit| commit.oid),
+            Some(selected_oid)
+        );
+    }
+
+    #[test]
+    fn test_refresh_from_repo_reloads_selected_commit_diff() {
+        let (_temp_dir, mut state) = create_test_state();
+        commit_file(
+            &state.repo.repo,
+            "tracked.txt",
+            "content\n",
+            "Commit with file",
+        );
+
+        state.initialize_from_repo().unwrap();
+        assert!(!state.graph_view.commit_files.is_empty());
+        assert!(state.graph_view.selected_file_diff.is_some());
+
+        state.graph_view.selected_file_diff = None;
+        state.refresh_from_repo().unwrap();
+
+        assert!(state.graph_view.selected_file_diff.is_some());
+    }
+
+    #[test]
+    fn test_apply_status_entries_keeps_status_and_staging_in_sync() {
+        let (temp_dir, mut state) = create_test_state();
+        commit_file(&state.repo.repo, "tracked.txt", "base\n", "Add tracked");
+
+        std::fs::write(temp_dir.path().join("tracked.txt"), "base\nmod\n").unwrap();
+        std::fs::write(temp_dir.path().join("staged.txt"), "staged\n").unwrap();
+
+        let mut index = state.repo.repo.index().unwrap();
+        index.add_path(Path::new("staged.txt")).unwrap();
+        index.write().unwrap();
+
+        state.initialize_from_repo().unwrap();
+
+        let total_staging_entries =
+            state.staging_state.staged_files().len() + state.staging_state.unstaged_files().len();
+
+        assert_eq!(state.status_entries.len(), total_staging_entries);
+        assert!(state
+            .staging_state
+            .unstaged_files()
+            .iter()
+            .any(|entry| entry.path == "tracked.txt"));
+        assert!(state
+            .staging_state
+            .staged_files()
+            .iter()
+            .any(|entry| entry.path == "staged.txt"));
+    }
+
+    #[test]
+    fn test_refresh_from_repo_filtered_graph_uses_filtered_pagination() {
+        let (_temp_dir, mut state) = create_test_state();
+        commit_file(&state.repo.repo, "alpha.txt", "one\n", "Alpha commit");
+        commit_file(&state.repo.repo, "beta.txt", "two\n", "Beta commit");
+
+        state.graph_filter.message = Some("Alpha".to_string());
+        state.initialize_from_repo().unwrap();
+
+        assert_eq!(state.graph_view.len(), 1);
+        assert_eq!(state.graph_view.total_commits, None);
+        assert_eq!(
+            state
+                .selected_commit()
+                .map(|commit| commit.message.as_str()),
+            Some("Alpha commit")
+        );
     }
 }

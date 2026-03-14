@@ -21,50 +21,7 @@ impl App {
     pub fn new(repo: GitRepo, repo_path: String) -> Result<Self> {
         let mut state = crate::state::AppState::new(repo, repo_path)?;
 
-        // Rafraîchir l'état initial avec l'API unifiée
-        state.current_branch = state.repo.current_branch().ok();
-
-        // Construire le graphe initial et l'assigner via l'API unifiée
-        let (initial_graph, can_load_more) = state
-            .repo
-            .build_graph_with_more(crate::state::INITIAL_COMMIT_COUNT)
-            .unwrap_or_default();
-        let graph_len = initial_graph.len();
-        state.replace_graph(initial_graph);
-
-        // Initialiser l'état de pagination
-        let total = state.repo.estimate_total_commits();
-        state
-            .graph_view
-            .update_pagination_state(graph_len, total, can_load_more);
-
-        // Charger les fichiers du commit sélectionné
-        state.refresh_commit_files();
-
-        // Charger le diff du premier fichier si disponible
-        if !state.graph_view.commit_files.is_empty() {
-            crate::handler::navigation::load_commit_file_diff(&mut state);
-        }
-
-        // Statut du working directory
-        state.status_entries = state.repo.status().unwrap_or_default();
-
-        // Rafraîchir l'état de staging.
-        let all_entries = state.repo.status().unwrap_or_default();
-        state.staging_state.set_staged_files(
-            all_entries
-                .iter()
-                .filter(|e| e.is_staged())
-                .cloned()
-                .collect(),
-        );
-        state.staging_state.set_unstaged_files(
-            all_entries
-                .iter()
-                .filter(|e| e.is_unstaged())
-                .cloned()
-                .collect(),
-        );
+        state.initialize_from_repo()?;
 
         Ok(Self { state })
     }

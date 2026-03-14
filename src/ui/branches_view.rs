@@ -625,20 +625,20 @@ fn render_branches_help(
         match section {
             BranchesSection::Branches => {
                 text(
-                    "Tab:section  Entree:checkout  n:nouvelle  d:supprimer  r:renommer  m:fusion  R:distantes  P:push  Ctrl+P:force push  1:graphe  2:staging",
-                    "Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging",
+                    "Tab/Shift+Tab:section  Entree:checkout  n:nouvelle  d:supprimer  r:renommer  m:fusion  R:distantes  P:push  Ctrl+P:force push  1:graphe  2:staging",
+                    "Tab/Shift+Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging",
                 )
             }
             BranchesSection::Worktrees => {
                 text(
-                    "Tab:section  n:nouveau  d:supprimer  1:graphe  2:staging",
-                    "Tab:section  n:new  d:delete  1:graph  2:staging",
+                    "Tab/Shift+Tab:section  n:nouveau  d:supprimer  1:graphe  2:staging",
+                    "Tab/Shift+Tab:section  n:new  d:delete  1:graph  2:staging",
                 )
             }
             BranchesSection::Stashes => {
                 text(
-                    "Tab:section  h/l:fichiers  J/K:defiler diff  a:appliquer  p:pop  d:supprimer  s:sauver  1:graphe  2:staging",
-                    "Tab:section  h/l:files  J/K:scroll diff  a:apply  p:pop  d:drop  s:save  1:graph  2:staging",
+                    "Tab/Shift+Tab:section  h/l:fichiers  J/K:defiler diff  a:appliquer  p:pop  d:supprimer  s:sauver  1:graphe  2:staging",
+                    "Tab/Shift+Tab:section  h/l:files  J/K:scroll diff  a:apply  p:pop  d:drop  s:save  1:graph  2:staging",
                 )
             }
         }
