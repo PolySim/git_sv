@@ -1,0 +1,7 @@
+---
+source: src/ui/tests/snapshots.rs
+assertion_line: 44
+expression: output
+---
+────────────────────────────────────────────────────────────────────────────────────────────────────
+j/k:navigate  Enter:details  b:branches  c:commit  s:stash  m:merge  P:push  Ctrl+P:force push  Tab:

@@ -1,0 +1,7 @@
+---
+source: src/ui/tests/snapshots.rs
+assertion_line: 60
+expression: output
+---
+  1 Graph │ 2 Staging │ 3 Branches                                              
+────────────────────────────────────────────────────────────────────────────────

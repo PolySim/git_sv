@@ -1,5 +1,7 @@
 //! Tests snapshot pour les composants UI.
 
+mod snapshots;
+
 use ratatui::{backend::TestBackend, buffer::Buffer, Terminal};
 
 /// Helper pour capturer le rendu d'un composant.

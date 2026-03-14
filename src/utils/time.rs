@@ -163,4 +163,32 @@ mod tests {
             assert_eq!(result, "il y a 2 ans");
         });
     }
+
+    #[test]
+    fn test_format_absolute_time_valid() {
+        let timestamp = 1_700_000_000;
+        let expected = Local
+            .timestamp_opt(timestamp, 0)
+            .single()
+            .unwrap()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+
+        let result = format_absolute_time(timestamp);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_format_absolute_time_epoch() {
+        let timestamp = 0;
+        let expected = Local
+            .timestamp_opt(timestamp, 0)
+            .single()
+            .unwrap()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+
+        let result = format_absolute_time(timestamp);
+        assert_eq!(result, expected);
+    }
 }

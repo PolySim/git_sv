@@ -1,0 +1,6 @@
+---
+source: src/ui/tests/snapshots.rs
+assertion_line: 25
+expression: output
+---
+git_sv  main  ✓ clean                                                       
