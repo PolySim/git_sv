@@ -330,6 +330,25 @@ pub struct StatusEntry {
     pub status: git2::Status,
 }
 
+/// Type de status d'un fichier dans le working directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileStatusKind {
+    /// Fichier modifié.
+    Modified,
+    /// Fichier supprimé.
+    Deleted,
+    /// Fichier non suivi.
+    Untracked,
+    /// Fichier renommé.
+    Renamed,
+    /// Fichier indexé.
+    Staged,
+    /// Nouveau fichier indexé.
+    NewStaged,
+    /// Fichier en conflit.
+    Conflicted,
+}
+
 impl Default for StatusEntry {
     fn default() -> Self {
         Self {
@@ -340,23 +359,42 @@ impl Default for StatusEntry {
 }
 
 impl StatusEntry {
+    /// Retourne le type de status sous forme d'enum.
+    pub fn status_kind(&self) -> FileStatusKind {
+        let status = self.status;
+
+        if status.is_conflicted() {
+            FileStatusKind::Conflicted
+        } else if status.is_index_new() {
+            FileStatusKind::NewStaged
+        } else if status.is_index_modified()
+            || status.is_index_deleted()
+            || status.is_index_renamed()
+        {
+            FileStatusKind::Staged
+        } else if status.is_wt_modified() {
+            FileStatusKind::Modified
+        } else if status.is_wt_deleted() {
+            FileStatusKind::Deleted
+        } else if status.is_wt_new() {
+            FileStatusKind::Untracked
+        } else if status.is_wt_renamed() {
+            FileStatusKind::Renamed
+        } else {
+            FileStatusKind::Modified
+        }
+    }
+
     /// Retourne une description lisible du status.
     pub fn display_status(&self) -> &'static str {
-        let s = self.status;
-        if s.contains(git2::Status::INDEX_NEW) {
-            text("Nouveau (staged)", "New (staged)")
-        } else if s.contains(git2::Status::INDEX_MODIFIED) {
-            text("Modifié (staged)", "Modified (staged)")
-        } else if s.contains(git2::Status::INDEX_DELETED) {
-            text("Supprimé (staged)", "Deleted (staged)")
-        } else if s.contains(git2::Status::WT_MODIFIED) {
-            text("Modifié", "Modified")
-        } else if s.contains(git2::Status::WT_NEW) {
-            text("Non suivi", "Untracked")
-        } else if s.contains(git2::Status::WT_DELETED) {
-            text("Supprimé", "Deleted")
-        } else {
-            text("Inconnu", "Unknown")
+        match self.status_kind() {
+            FileStatusKind::Modified => text("Modifié", "Modified"),
+            FileStatusKind::Deleted => text("Supprimé", "Deleted"),
+            FileStatusKind::Untracked => text("Non suivi", "Untracked"),
+            FileStatusKind::Renamed => text("Renommé", "Renamed"),
+            FileStatusKind::Staged => text("Indexé", "Staged"),
+            FileStatusKind::NewStaged => text("Nouveau (staged)", "New (staged)"),
+            FileStatusKind::Conflicted => text("Conflit", "Conflicted"),
         }
     }
 
@@ -448,7 +486,59 @@ mod tests {
                 status: git2::Status::WT_DELETED,
             };
             assert_eq!(entry_deleted.display_status(), "Supprimé");
+
+            let entry_staged = StatusEntry {
+                path: "staged.txt".to_string(),
+                status: git2::Status::INDEX_MODIFIED,
+            };
+            assert_eq!(entry_staged.display_status(), "Indexé");
+
+            let entry_renamed = StatusEntry {
+                path: "renamed.txt".to_string(),
+                status: git2::Status::WT_RENAMED,
+            };
+            assert_eq!(entry_renamed.display_status(), "Renommé");
+
+            let entry_conflicted = StatusEntry {
+                path: "conflicted.txt".to_string(),
+                status: git2::Status::CONFLICTED,
+            };
+            assert_eq!(entry_conflicted.display_status(), "Conflit");
         });
+    }
+
+    #[test]
+    fn test_status_entry_status_kind() {
+        let cases = [
+            (git2::Status::INDEX_NEW, FileStatusKind::NewStaged),
+            (git2::Status::INDEX_MODIFIED, FileStatusKind::Staged),
+            (git2::Status::INDEX_DELETED, FileStatusKind::Staged),
+            (git2::Status::INDEX_RENAMED, FileStatusKind::Staged),
+            (git2::Status::WT_MODIFIED, FileStatusKind::Modified),
+            (git2::Status::WT_DELETED, FileStatusKind::Deleted),
+            (git2::Status::WT_NEW, FileStatusKind::Untracked),
+            (git2::Status::WT_RENAMED, FileStatusKind::Renamed),
+            (git2::Status::CONFLICTED, FileStatusKind::Conflicted),
+        ];
+
+        for (status, expected) in cases {
+            let entry = StatusEntry {
+                path: "file.txt".to_string(),
+                status,
+            };
+
+            assert_eq!(entry.status_kind(), expected);
+        }
+    }
+
+    #[test]
+    fn test_status_entry_status_kind_prioritizes_index_over_worktree() {
+        let entry = StatusEntry {
+            path: "file.txt".to_string(),
+            status: git2::Status::INDEX_MODIFIED | git2::Status::WT_MODIFIED,
+        };
+
+        assert_eq!(entry.status_kind(), FileStatusKind::Staged);
     }
 
     #[test]

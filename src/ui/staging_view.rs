@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::git::repo::StatusEntry;
+use crate::git::repo::{FileStatusKind, StatusEntry};
 use crate::i18n::{text, text_owned};
 use crate::state::{StagingFocus, StagingState};
 use crate::ui::common::StatusBarConfig;
@@ -154,20 +154,24 @@ fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
     let items: Vec<ListItem> = files
         .iter()
         .map(|entry| {
-            let status_icon = match entry.display_status() {
-                s if s.contains("staged") => "●",
-                "Modifié" => "M",
-                "Supprimé" => "D",
-                "Non suivi" => "?",
-                _ => " ",
+            let kind = entry.status_kind();
+
+            let status_icon = match kind {
+                FileStatusKind::Staged | FileStatusKind::NewStaged => "●",
+                FileStatusKind::Modified => "M",
+                FileStatusKind::Deleted => "D",
+                FileStatusKind::Untracked => "?",
+                FileStatusKind::Renamed => "R",
+                FileStatusKind::Conflicted => "!",
             };
 
-            let status_color = match entry.display_status() {
-                s if s.contains("staged") => theme.success,
-                "Modifié" => theme.warning,
-                "Supprimé" => theme.error,
-                "Non suivi" => theme.text_secondary,
-                _ => theme.text_normal,
+            let status_color = match kind {
+                FileStatusKind::Staged | FileStatusKind::NewStaged => theme.success,
+                FileStatusKind::Modified => theme.warning,
+                FileStatusKind::Deleted => theme.error,
+                FileStatusKind::Untracked => theme.text_secondary,
+                FileStatusKind::Renamed => theme.info,
+                FileStatusKind::Conflicted => theme.error,
             };
 
             let line = Line::from(vec![
