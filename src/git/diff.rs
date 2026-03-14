@@ -2,8 +2,6 @@
 //!
 //! Supporte le mode unifié et le mode side-by-side.
 
-#![allow(dead_code)]
-
 use git2::{Oid, Repository};
 
 use crate::error::Result;
@@ -42,6 +40,7 @@ pub enum DiffStatus {
 pub struct DiffFile {
     pub path: String,
     pub status: DiffStatus,
+    #[allow(dead_code)]
     pub old_path: Option<String>,
     pub additions: usize,
     pub deletions: usize,
@@ -78,6 +77,7 @@ pub struct DiffLine {
 pub struct FileDiff {
     /// Chemin du fichier.
     pub path: String,
+    #[allow(dead_code)]
     /// Statut (Added, Modified, Deleted, Renamed).
     pub status: DiffStatus,
     /// Lignes du diff.

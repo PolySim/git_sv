@@ -1,3 +1,8 @@
+# Template local de formule Homebrew.
+#
+# La release publie la formule active dans le tap externe `PolySim/homebrew-tap`.
+# Ce fichier reste desactive tant qu'il n'est pas synchronise avec des checksums reels.
+
 class GitSv < Formula
   desc "Visualize git graph in your terminal with a beautiful TUI"
   homepage "https://github.com/PolySim/git_sv"

@@ -17,11 +17,12 @@
 | anyhow           | 1       | Erreurs applicatives au point d'entree |
 | thiserror        | 2       | Erreurs typees du projet |
 | chrono           | 0.4     | Dates et formatage temporel |
+| dirs             | 5       | Localisation du fichier de configuration utilisateur |
 | arboard          | 3       | Presse-papier |
 | lru              | 0.12    | Cache des diffs |
-| terminal-light   | 1.4     | Detection du theme du terminal |
 | serde / serde_json | 1.0   | Sorties JSON du CLI |
 | tempfile         | 3       | Repositories temporaires pour les tests |
+| insta            | 1.34    | Support de snapshots de tests |
 
 Le watcher git n'utilise pas `notify` : il repose sur un polling leger des fichiers critiques du repertoire `.git` dans `src/watcher.rs`.
 
@@ -46,10 +47,25 @@ git_sv/
 │   ├── terminal.rs
 │   ├── watcher.rs
 │   ├── git/
+│   │   ├── conflict/
+│   │   ├── graph/
+│   │   ├── remote/
+│   │   └── tests/
 │   ├── handler/
+│   │   ├── branch/
+│   │   ├── conflict/
+│   │   ├── dispatcher/
+│   │   ├── navigation/
+│   │   └── staging/
 │   ├── state/
+│   │   ├── action/
+│   │   └── view/
 │   ├── test_utils/
 │   ├── ui/
+│   │   ├── common/
+│   │   ├── conflicts_view/
+│   │   ├── graph_view/
+│   │   └── input/
 │   └── utils/
 ├── tests/
 │   ├── common/
@@ -90,6 +106,7 @@ src/git/
 ├── mod.rs
 ├── repo.rs
 ├── graph.rs
+├── graph/
 ├── commit.rs
 ├── branch.rs
 ├── stash.rs
@@ -99,6 +116,7 @@ src/git/
 ├── discard.rs
 ├── helpers.rs
 ├── remote.rs
+├── remote/
 ├── search.rs
 ├── worktree.rs
 └── conflict/
@@ -168,7 +186,7 @@ src/state/
 - les etats de vues secondaires : staging, branches, conflits, blame, recherche ;
 - les messages flash, boites de confirmation et pickers temporaires ;
 - le cache des diffs et les filtres appliques ;
-- plusieurs champs legacy encore utilises par l'overlay historique de branches (`show_branch_panel`, `branch_selected`).
+- la vue branches repose sur `BranchesViewState`, sans overlay dedie en vue graph.
 
 ### Modes principaux
 
@@ -192,12 +210,15 @@ src/handler/
 ├── mod.rs
 ├── background.rs
 ├── branch.rs
+├── branch/
 ├── edit.rs
 ├── filter.rs
 ├── git.rs
 ├── navigation.rs
+├── navigation/
 ├── search.rs
 ├── staging.rs
+├── staging/
 ├── traits.rs
 ├── conflict/
 │   ├── mod.rs
@@ -240,16 +261,16 @@ Le rendu TUI reside dans `src/ui/`.
 src/ui/
 ├── mod.rs
 ├── blame_view.rs
-├── branch_panel.rs
 ├── branches_layout.rs
 ├── branches_view.rs
 ├── confirm_dialog.rs
 ├── conflicts_view.rs
+├── conflicts_view/
 ├── detail_view.rs
 ├── diff_view.rs
 ├── files_view.rs
 ├── filter_popup.rs
-├── graph_view.rs
+├── graph_view/
 ├── help_bar.rs
 ├── help_overlay.rs
 ├── hit_test.rs
@@ -286,7 +307,7 @@ src/ui/
 - `ui/input/keyboard.rs` et `ui/input/mouse.rs` traduisent les interactions en `AppAction`.
 - `layout.rs`, `branches_layout.rs` et `staging_layout.rs` decoupent l'ecran.
 - `common/` contient des composants et helpers reutilisables.
-- `branch_panel.rs` correspond a un overlay legacy encore supporte en vue graph.
+- `branches_view.rs` porte toute l'interface de navigation branches/worktrees/stashes.
 
 ---
 
@@ -298,7 +319,11 @@ src/ui/
 - `plain`
 - `json`
 
+`--format` est une option globale de `git_sv`, pas une option propre a chaque sous-commande.
+
 La sortie JSON existe pour `log`, `branches`, `status` et `graph`.
+
+La sous-commande `graph` borne actuellement la sortie a 50 commits pour eviter les sorties trop lourdes.
 
 Le format `graph` JSON expose une vue simplifiee de chaque commit : hash, message, auteur, parents, colonne, couleur et references attachees.
 
@@ -318,7 +343,7 @@ Regles actuelles :
 - debounce : 500 ms ;
 - si un changement est confirme, `state.dirty` est releve puis la boucle recharge les donnees.
 
-Le watcher gere aussi les worktrees via `git rev-parse --git-dir` si `.git/` n'est pas un repertoire direct.
+Le watcher gere aussi les worktrees de maniere best-effort via `git rev-parse --git-dir` si `.git/` n'est pas un repertoire direct.
 
 ---
 
@@ -337,7 +362,7 @@ Le watcher gere aussi les worktrees via `git rev-parse --git-dir` si `.git/` n'e
 Le projet combine :
 
 - des tests unitaires co-localises dans les modules ;
-- des helpers de test dans `src/test_utils/` ;
+- des helpers de test dans `src/test_utils/` et `src/git/tests/test_utils.rs` ;
 - des tests d'integration dans `tests/`.
 
 Structure actuelle :
@@ -358,6 +383,5 @@ tests/
 
 ## Points a surveiller
 
-- Le projet conserve une couche legacy autour du panneau de branches en overlay dans la vue graph, en parallele de `BranchesViewState`.
-- Plusieurs modules possedent encore des `#[allow(dead_code)]`, signe d'API en transition ou de code garde pour evolution future.
-- La formule Homebrew `homebrew/git_sv.rb` reste un squelette tant que les `sha256` ne sont pas renseignes.
+- Quelques `allow(dead_code)` restent presents dans les zones de compatibilite et dans certains utilitaires UI encore partiellement integres.
+- La release publie Homebrew et Scoop via des depots externes ; `homebrew/git_sv.rb` dans ce repo sert de gabarit local desactive.

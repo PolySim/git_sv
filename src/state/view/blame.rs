@@ -1,13 +1,12 @@
 //! État de la vue blame.
 
-#![allow(dead_code)]
-
 /// État de la vue blame.
 #[derive(Debug, Clone)]
 pub struct BlameState {
     /// Fichier actuellement "blâmé".
     pub file_path: String,
     /// Commit Oid du commit à partir duquel on fait le blame.
+    #[allow(dead_code)]
     pub commit_oid: git2::Oid,
     /// Résultat du blame.
     pub blame: Option<crate::git::blame::FileBlame>,

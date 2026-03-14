@@ -1,8 +1,5 @@
 //! Widgets et utilitaires UI réutilisables.
 
-#![allow(unused_imports)]
-#![allow(dead_code)]
-
 use crate::ui::theme::current_theme;
 use ratatui::{
     layout::Rect,
@@ -21,17 +18,7 @@ pub mod rect;
 pub mod style;
 pub mod text;
 
-// Re-exports pour un accès plus simple
-pub use block::StyledBlock;
-pub use help_bar::{HelpBar, KeyBinding};
-pub use list::{list_item, list_item_styled, StyledList};
-pub use popup::Popup;
-pub use rect::{centered_rect, centered_rect_fixed, is_terminal_size_adequate};
-pub use style::{
-    border_style, diff_add_style, diff_header_style, diff_remove_style, dim_style, error_style,
-    highlight_style, success_style, title_style,
-};
-pub use text::{pad_left, pad_right, truncate, truncate_start};
+pub use rect::centered_rect;
 
 /// Configuration pour une status bar.
 #[derive(Default)]

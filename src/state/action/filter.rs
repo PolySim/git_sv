@@ -1,7 +1,5 @@
 //! Actions de filtrage pour le graph de commits.
 
-#![allow(dead_code)]
-
 /// Actions de filtrage du graph.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FilterAction {

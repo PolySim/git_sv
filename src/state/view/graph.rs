@@ -1,7 +1,5 @@
 //! État de la vue graph.
 
-#![allow(dead_code)]
-
 use crate::git::diff::DiffViewMode;
 use crate::git::diff::{DiffFile, FileDiff};
 use crate::git::graph::GraphRow;
@@ -295,6 +293,7 @@ impl GraphViewState {
     }
 
     /// Bascule le mode plein écran du diff.
+    #[allow(dead_code)]
     pub fn toggle_diff_fullscreen(&mut self) {
         self.diff_fullscreen = !self.diff_fullscreen;
     }
@@ -350,6 +349,7 @@ impl GraphViewState {
     ///
     /// Cette méthode étend le graphe actuel avec de nouveaux commits,
     /// en préservant la sélection de l'utilisateur.
+    #[allow(dead_code)]
     pub fn append_commits(&mut self, additional_rows: Vec<GraphRow>) {
         if additional_rows.is_empty() {
             // Plus rien à charger

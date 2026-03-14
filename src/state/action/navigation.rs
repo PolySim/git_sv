@@ -1,7 +1,5 @@
 //! Actions de navigation dans les listes et panneaux.
 
-#![allow(dead_code)]
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum NavigationAction {
     /// Monter d'un élément

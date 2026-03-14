@@ -10,7 +10,6 @@ use ratatui::{
     Frame,
 };
 
-use crate::i18n::text;
 use crate::ui::theme::current_theme;
 
 /// Un raccourci clavier à afficher.

@@ -119,7 +119,8 @@ Ordre recommande :
 
 - tests unitaires dans le fichier concerne sous `#[cfg(test)]` ;
 - tests d'integration dans `tests/` ;
-- utiliser `tempfile` et les helpers existants de `src/test_utils/` quand c'est pertinent.
+- utiliser `tempfile` et les helpers existants de `src/test_utils/` et `src/git/tests/test_utils.rs` quand c'est pertinent ;
+- utiliser `insta` si un snapshot rend une regression de rendu ou de structure plus simple a verrouiller.
 
 ---
 
@@ -153,16 +154,18 @@ Ordre recommande :
 - souris : `src/ui/input/mouse.rs` si necessaire ;
 - tests associes : `src/ui/input/tests.rs`.
 
+Note: l'acces aux branches passe uniquement par la vue `Branches`; ne reintroduisez pas d'overlay dedie depuis la vue graph.
+
 ---
 
 ## Ajouter un nouveau comportement sans nouvelle vue
 
 Selon la nature du changement :
 
-- navigation : `src/handler/navigation.rs`
+- navigation : `src/handler/navigation.rs` et `src/handler/navigation/`
 - git : `src/handler/git.rs`
-- staging : `src/handler/staging.rs`
-- branches/worktrees/stashes : `src/handler/branch.rs`
+- staging : `src/handler/staging.rs` et `src/handler/staging/`
+- branches/worktrees/stashes : `src/handler/branch.rs` et `src/handler/branch/`
 - recherche : `src/handler/search.rs`
 - filtres : `src/handler/filter.rs`
 - confirmations / pickers / clipboard : `src/handler/dispatcher/`
@@ -172,6 +175,13 @@ Dans la plupart des cas il faut :
 1. ajouter ou etendre une action ;
 2. brancher le mapping dans `src/ui/input/keyboard.rs` ;
 3. traiter l'action dans le bon handler ou dans `src/handler/dispatcher/mod.rs`.
+
+## Refactors modulaires
+
+- gardez `mod.rs` ou le fichier racine comme point d'orchestration court, et extrayez la logique dense dans des sous-modules par responsabilite ;
+- pour les handlers, preferez une separation par domaine concret (`focus`, `input`, `branches`, `stashes`, `worktrees`, `diff`, `refresh`, etc.) plutot qu'un decoupage arbitraire ;
+- pour le mapping input, preserve l'ordre de priorite actuel : quit, modales bloquantes, saisie bloquante, aide, changement de vue, mapping propre a la vue ;
+- evitez de reintroduire des overlays legacy ou des chemins paralleles qui doublonnent les vues actuelles.
 
 ---
 
@@ -197,11 +207,19 @@ Dans la plupart des cas il faut :
 ## Checklist avant PR
 
 - `cargo build` passe
+- `cargo check` passe
 - `cargo test` passe
 - `cargo fmt -- --check` passe
-- `cargo clippy --all-features -- -D warnings` passe si vous touchez du code significatif
+- `cargo clippy --all-features -- -D warnings` passe
 - la documentation est mise a jour si l'architecture, les commandes ou les raccourcis changent
 - les commentaires ajoutes restent en francais
+
+## Workflow attendu par step
+
+- avancez par step ou sous-step coherente, avec code compilable a chaque jalon ;
+- faites passer `cargo fmt -- --check`, `cargo clippy --all-features -- -D warnings` et `cargo test` a la fin de chaque step ;
+- si vous touchez le mapping clavier ou souris, ajustez `src/ui/input/tests.rs` ;
+- si vous touchez le graphe, la pagination ou les vues detail/diff, ajoutez un test de non-regression cible.
 
 ---
 

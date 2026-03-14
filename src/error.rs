@@ -1,8 +1,6 @@
 //! Types d'erreurs de l'application.
 //!
 //! Définit `GitSvError` avec `thiserror` et l'alias `Result<T>`.
-//! Fournit également le trait `IoErrorContext` pour ajouter du contexte
-//! aux erreurs I/O.
 
 use std::path::PathBuf;
 use thiserror::Error;
@@ -101,18 +99,3 @@ impl From<std::io::Error> for GitSvError {
 
 /// Alias pratique pour Result avec `GitSvError`.
 pub type Result<T> = std::result::Result<T, GitSvError>;
-
-/// Trait d'extension pour ajouter du contexte aux erreurs I/O
-#[allow(dead_code)]
-pub trait IoErrorContext<T> {
-    fn with_context(self, context: impl Into<String>) -> Result<T>;
-}
-
-impl<T> IoErrorContext<T> for std::result::Result<T, std::io::Error> {
-    fn with_context(self, context: impl Into<String>) -> Result<T> {
-        self.map_err(|source| GitSvError::Io {
-            source,
-            context: context.into(),
-        })
-    }
-}

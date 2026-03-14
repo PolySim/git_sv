@@ -1,7 +1,5 @@
 //! Actions sur les branches, worktrees et stashes.
 
-#![allow(dead_code)]
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum BranchAction {
     /// Checkout une branche

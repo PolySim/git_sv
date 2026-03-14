@@ -1,7 +1,5 @@
 //! État de la vue de résolution de conflits.
 
-#![allow(dead_code)]
-
 use crate::git::conflict::{ConflictResolutionMode, MergeFile};
 
 /// Focus dans les panneaux de la vue conflits.
@@ -98,18 +96,5 @@ impl ConflictsState {
             theirs_panel_height: 0,
             result_panel_height: 0,
         }
-    }
-
-    /// Fichier actuellement sélectionné.
-    pub fn selected_file(&self) -> Option<&MergeFile> {
-        self.all_files.get(self.file_selected)
-    }
-
-    /// Nombre de fichiers avec des conflits restants.
-    pub fn remaining_conflicts(&self) -> usize {
-        self.all_files
-            .iter()
-            .filter(|f| f.has_conflicts && !f.is_resolved)
-            .count()
     }
 }

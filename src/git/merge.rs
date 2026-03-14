@@ -1,21 +1,9 @@
 //! Opérations de merge entre branches.
 
-#![allow(dead_code)]
-
 use git2::{build::CheckoutBuilder, Repository, Signature};
 
 use crate::error::{GitSvError, Result};
 use crate::git::conflict::{list_conflict_files, MergeResult};
-
-/// Effectue un merge de la branche source dans la branche courante.
-pub fn merge_branch(repo: &Repository, branch_name: &str) -> Result<()> {
-    match merge_branch_with_result(repo, branch_name)? {
-        MergeResult::Success | MergeResult::FastForward | MergeResult::UpToDate => Ok(()),
-        MergeResult::Conflicts(_) => Err(GitSvError::Other(
-            "Conflits détectés. Résolvez-les avant de committer.".into(),
-        )),
-    }
-}
 
 /// Effectue un merge et retourne un résultat typé pour gérer les conflits.
 pub fn merge_branch_with_result(repo: &Repository, branch_name: &str) -> Result<MergeResult> {

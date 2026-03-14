@@ -1,7 +1,5 @@
 //! État de la vue staging.
 
-#![allow(dead_code)]
-
 use crate::git::diff::{DiffViewMode, FileDiff};
 use crate::git::repo::StatusEntry;
 use crate::state::selection::ListSelection;
@@ -51,25 +49,6 @@ impl StagingState {
         Self::default()
     }
 
-    /// Fichier actuellement sélectionné (unstaged ou staged selon focus).
-    pub fn selected_file(&self) -> Option<&StatusEntry> {
-        match self.focus {
-            StagingFocus::Unstaged => self.unstaged.selected_item(),
-            StagingFocus::Staged => self.staged.selected_item(),
-            _ => None,
-        }
-    }
-
-    /// Passe au panneau suivant.
-    pub fn cycle_focus(&mut self) {
-        self.focus = match self.focus {
-            StagingFocus::Unstaged => StagingFocus::Staged,
-            StagingFocus::Staged => StagingFocus::Diff,
-            StagingFocus::Diff => StagingFocus::Unstaged,
-            StagingFocus::CommitMessage => StagingFocus::CommitMessage,
-        };
-    }
-
     // ═══════════════════════════════════════════════════
     // Compatibilité ascendante - champs legacy
     // ═══════════════════════════════════════════════════
@@ -80,6 +59,7 @@ impl StagingState {
     }
 
     /// Accès mutable aux fichiers stagés (compatibilité).
+    #[allow(dead_code)]
     pub fn staged_files_mut(&mut self) -> &mut Vec<StatusEntry> {
         &mut self.staged.items
     }
@@ -95,6 +75,7 @@ impl StagingState {
     }
 
     /// Accès mutable aux fichiers non stagés (compatibilité).
+    #[allow(dead_code)]
     pub fn unstaged_files_mut(&mut self) -> &mut Vec<StatusEntry> {
         &mut self.unstaged.items
     }

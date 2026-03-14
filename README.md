@@ -56,7 +56,14 @@ cargo build --release
 
 ### Homebrew
 
-Le fichier `homebrew/git_sv.rb` est present dans le depot, mais la formule n'est pas encore publiable tant que les `sha256` des archives de release ne sont pas renseignes.
+Les releases publient la formule Homebrew dans le tap externe `PolySim/homebrew-tap`.
+
+```bash
+brew tap PolySim/homebrew-tap
+brew install git_sv
+```
+
+Le fichier `homebrew/git_sv.rb` du depot sert de gabarit local et reste desactive tant qu'il n'est pas synchronise avec une release publiee.
 
 ### OpenSSL
 
@@ -90,21 +97,22 @@ git_sv log -n 50
 git_sv log --author "Alice"
 git_sv log --message "fix"
 git_sv log --since 2024-01-01 --until 2024-12-31
+git_sv --format json log --author "Alice"
 
 # Branches
 git_sv branches
-git_sv branches --format json
+git_sv --format json branches
 
 # Status
 git_sv status
-git_sv status --format plain
+git_sv --format plain status
 
 # Recherche
 git_sv search "fix bug"
 
 # Graphe simplifie
 git_sv graph -n 30
-git_sv graph --format json
+git_sv --format json graph
 ```
 
 ### Formats de sortie CLI
@@ -113,14 +121,18 @@ git_sv graph --format json
 - `plain` : texte simple ;
 - `json` : sortie structuree pour scripts.
 
+`--format` est une option globale : elle se place avant la sous-commande.
+
+La sous-commande `graph` limite actuellement la sortie a 50 commits maximum, meme si `-n` demande plus.
+
 ### Exemples
 
 ```bash
 # Extraire les hashes d'un auteur
-git_sv log --author "Alice" --format json | jq '.[].hash'
+git_sv --format json log --author "Alice" | jq '.[].hash'
 
 # Verifier rapidement les fichiers modifies
-git_sv status --format plain | grep "^M"
+git_sv --format plain status | grep "^M"
 
 # Trouver le dernier commit ayant touche un fichier
 git_sv log -n 1 --path-filter src/main.rs
@@ -146,12 +158,12 @@ git_sv log -n 1 --path-filter src/main.rs
 
 | Touche | Action |
 |--------|--------|
-| `j` / `k` | Naviguer dans les commits |
-| `g` / `G` | Aller au debut / a la fin |
-| `Ctrl+d` / `Ctrl+u` | Page suivante / precedente |
+| `j` / `k` | Naviguer dans les commits ou le panneau focalise |
+| `g` / `G` | Aller au debut / a la fin du graphe ou du diff focalise |
+| `Ctrl+d` / `Ctrl+u` | Page suivante / precedente dans le graphe, ou dans le diff si le diff a le focus |
 | `Tab` | Changer de panneau |
-| `Enter` | Ouvrir le panneau fichiers depuis le graphe |
-| `z` | Ouvrir ou fermer le diff plein ecran |
+| `Enter` | Depuis le graphe, ouvrir le panneau fichiers ; depuis fichiers/diff, basculer le diff plein ecran |
+| `z` | Basculer le diff plein ecran depuis fichiers ou diff |
 | `M` | Basculer le panneau bas-gauche |
 | `r` | Rafraichir |
 | `P` | Push |
@@ -162,7 +174,7 @@ git_sv log -n 1 --path-filter src/main.rs
 | `y` | Copier le contenu du panneau actif |
 | `/` | Recherche |
 | `F` | Filtres |
-| `v` | Basculer le mode de diff |
+| `v` | Basculer le mode de diff quand le diff a le focus |
 | `L` | Charger plus d'historique |
 
 ### Vue Staging

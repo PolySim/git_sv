@@ -1,14 +1,11 @@
 //! Opérations sur les commits : création, amendement, log.
 
-#![allow(dead_code)]
-
 use git2::{Oid, Repository, Signature};
 
 use crate::error::Result;
 
 /// Informations essentielles d'un commit.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CommitInfo {
     pub oid: Oid,
     pub message: String,
@@ -48,6 +45,7 @@ impl CommitInfo {
     }
 
     /// Retourne les chemins modifiés, en les chargeant si nécessaire.
+    #[allow(dead_code)]
     pub fn changed_paths(&mut self, repo: &Repository) -> crate::error::Result<&[String]> {
         if self.changed_paths.is_none() {
             self.load_changed_paths(repo)?;
@@ -56,6 +54,7 @@ impl CommitInfo {
     }
 
     /// Retourne le hash court (7 caractères).
+    #[allow(dead_code)]
     pub fn short_hash(&self) -> String {
         self.oid.to_string()[..7].to_string()
     }
@@ -159,6 +158,7 @@ pub fn unstage_all(repo: &Repository) -> Result<()> {
 }
 
 /// Cherry-pick un commit sur la branche courante.
+#[allow(dead_code)]
 pub fn cherry_pick(repo: &Repository, commit_oid: Oid) -> Result<()> {
     let commit = repo.find_commit(commit_oid)?;
 
