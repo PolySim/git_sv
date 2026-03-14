@@ -8,6 +8,8 @@ use crate::config::ThemeMode;
 /// Thème de couleurs pour l'application.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Theme {
+    /// Mode du thème (clair ou sombre).
+    pub mode: ThemeMode,
     /// Couleur primaire (bordures, éléments actifs)
     pub primary: Color,
     /// Couleur secondaire (éléments secondaires)
@@ -50,6 +52,7 @@ impl Theme {
     /// Thème sombre (défaut).
     pub fn dark() -> Self {
         Self {
+            mode: ThemeMode::Dark,
             primary: Color::Cyan,
             secondary: Color::Magenta,
             selection_bg: Color::DarkGray,
@@ -74,6 +77,7 @@ impl Theme {
     /// Thème clair.
     pub fn light() -> Self {
         Self {
+            mode: ThemeMode::Light,
             primary: Color::Blue,
             secondary: Color::Magenta,
             selection_bg: Color::Indexed(252), // Gris clair visible sur fond blanc
@@ -101,6 +105,12 @@ impl Theme {
             ThemeMode::Dark => Self::dark(),
             ThemeMode::Light => Self::light(),
         }
+    }
+
+    /// Retourne true si le thème est en mode clair.
+    #[allow(dead_code)] // Prevu pour d'autres contextes de rendu.
+    pub fn is_light(&self) -> bool {
+        self.mode == ThemeMode::Light
     }
 
     /// Couleurs assignées aux branches du graphe (thème sombre).
@@ -138,10 +148,9 @@ impl Theme {
 
     /// Retourne la couleur pour un index de branche selon le thème actuel.
     pub fn branch_color(&self, index: usize) -> Color {
-        let colors = if self.background == Color::White {
-            Self::BRANCH_COLORS_LIGHT
-        } else {
-            Self::BRANCH_COLORS_DARK
+        let colors = match self.mode {
+            ThemeMode::Light => Self::BRANCH_COLORS_LIGHT,
+            ThemeMode::Dark => Self::BRANCH_COLORS_DARK,
         };
         colors[index % colors.len()]
     }
@@ -154,7 +163,9 @@ static THEME: OnceLock<Theme> = OnceLock::new();
 /// Doit être appelé une seule fois au démarrage, avant tout accès au thème.
 pub fn init_theme(mode: ThemeMode) {
     let theme = Theme::from_mode(mode);
-    THEME.get_or_init(|| theme);
+    if THEME.set(theme).is_err() {
+        eprintln!("Warning: init_theme called more than once, ignoring.");
+    }
 }
 
 /// Retourne le thème actuel.
