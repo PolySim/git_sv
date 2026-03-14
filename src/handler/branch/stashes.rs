@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::state::{AppState, BranchesSection, ViewMode};
+use crate::utils::{flash_error_message, flash_success};
 
 pub(super) fn handle_stash_apply(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
@@ -9,10 +10,10 @@ pub(super) fn handle_stash_apply(state: &mut AppState) -> Result<()> {
             match crate::git::stash::apply_stash(&mut state.repo.repo, index) {
                 Ok(_) => {
                     state.mark_dirty();
-                    state.set_flash_message("Stash appliqué ✓".to_string());
+                    state.set_flash_message(flash_success("Stash appliqué"));
                 }
                 Err(e) => {
-                    state.set_flash_message(format!("Erreur: {}", e));
+                    state.set_flash_message(flash_error_message(e));
                 }
             }
         }
@@ -28,10 +29,10 @@ pub(super) fn handle_stash_pop(state: &mut AppState) -> Result<()> {
             match crate::git::stash::pop_stash(&mut state.repo.repo, index) {
                 Ok(_) => {
                     state.mark_dirty();
-                    state.set_flash_message("Stash pop ✓".to_string());
+                    state.set_flash_message(flash_success("Stash pop"));
                 }
                 Err(e) => {
-                    state.set_flash_message(format!("Erreur: {}", e));
+                    state.set_flash_message(flash_error_message(e));
                 }
             }
         }
@@ -87,7 +88,7 @@ pub fn load_stash_file_diff(state: &mut AppState) -> Result<()> {
                     state.branches_view_state.stash_file_diff = Some(diff);
                 }
                 Err(e) => {
-                    state.set_flash_message(format!("Erreur chargement diff: {}", e));
+                    state.set_flash_message(crate::utils::flash_error("chargement diff", e));
                     state.branches_view_state.stash_file_diff = None;
                 }
             }

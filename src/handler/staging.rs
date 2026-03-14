@@ -417,7 +417,7 @@ mod tests {
         assert_eq!(state.staging_state.staged_files().len(), 1);
         assert_eq!(
             state.current_flash_message(),
-            Some("Stash cree pour tracked.txt (index conserve) ✓")
+            Some("Stash créé pour tracked.txt (index conservé) ✓")
         );
     }
 }

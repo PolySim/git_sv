@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::git::stash::StashPushOutcome;
 use crate::state::{AppState, ViewMode};
+use crate::utils::flash_success;
 
 use super::refresh_staging;
 
@@ -14,16 +15,16 @@ pub(super) fn handle_stash_selected_file(state: &mut AppState) -> Result<()> {
         .unstaged_files()
         .get(state.staging_state.unstaged_selected())
     else {
-        state.set_flash_message("Aucun fichier non stage selectionne".to_string());
+        state.set_flash_message("Aucun fichier non stagé sélectionné".to_string());
         return Ok(());
     };
 
     let path = file.path.clone();
 
     if file.status.contains(git2::Status::WT_NEW) && !file.is_staged() {
-        state.set_flash_message(
-            "Stash fichier indisponible pour un fichier non suivi, utilisez Ctrl+S".to_string(),
-        );
+        state.set_flash_message(crate::utils::flash_error_message(
+            "stash fichier indisponible pour un fichier non suivi, utilisez Ctrl+S",
+        ));
         return Ok(());
     }
 
@@ -31,15 +32,18 @@ pub(super) fn handle_stash_selected_file(state: &mut AppState) -> Result<()> {
 
     match crate::git::stash::stash_file(&state.repo_path, &path, Some(&message))? {
         StashPushOutcome::Created => {
-            state.set_flash_message(format!("Stash cree pour {} (index conserve) ✓", path));
+            state.set_flash_message(flash_success(format!(
+                "Stash créé pour {} (index conservé)",
+                path
+            )));
             state.mark_dirty();
             refresh_staging(state)?;
         }
         StashPushOutcome::NoChanges => {
-            state.set_flash_message(format!(
-                "Aucun changement non stage a stasher pour {}",
+            state.set_flash_message(crate::utils::flash_error_message(format!(
+                "aucun changement non stagé à stasher pour {}",
                 path
-            ));
+            )));
         }
     }
 
@@ -51,16 +55,20 @@ pub(super) fn handle_stash_unstaged_files(state: &mut AppState) -> Result<()> {
         return Ok(());
     }
 
-    let message = "git_sv: stash des changements non stages";
+    let message = "git_sv: stash des changements non stagés";
 
     match crate::git::stash::stash_unstaged_files(&state.repo_path, Some(message))? {
         StashPushOutcome::Created => {
-            state.set_flash_message("Stash des changements non stages cree (index conserve) ✓");
+            state.set_flash_message(flash_success(
+                "Stash des changements non stagés créé (index conservé)",
+            ));
             state.mark_dirty();
             refresh_staging(state)?;
         }
         StashPushOutcome::NoChanges => {
-            state.set_flash_message("Aucun changement non stage a stasher");
+            state.set_flash_message(crate::utils::flash_error_message(
+                "aucun changement non stagé à stasher",
+            ));
         }
     }
 

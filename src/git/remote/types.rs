@@ -1,4 +1,5 @@
 use crate::git::conflict::MergeResult;
+use crate::utils::flash_success;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PushSuccess {
@@ -11,23 +12,22 @@ pub struct PushSuccess {
 impl PushSuccess {
     pub fn flash_message(&self) -> String {
         match (self.force, self.upstream_set) {
-            (true, true) => format!(
-                "Force push de '{}' vers {}/{} (upstream configuré) ✓",
+            (true, true) => flash_success(format!(
+                "Force push de '{}' vers {}/{} (upstream configuré)",
                 self.branch_name, self.remote_name, self.branch_name
-            ),
-            (true, false) => {
-                format!(
-                    "Force push de '{}' vers {} ✓",
-                    self.branch_name, self.remote_name
-                )
-            }
-            (false, true) => format!(
-                "Push de '{}' vers {}/{} (upstream configuré) ✓",
+            )),
+            (true, false) => flash_success(format!(
+                "Force push de '{}' vers {}",
+                self.branch_name, self.remote_name
+            )),
+            (false, true) => flash_success(format!(
+                "Push de '{}' vers {}/{} (upstream configuré)",
                 self.branch_name, self.remote_name, self.branch_name
-            ),
-            (false, false) => {
-                format!("Push de '{}' vers {} ✓", self.branch_name, self.remote_name)
-            }
+            )),
+            (false, false) => flash_success(format!(
+                "Push de '{}' vers {}",
+                self.branch_name, self.remote_name
+            )),
         }
     }
 }
@@ -39,15 +39,15 @@ pub struct FetchSuccess {
 
 impl FetchSuccess {
     pub fn flash_message(&self) -> String {
-        format!("Fetch depuis '{}' réussi ✓", self.remote_name)
+        flash_success(format!("Fetch depuis '{}' réussi", self.remote_name))
     }
 }
 
 pub fn flash_message_for_pull_result(result: &MergeResult) -> Option<String> {
     match result {
-        MergeResult::UpToDate => Some("Déjà à jour ✓".to_string()),
-        MergeResult::FastForward => Some("Pull (fast-forward) réussi ✓".to_string()),
-        MergeResult::Success => Some("Pull réussi ✓".to_string()),
+        MergeResult::UpToDate => Some(flash_success("Déjà à jour")),
+        MergeResult::FastForward => Some(flash_success("Pull (fast-forward) réussi")),
+        MergeResult::Success => Some(flash_success("Pull réussi")),
         MergeResult::Conflicts(_) => None,
     }
 }

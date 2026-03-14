@@ -1,8 +1,8 @@
+use super::super::traits::HandlerContext;
 use crate::error::Result;
 use crate::handler::navigation;
 use crate::state::ViewMode;
-
-use super::super::traits::HandlerContext;
+use crate::utils::{flash_error, flash_success};
 
 /// Gère la confirmation du merge picker.
 pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()> {
@@ -18,17 +18,23 @@ pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()
     if let Some(branch_name) = branch_to_merge {
         match crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, &branch_name) {
             Ok(MergeResult::UpToDate) => {
-                ctx.state
-                    .set_flash_message(format!("Branche '{}' est déjà à jour", branch_name));
+                ctx.state.set_flash_message(flash_success(format!(
+                    "Branche '{}' est déjà à jour",
+                    branch_name
+                )));
             }
             Ok(MergeResult::FastForward) => {
-                ctx.state
-                    .set_flash_message(format!("Fast-forward vers '{}'", branch_name));
+                ctx.state.set_flash_message(flash_success(format!(
+                    "Fast-forward vers '{}'",
+                    branch_name
+                )));
                 ctx.state.mark_dirty();
             }
             Ok(MergeResult::Success) => {
-                ctx.state
-                    .set_flash_message(format!("Branche '{}' mergée avec succès", branch_name));
+                ctx.state.set_flash_message(flash_success(format!(
+                    "Branche '{}' mergée avec succès",
+                    branch_name
+                )));
                 ctx.state.mark_dirty();
             }
             Ok(MergeResult::Conflicts(conflicts)) => {
@@ -52,7 +58,7 @@ pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()
                 ctx.state.view_mode = ViewMode::Conflicts;
             }
             Err(e) => {
-                ctx.state.set_flash_message(format!("Erreur merge: {}", e));
+                ctx.state.set_flash_message(flash_error("merge", e));
             }
         }
     }
@@ -102,8 +108,7 @@ pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
     };
 
     if let Err(e) = load_result {
-        ctx.state
-            .set_flash_message(format!("Erreur chargement: {}", e));
+        ctx.state.set_flash_message(flash_error("chargement", e));
     }
 
     // Marquer la fin du chargement

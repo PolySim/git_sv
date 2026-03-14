@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::state::{AppState, BranchesFocus, BranchesSection, InputAction, ViewMode};
+use crate::utils::{flash_error, flash_error_message, flash_success};
 
 pub(super) fn handle_create(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
@@ -59,10 +60,10 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
         Some(InputAction::CreateBranch) => {
             match crate::git::branch::create_branch(&state.repo.repo, &input) {
                 Ok(_) => {
-                    state.set_flash_message(format!("Branche '{}' créée ✓", input));
+                    state.set_flash_message(flash_success(format!("Branche '{}' créée", input)));
                     state.mark_dirty();
                 }
-                Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+                Err(e) => state.set_flash_message(flash_error_message(e)),
             }
         }
         Some(InputAction::RenameBranch) => {
@@ -70,39 +71,44 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                 let old_name = branch.name.clone();
                 match crate::git::branch::rename_branch(&state.repo.repo, &old_name, &input) {
                     Ok(_) => {
-                        state.set_flash_message(format!("Branche renommée → '{}' ✓", input));
+                        state.set_flash_message(flash_success(format!(
+                            "Branche renommée → '{}'",
+                            input
+                        )));
                         state.mark_dirty();
                     }
-                    Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+                    Err(e) => state.set_flash_message(flash_error_message(e)),
                 }
             }
         }
         Some(InputAction::SaveStash) => {
             match crate::git::stash::save_stash(&mut state.repo.repo, Some(&input)) {
                 Ok(_) => {
-                    state.set_flash_message(format!("Stash créé: {} ✓", input));
+                    state.set_flash_message(flash_success(format!("Stash créé: {}", input)));
                     state.mark_dirty();
                 }
-                Err(e) => state.set_flash_message(format!("Erreur: {}", e)),
+                Err(e) => state.set_flash_message(flash_error_message(e)),
             }
         }
         Some(InputAction::CreateWorktree) => {
             let parts: Vec<&str> = input.split_whitespace().collect();
             if parts.len() < 2 {
-                state.set_flash_message("Format: nom chemin [branche]".to_string());
+                state.set_flash_message(crate::utils::flash_error_message(
+                    "format attendu: nom chemin [branche]",
+                ));
             } else {
                 let name = parts[0];
                 let path = parts[1];
                 let branch = parts.get(2).copied();
 
                 if name.is_empty() {
-                    state.set_flash_message(
-                        "Erreur: le nom du worktree ne peut pas être vide".to_string(),
-                    );
+                    state.set_flash_message(crate::utils::flash_error_message(
+                        "le nom du worktree ne peut pas être vide",
+                    ));
                 } else if path.is_empty() {
-                    state.set_flash_message(
-                        "Erreur: le chemin du worktree ne peut pas être vide".to_string(),
-                    );
+                    state.set_flash_message(crate::utils::flash_error_message(
+                        "le chemin du worktree ne peut pas être vide",
+                    ));
                 } else {
                     let worktree_exists = state
                         .branches_view_state
@@ -111,10 +117,10 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                         .any(|w| w.name == name);
 
                     if worktree_exists {
-                        state.set_flash_message(format!(
-                            "Erreur: un worktree '{}' existe déjà",
+                        state.set_flash_message(crate::utils::flash_error_message(format!(
+                            "un worktree '{}' existe déjà",
                             name
-                        ));
+                        )));
                     } else {
                         match crate::git::worktree::create_worktree(
                             &state.repo.repo,
@@ -123,7 +129,10 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                             branch,
                         ) {
                             Ok(_) => {
-                                state.set_flash_message(format!("Worktree '{}' créé ✓", name));
+                                state.set_flash_message(flash_success(format!(
+                                    "Worktree '{}' créé",
+                                    name
+                                )));
                                 state.mark_dirty();
 
                                 if let Ok(worktrees) =
@@ -144,29 +153,23 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                             Err(e) => {
                                 let error_msg = format!("{}", e);
                                 if error_msg.contains("exists") || error_msg.contains("déjà") {
-                                    state.set_flash_message(format!(
-                                        "Erreur: le chemin '{}' existe déjà",
-                                        path
+                                    state.set_flash_message(crate::utils::flash_error_message(
+                                        format!("le chemin '{}' existe déjà", path),
                                     ));
                                 } else if error_msg.contains("invalid")
                                     || error_msg.contains("invalide")
                                 {
-                                    state.set_flash_message(format!(
-                                        "Erreur: chemin invalide '{}'",
-                                        path
+                                    state.set_flash_message(crate::utils::flash_error_message(
+                                        format!("chemin invalide '{}'", path),
                                     ));
                                 } else if error_msg.contains("branch")
                                     || error_msg.contains("branche")
                                 {
-                                    state.set_flash_message(format!(
-                                        "Erreur: branche '{}' inexistante",
-                                        branch.unwrap_or("")
+                                    state.set_flash_message(crate::utils::flash_error_message(
+                                        format!("branche '{}' inexistante", branch.unwrap_or("")),
                                     ));
                                 } else {
-                                    state.set_flash_message(format!(
-                                        "Erreur création worktree: {}",
-                                        e
-                                    ));
+                                    state.set_flash_message(flash_error("création worktree", e));
                                 }
                             }
                         }

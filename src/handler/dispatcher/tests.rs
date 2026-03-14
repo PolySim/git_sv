@@ -335,7 +335,7 @@ fn test_ui_flow_invalid_worktree_input_shows_validation_message() {
     assert_eq!(harness.state.view_mode, ViewMode::Branches);
     assert_eq!(
         harness.state.current_flash_message(),
-        Some("Format: nom chemin [branche]")
+        Some("Erreur: format attendu: nom chemin [branche]")
     );
     assert!(harness.state.branches_view_state.input_action.is_none());
 }
@@ -413,7 +413,7 @@ fn test_ui_flow_search_then_filter_clears_search_state() {
     assert!(harness.state.search_state.query.is_empty());
     assert_eq!(
         harness.state.current_flash_message(),
-        Some("Filtres actifs: message")
+        Some("Filtres actifs: message ✓")
     );
 }
 

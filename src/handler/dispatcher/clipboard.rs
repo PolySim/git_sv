@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::state::ViewMode;
+use crate::utils::flash_success;
 
 use super::super::traits::HandlerContext;
 
@@ -158,7 +159,7 @@ pub(super) fn handle_copy_to_clipboard(ctx: &mut HandlerContext) -> Result<()> {
             .set_text(&text_to_copy)
             .map_err(|e| crate::error::GitSvError::Clipboard(e.to_string()))?;
         ctx.state
-            .set_flash_message("Copié dans le presse-papier ✓".to_string());
+            .set_flash_message(flash_success("Copié dans le presse-papier"));
     }
 
     Ok(())

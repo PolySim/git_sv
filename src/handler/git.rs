@@ -4,6 +4,7 @@ use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::GitAction;
 use crate::state::{AppState, BlameState, FocusPanel, StagingFocus, ViewMode};
+use crate::utils::{flash_error, flash_error_message, flash_success};
 
 /// Handler pour les opérations Git.
 pub struct GitHandler;
@@ -38,14 +39,14 @@ fn handle_push(state: &mut AppState) -> Result<()> {
                 state.set_flash_message(success.flash_message());
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur lors du push: {}", e));
+                state.set_flash_message(flash_error("lors du push", e));
             }
         },
         Ok(false) => {
-            state.set_flash_message("Aucun remote configuré".to_string());
+            state.set_flash_message(flash_error_message("aucun remote configuré"));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
     Ok(())
@@ -58,14 +59,14 @@ fn handle_force_push(state: &mut AppState) -> Result<()> {
                 state.set_flash_message(success.flash_message());
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur lors du force push: {}", e));
+                state.set_flash_message(flash_error("lors du force push", e));
             }
         },
         Ok(false) => {
-            state.set_flash_message("Aucun remote configuré".to_string());
+            state.set_flash_message(flash_error_message("aucun remote configuré"));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
     Ok(())
@@ -111,17 +112,19 @@ fn handle_pull(state: &mut AppState) -> Result<()> {
                     theirs_name,
                 ));
                 state.view_mode = ViewMode::Conflicts;
-                state.set_flash_message("Conflits lors du pull - résolution requise".to_string());
+                state.set_flash_message(flash_error_message(
+                    "conflits lors du pull - résolution requise",
+                ));
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur lors du pull: {}", e));
+                state.set_flash_message(flash_error("lors du pull", e));
             }
         },
         Ok(false) => {
-            state.set_flash_message("Aucun remote configuré".to_string());
+            state.set_flash_message(flash_error_message("aucun remote configuré"));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
     Ok(())
@@ -139,14 +142,14 @@ fn handle_fetch(state: &mut AppState) -> Result<()> {
                 state.mark_dirty();
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur lors du fetch: {}", e));
+                state.set_flash_message(flash_error("lors du fetch", e));
             }
         },
         Ok(false) => {
-            state.set_flash_message("Aucun remote configuré".to_string());
+            state.set_flash_message(flash_error_message("aucun remote configuré"));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
     Ok(())
@@ -163,7 +166,7 @@ fn handle_cherry_pick(state: &mut AppState) -> Result<()> {
     let commit_oid = if let Some(commit) = state.selected_commit() {
         commit.oid
     } else {
-        state.set_flash_message("Aucun commit sélectionné".to_string());
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
         return Ok(());
     };
 
@@ -206,7 +209,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
 
     // Utiliser l'API unifiée pour accéder aux fichiers
     if state.graph_view.commit_files.is_empty() {
-        state.set_flash_message("Aucun fichier sélectionné".to_string());
+        state.set_flash_message(flash_error_message("aucun fichier sélectionné"));
         return Ok(());
     }
 
@@ -217,7 +220,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
     {
         Some(f) => f,
         None => {
-            state.set_flash_message("Index de fichier invalide".to_string());
+            state.set_flash_message(flash_error_message("index de fichier invalide"));
             return Ok(());
         }
     };
@@ -227,7 +230,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
     let commit_oid = if let Some(commit) = state.selected_commit() {
         commit.oid
     } else {
-        state.set_flash_message("Aucun commit sélectionné".to_string());
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
         return Ok(());
     };
 
@@ -239,7 +242,7 @@ fn handle_open_blame(state: &mut AppState) -> Result<()> {
             state.open_blame(blame_state);
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur lors du blame: {}", e));
+            state.set_flash_message(flash_error("lors du blame", e));
         }
     }
 
@@ -278,7 +281,9 @@ fn handle_jump_to_blame_commit(state: &mut AppState) -> Result<()> {
                     let commit_short_id = format!("{:.7}", target_oid);
                     state.set_flash_message(format!("Sauté au commit {}", commit_short_id));
                 } else {
-                    state.set_flash_message("Commit non trouvé dans le graphe visible".to_string());
+                    state.set_flash_message(flash_error_message(
+                        "commit non trouvé dans le graphe visible",
+                    ));
                 }
             }
         }
@@ -304,11 +309,11 @@ fn handle_stash_prompt(state: &mut AppState) -> Result<()> {
     // Créer un stash rapide sans message (WIP par défaut)
     match crate::git::stash::save_stash(&mut state.repo.repo, None) {
         Ok(_) => {
-            state.set_flash_message("Stash créé ✓".to_string());
+            state.set_flash_message(flash_success("Stash créé"));
             state.mark_dirty();
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur stash: {}", e));
+            state.set_flash_message(flash_error("stash", e));
         }
     }
     Ok(())
@@ -333,14 +338,16 @@ fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
             }
 
             if branch_names.is_empty() {
-                state.set_flash_message("Aucune autre branche disponible pour merge".to_string());
+                state.set_flash_message(flash_error_message(
+                    "aucune autre branche disponible pour merge",
+                ));
                 return Ok(());
             }
 
             state.merge_picker = Some(crate::state::MergePickerState::new(branch_names));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur chargement branches: {}", e));
+            state.set_flash_message(flash_error("chargement branches", e));
         }
     }
     Ok(())
@@ -365,7 +372,7 @@ fn handle_reset_prompt(state: &mut AppState) -> Result<()> {
             commit_message,
         ));
     } else {
-        state.set_flash_message("Aucun commit sélectionné".to_string());
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
     }
 
     Ok(())
@@ -373,7 +380,7 @@ fn handle_reset_prompt(state: &mut AppState) -> Result<()> {
 
 fn handle_abort_merge(state: &mut AppState) -> Result<()> {
     if !state.is_merging {
-        state.set_flash_message("Aucun merge en cours".to_string());
+        state.set_flash_message(flash_error_message("aucun merge en cours"));
         return Ok(());
     }
 

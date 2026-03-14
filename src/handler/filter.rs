@@ -4,6 +4,7 @@ use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::FilterAction;
 use crate::state::{AppState, ViewMode};
+use crate::utils::flash_success;
 
 /// Handler pour les opérations de filtrage.
 pub struct FilterHandler;
@@ -89,9 +90,12 @@ fn handle_apply(state: &mut AppState) -> Result<()> {
         if state.graph_filter.message.is_some() {
             parts.push("message");
         }
-        state.set_flash_message(format!("Filtres actifs: {}", parts.join(", ")));
+        state.set_flash_message(flash_success(format!(
+            "Filtres actifs: {}",
+            parts.join(", ")
+        )));
     } else {
-        state.set_flash_message("Filtres effacés".to_string());
+        state.set_flash_message(flash_success("Filtres effacés"));
     }
 
     Ok(())
@@ -120,7 +124,7 @@ fn handle_clear(state: &mut AppState) -> Result<()> {
     // Repartir d'un chargement initial sans filtres.
     reset_graph_pagination(state);
 
-    state.set_flash_message("Filtres effacés".to_string());
+    state.set_flash_message(flash_success("Filtres effacés"));
 
     Ok(())
 }

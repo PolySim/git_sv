@@ -132,7 +132,7 @@ mod tests {
     fn test_flash_message_for_structured_pull_result() {
         assert_eq!(
             flash_message_for_pull_result(&MergeResult::FastForward),
-            Some("Pull (fast-forward) réussi ✓".to_string())
+            Some(crate::utils::flash_success("Pull (fast-forward) réussi"))
         );
         assert_eq!(
             flash_message_for_pull_result(&MergeResult::Conflicts(Vec::new())),

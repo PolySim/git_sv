@@ -4,6 +4,7 @@ use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::SearchAction;
 use crate::state::AppState;
+use crate::utils::flash_success;
 
 /// Handler pour les opérations de recherche.
 pub struct SearchHandler;
@@ -133,10 +134,10 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
                 }
             }
         }
-        state.set_flash_message(format!(
+        state.set_flash_message(flash_success(format!(
             "{} résultats trouvés",
             state.search_state.results.len()
-        ));
+        )));
     } else {
         state.set_flash_message("Aucun résultat".to_string());
     }

@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::git::conflict::ConflictResolutionMode;
 use crate::state::{AppState, ConflictPanelFocus, ViewMode};
+use crate::utils::{flash_error, flash_error_message, flash_success};
 
 use super::shared::{adjust_scroll, advance_to_next_unresolved, calculate_absolute_line_position};
 
@@ -194,10 +195,10 @@ pub(super) fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
                 advance_to_next_unresolved(conflicts);
             }
             state.mark_dirty();
-            state.set_flash_message(format!("Accepté 'ours' pour {}", file_path));
+            state.set_flash_message(flash_success(format!("Accepté 'ours' pour {}", file_path)));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
 
@@ -266,10 +267,13 @@ pub(super) fn handle_accept_theirs_file(state: &mut AppState) -> Result<()> {
                 advance_to_next_unresolved(conflicts);
             }
             state.mark_dirty();
-            state.set_flash_message(format!("Accepté 'theirs' pour {}", file_path));
+            state.set_flash_message(flash_success(format!(
+                "Accepté 'theirs' pour {}",
+                file_path
+            )));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
 
@@ -309,9 +313,9 @@ pub(super) fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
         if let Some(conflicts) = &mut state.conflicts_state {
             if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
                 if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                    state.set_flash_message(format!(
-                        "Erreur lors de l'application de la résolution: {}",
-                        e
+                    state.set_flash_message(flash_error(
+                        "lors de l'application de la résolution",
+                        e,
                     ));
                     return Ok(());
                 }
@@ -320,7 +324,7 @@ pub(super) fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
             }
         }
 
-        state.set_flash_message(format!("{} résolu (ours)", file_path));
+        state.set_flash_message(flash_success(format!("{} résolu (ours)", file_path)));
 
         if let Some(conflicts) = &mut state.conflicts_state {
             advance_to_next_unresolved(conflicts);
@@ -361,14 +365,14 @@ pub(super) fn handle_accept_theirs_block(state: &mut AppState) -> Result<()> {
         if let Some(conflicts) = &mut state.conflicts_state {
             if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
                 if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                    state.set_flash_message(format!("Erreur: {}", e));
+                    state.set_flash_message(flash_error_message(e));
                     return Ok(());
                 }
                 file.is_resolved = true;
             }
             advance_to_next_unresolved(conflicts);
         }
-        state.set_flash_message(format!("{} résolu (theirs)", path));
+        state.set_flash_message(flash_success(format!("{} résolu (theirs)", path)));
         state.mark_dirty();
     }
     Ok(())
@@ -404,14 +408,14 @@ pub(super) fn handle_accept_both(state: &mut AppState) -> Result<()> {
         if let Some(conflicts) = &mut state.conflicts_state {
             if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
                 if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                    state.set_flash_message(format!("Erreur: {}", e));
+                    state.set_flash_message(flash_error_message(e));
                     return Ok(());
                 }
                 file.is_resolved = true;
             }
             advance_to_next_unresolved(conflicts);
         }
-        state.set_flash_message(format!("{} résolu (both)", path));
+        state.set_flash_message(flash_success(format!("{} résolu (both)", path)));
         state.mark_dirty();
     }
     Ok(())
@@ -447,9 +451,9 @@ pub(super) fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
                 if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
                     // Appliquer la résolution sur le disque
                     if let Err(e) = apply_resolved_content(&state.repo.repo, file, mode) {
-                        state.set_flash_message(format!(
-                            "Erreur lors de l'application de la résolution: {}",
-                            e
+                        state.set_flash_message(flash_error(
+                            "lors de l'application de la résolution",
+                            e,
                         ));
                         return Ok(());
                     }
@@ -458,13 +462,13 @@ pub(super) fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
                 }
                 advance_to_next_unresolved(conflicts);
             }
-            state.set_flash_message(format!("{} résolu et sauvegardé", path));
+            state.set_flash_message(flash_success(format!("{} résolu et sauvegardé", path)));
             state.mark_dirty();
         } else {
-            state.set_flash_message(format!(
+            state.set_flash_message(flash_error_message(format!(
                 "{}: toutes les sections ne sont pas résolues",
                 path
-            ));
+            )));
         }
     }
     Ok(())
@@ -477,10 +481,10 @@ pub(super) fn handle_finalize_merge(state: &mut AppState) -> Result<()> {
                 state.clear_conflicts();
                 state.enter_view(ViewMode::Graph);
                 state.mark_dirty();
-                state.set_flash_message("Merge finalisé ✓".to_string());
+                state.set_flash_message(flash_success("Merge finalisé"));
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur: {}", e));
+                state.set_flash_message(flash_error_message(e));
             }
         }
     }
@@ -494,10 +498,10 @@ pub(super) fn handle_abort_merge(state: &mut AppState) -> Result<()> {
                 state.clear_conflicts();
                 state.enter_view(ViewMode::Staging);
                 state.mark_dirty();
-                state.set_flash_message("Merge annulé".to_string());
+                state.set_flash_message(flash_success("Merge annulé"));
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur: {}", e));
+                state.set_flash_message(flash_error_message(e));
             }
         }
     }

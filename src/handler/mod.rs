@@ -204,7 +204,7 @@ impl EventHandler {
             }
             BackgroundResult::Push(Err(err)) => {
                 self.state
-                    .set_flash_message(format!("Erreur push : {}", err));
+                    .set_flash_message(crate::utils::flash_error("push", err));
             }
             BackgroundResult::Pull(Ok(pull_result)) => match pull_result {
                 MergeResult::Conflicts(files) => {
@@ -233,9 +233,9 @@ impl EventHandler {
                                 );
                             }
                             Err(e) => {
-                                self.state.set_flash_message(format!(
-                                    "Erreur détection conflits : {}",
-                                    e
+                                self.state.set_flash_message(crate::utils::flash_error(
+                                    "détection conflits",
+                                    e,
                                 ));
                             }
                         }
@@ -271,7 +271,7 @@ impl EventHandler {
             },
             BackgroundResult::Pull(Err(err)) => {
                 self.state
-                    .set_flash_message(format!("Erreur pull : {}", err));
+                    .set_flash_message(crate::utils::flash_error("pull", err));
             }
             BackgroundResult::Fetch(Ok(success)) => {
                 self.state.set_flash_message(success.flash_message());
@@ -279,7 +279,7 @@ impl EventHandler {
             }
             BackgroundResult::Fetch(Err(err)) => {
                 self.state
-                    .set_flash_message(format!("Erreur fetch : {}", err));
+                    .set_flash_message(crate::utils::flash_error("fetch", err));
             }
         }
         Ok(())

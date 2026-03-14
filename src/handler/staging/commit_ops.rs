@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::state::{AppState, StagingFocus, ViewMode};
+use crate::utils::flash_success;
 
 use super::refresh_staging;
 
@@ -17,10 +18,10 @@ pub(super) fn handle_confirm_commit(state: &mut AppState) -> Result<()> {
 
         if state.staging_state.is_amending {
             crate::git::commit::amend_commit(&state.repo.repo, &message)?;
-            state.set_flash_message("Commit amendé ✓".to_string());
+            state.set_flash_message(flash_success("Commit amendé"));
         } else {
             crate::git::commit::create_commit(&state.repo.repo, &message)?;
-            state.set_flash_message("Commit créé ✓".to_string());
+            state.set_flash_message(flash_success("Commit créé"));
         }
 
         state.staging_state.is_committing = false;

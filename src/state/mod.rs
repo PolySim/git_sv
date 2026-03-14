@@ -15,9 +15,9 @@ use crate::git::repo::{GitRepo, StatusEntry};
 use ratatui::layout::Rect;
 use std::time::{Duration, Instant};
 
-/// Nombre initial de commits à charger (affichage rapide au démarrage).
+/// Nombre initial de commits à chargér (affichage rapide au démarrage).
 pub const INITIAL_COMMIT_COUNT: usize = 200;
-/// Nombre de commits supplémentaires à charger à chaque "charger plus".
+/// Nombre de commits supplémentaires à chargér à chaque "chargér plus".
 pub const COMMIT_BATCH_SIZE: usize = 200;
 /// Nombre maximum total de commits (limite de sécurité).
 pub const MAX_TOTAL_COMMITS: usize = 10000;
@@ -106,7 +106,7 @@ pub struct AppState {
     /// Action en attente de confirmation (dialogue modal).
     pub pending_confirmation: Option<crate::ui::confirm_dialog::ConfirmAction>,
 
-    /// Spinner de chargement actif.
+    /// Spinner de chargément actif.
     pub loading_spinner: Option<crate::ui::loading::LoadingSpinner>,
 
     /// Indique si un merge est en cours (MERGE_HEAD existe).
@@ -175,23 +175,23 @@ impl AppState {
         self.diff_cache.clear_working_directory();
     }
 
-    /// Planifie un rafraichissement sans invalider explicitement le cache diff.
+    /// Planifie un rafraîchissement sans invalider explicitement le cache diff.
     pub fn schedule_refresh(&mut self) {
         self.dirty = true;
     }
 
-    /// Met a jour la zone d'ecran connue apres rendu.
+    /// Met à jour la zone d'écran connue après rendu.
     pub fn update_screen_area(&mut self, area: Rect) {
         self.screen_area = area;
     }
 
-    /// Bascule vers une vue et planifie un rafraichissement.
+    /// Bascule vers une vue et planifie un rafraîchissement.
     pub fn enter_view(&mut self, view_mode: ViewMode) {
         self.view_mode = view_mode;
         self.schedule_refresh();
     }
 
-    /// Bascule l'overlay d'aide en preservant la vue precedente.
+    /// Bascule l'overlay d'aide en préservant la vue précédente.
     pub fn toggle_help(&mut self) {
         if self.view_mode == ViewMode::Help {
             self.leave_help();
@@ -201,7 +201,7 @@ impl AppState {
         }
     }
 
-    /// Quitte la vue d'aide et restaure la vue precedente.
+    /// Quitte la vue d'aide et restaure la vue précédente.
     pub fn leave_help(&mut self) {
         self.view_mode = self.previous_view_mode.take().unwrap_or(ViewMode::Graph);
     }
@@ -221,7 +221,7 @@ impl AppState {
         self.loading_spinner = Some(crate::ui::loading::LoadingSpinner::new(message.into()));
     }
 
-    /// Desactive le spinner de chargement.
+    /// Désactive le spinner de chargement.
     pub fn clear_loading(&mut self) {
         self.loading_spinner = None;
     }
@@ -231,7 +231,7 @@ impl AppState {
         self.should_quit = true;
     }
 
-    /// Ouvre la vue blame avec son etat.
+    /// Ouvre la vue blame avec son état.
     pub fn open_blame(&mut self, blame_state: BlameState) {
         self.blame_state = Some(blame_state);
         self.view_mode = ViewMode::Blame;
@@ -243,13 +243,13 @@ impl AppState {
         self.view_mode = ViewMode::Graph;
     }
 
-    /// Ouvre la vue conflits avec son etat.
+    /// Ouvre la vue conflits avec son état.
     pub fn open_conflicts(&mut self, conflicts_state: ConflictsState) {
         self.conflicts_state = Some(conflicts_state);
         self.view_mode = ViewMode::Conflicts;
     }
 
-    /// Ferme la vue conflits sans changer d'autre etat.
+    /// Ferme la vue conflits sans changer d'autre état.
     pub fn clear_conflicts(&mut self) {
         self.conflicts_state = None;
     }
@@ -297,19 +297,19 @@ impl AppState {
         }
     }
 
-    /// Initialise l'etat a partir du repository.
+    /// Initialise l'état à partir du repository.
     ///
     /// Invariants en sortie:
-    /// - la selection du graphe reste valide ;
-    /// - la pagination reflete les commits charges ;
-    /// - `status_entries` et `staging_state` sont synchronises ;
-    /// - le diff du commit ou du staging est coherent avec la vue active ;
+    /// - la sélection du graphe reste valide ;
+    /// - la pagination reflète les commits chargés ;
+    /// - `status_entries` et `staging_state` sont synchronisés ;
+    /// - le diff du commit ou du staging est cohérent avec la vue active ;
     pub fn initialize_from_repo(&mut self) -> crate::error::Result<()> {
         self.refresh_with_commit_limit(INITIAL_COMMIT_COUNT)
     }
 
-    /// Rafraichit l'etat courant a partir du repository, en preservant
-    /// le niveau de pagination deja charge quand c'est possible.
+    /// Rafraîchit l'état courant à partir du repository, en préservant
+    /// le niveau de pagination déjà chargé quand c'est possible.
     pub fn refresh_from_repo(&mut self) -> crate::error::Result<()> {
         let commit_limit = self.graph_view.loaded_count.max(INITIAL_COMMIT_COUNT);
         self.refresh_with_commit_limit(commit_limit)
@@ -359,7 +359,7 @@ impl AppState {
         Ok(())
     }
 
-    /// Synchronise `status_entries` et la vue staging a partir d'une seule lecture.
+    /// Synchronise `status_entries` et la vue staging à partir d'une seule lecture.
     pub fn apply_status_entries(&mut self, status_entries: Vec<StatusEntry>) {
         let staged_files = status_entries
             .iter()

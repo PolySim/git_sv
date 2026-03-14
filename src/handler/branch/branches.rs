@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::state::{AppState, ViewMode};
+use crate::utils::{flash_error, flash_error_message, flash_success};
 
 pub(super) fn handle_checkout(state: &mut AppState) -> Result<()> {
     let branch_info = if state.view_mode == ViewMode::Branches {
@@ -21,10 +22,13 @@ pub(super) fn handle_checkout(state: &mut AppState) -> Result<()> {
         match crate::git::branch::checkout_branch(&state.repo.repo, &branch_name) {
             Ok(_) => {
                 state.mark_dirty();
-                state.set_flash_message(format!("Branche '{}' check-out ✓", branch_name));
+                state.set_flash_message(flash_success(format!(
+                    "Branche '{}' check-out",
+                    branch_name
+                )));
             }
             Err(e) => {
-                state.set_flash_message(format!("Erreur checkout: {}", e));
+                state.set_flash_message(flash_error("checkout", e));
             }
         }
     }
@@ -42,12 +46,16 @@ pub(super) fn handle_delete(state: &mut AppState) -> Result<()> {
 
     if let Some((branch, selected)) = selected_info {
         if selected.is_remote() {
-            state.set_flash_message("Suppression impossible sur une branche distante.".to_string());
+            state.set_flash_message(crate::utils::flash_error_message(
+                "suppression impossible sur une branche distante",
+            ));
             return Ok(());
         }
 
         if branch.is_head {
-            state.set_flash_message("Impossible de supprimer la branche courante".to_string());
+            state.set_flash_message(crate::utils::flash_error_message(
+                "impossible de supprimer la branche courante",
+            ));
             return Ok(());
         }
         let branch_name = branch.name.clone();
@@ -60,9 +68,9 @@ pub(super) fn handle_rename(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
         if let Some((branch, selected)) = state.branches_view_state.selected_branch_info() {
             if selected.is_remote() {
-                state.set_flash_message(
-                    "Renommage impossible sur une branche distante.".to_string(),
-                );
+                state.set_flash_message(crate::utils::flash_error_message(
+                    "renommage impossible sur une branche distante",
+                ));
                 return Ok(());
             }
 
@@ -97,14 +105,16 @@ pub(super) fn handle_merge(state: &mut AppState) -> Result<()> {
             }
 
             if branch_names.is_empty() {
-                state.set_flash_message("Aucune autre branche disponible pour merge".to_string());
+                state.set_flash_message(crate::utils::flash_error_message(
+                    "aucune autre branche disponible pour merge",
+                ));
                 return Ok(());
             }
 
             state.merge_picker = Some(crate::state::MergePickerState::new(branch_names));
         }
         Err(e) => {
-            state.set_flash_message(format!("Erreur: {}", e));
+            state.set_flash_message(flash_error_message(e));
         }
     }
     Ok(())
