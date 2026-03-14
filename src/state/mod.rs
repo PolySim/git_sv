@@ -6,8 +6,10 @@ pub mod filter;
 pub mod selection;
 pub mod view;
 
+#[allow(unused_imports)]
 pub use action::AppAction;
-pub use cache::DiffCache;
+#[allow(unused_imports)]
+pub use cache::{DiffCache, Lazy, LazyBlame, LazyDiff};
 pub use filter::{FilterField, FilterPopupState, GraphFilter};
 pub use view::*;
 

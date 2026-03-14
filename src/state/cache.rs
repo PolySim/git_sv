@@ -6,6 +6,88 @@ use std::num::NonZeroUsize;
 
 use crate::git::diff::FileDiff;
 
+/// Etat d'une ressource chargee paresseusement.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default)]
+pub enum Lazy<T> {
+    /// Non charge encore.
+    #[default]
+    NotLoaded,
+    /// En cours de chargement.
+    Loading,
+    /// Charge avec succes.
+    Loaded(T),
+    /// Erreur de chargement.
+    Error(String),
+}
+
+#[allow(dead_code)]
+impl<T> Lazy<T> {
+    /// Cree un nouvel etat `NotLoaded`.
+    pub fn new() -> Self {
+        Self::NotLoaded
+    }
+
+    /// Recupere la valeur si chargee, ou la charge via le loader fourni.
+    pub fn get_or_load<F>(&mut self, loader: F) -> Option<&T>
+    where
+        F: FnOnce() -> crate::error::Result<T>,
+    {
+        if matches!(self, Self::NotLoaded) {
+            *self = Self::Loading;
+            match loader() {
+                Ok(value) => *self = Self::Loaded(value),
+                Err(e) => *self = Self::Error(e.to_string()),
+            }
+        }
+
+        match self {
+            Self::Loaded(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Force le rechargement.
+    pub fn reload<F>(&mut self, loader: F) -> Option<&T>
+    where
+        F: FnOnce() -> crate::error::Result<T>,
+    {
+        *self = Self::NotLoaded;
+        self.get_or_load(loader)
+    }
+
+    /// Verifie si la ressource est chargee.
+    pub fn is_loaded(&self) -> bool {
+        matches!(self, Self::Loaded(_))
+    }
+
+    /// Verifie si la ressource est en cours de chargement.
+    pub fn is_loading(&self) -> bool {
+        matches!(self, Self::Loading)
+    }
+
+    /// Recupere la valeur si chargee, sans tenter de charger.
+    pub fn get(&self) -> Option<&T> {
+        match self {
+            Self::Loaded(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Reinitialise l'etat a `NotLoaded`.
+    pub fn reset(&mut self) {
+        *self = Self::NotLoaded;
+    }
+}
+
+#[allow(dead_code)]
+/// Alias pour un diff charge paresseusement.
+pub type LazyDiff = Lazy<FileDiff>;
+
+#[allow(dead_code)]
+/// Alias pour un blame charge paresseusement.
+pub type LazyBlame = Lazy<crate::git::blame::FileBlame>;
+
 /// Clé de cache pour un diff.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiffCacheKey {
@@ -117,6 +199,49 @@ mod tests {
         let mut bytes = [0u8; 20];
         bytes[0] = n;
         Oid::from_bytes(&bytes).unwrap()
+    }
+
+    #[test]
+    fn test_lazy_get_or_load_success() {
+        let mut lazy = Lazy::new();
+
+        let value = lazy.get_or_load(|| Ok::<_, crate::error::GitSvError>(42));
+
+        assert_eq!(value, Some(&42));
+        assert!(lazy.is_loaded());
+        assert_eq!(lazy.get(), Some(&42));
+    }
+
+    #[test]
+    fn test_lazy_get_or_load_error() {
+        let mut lazy = Lazy::<u32>::new();
+
+        let value = lazy.get_or_load(|| Err(crate::error::GitSvError::Other("echec".into())));
+
+        assert!(value.is_none());
+        assert!(matches!(lazy, Lazy::Error(ref message) if message == "echec"));
+    }
+
+    #[test]
+    fn test_lazy_reload_replaces_existing_value() {
+        let mut lazy = Lazy::Loaded(1);
+
+        let value = lazy.reload(|| Ok::<_, crate::error::GitSvError>(2));
+
+        assert_eq!(value, Some(&2));
+        assert_eq!(lazy.get(), Some(&2));
+    }
+
+    #[test]
+    fn test_lazy_reset_clears_loaded_state() {
+        let mut lazy = Lazy::Loaded(7);
+
+        lazy.reset();
+
+        assert!(matches!(lazy, Lazy::NotLoaded));
+        assert!(!lazy.is_loaded());
+        assert!(!lazy.is_loading());
+        assert!(lazy.get().is_none());
     }
 
     #[test]
