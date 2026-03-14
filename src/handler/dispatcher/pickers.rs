@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::handler::navigation;
 use crate::state::ViewMode;
 
 use super::super::traits::HandlerContext;
@@ -62,7 +63,7 @@ pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()
 
 /// Gère le chargement progressif de l'historique.
 pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
-    use crate::state::{COMMIT_BATCH_SIZE, MAX_TOTAL_COMMITS};
+    use crate::state::MAX_TOTAL_COMMITS;
 
     // Vérifier si on peut charger plus
     if !ctx.state.graph_view.can_load_more {
@@ -81,7 +82,11 @@ pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
 
     // Calculer combien de commits charger
     let current_count = ctx.state.graph_view.loaded_count;
-    let target_count = (current_count + COMMIT_BATCH_SIZE).min(MAX_TOTAL_COMMITS);
+    let target_count = ctx
+        .state
+        .graph_view
+        .target_count_for_next_load()
+        .min(MAX_TOTAL_COMMITS);
 
     if target_count <= current_count {
         ctx.state.graph_view.finish_loading_more();
@@ -90,48 +95,142 @@ pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
         return Ok(());
     }
 
-    // Charger les commits supplémentaires
-    let additional_count = target_count - current_count;
+    let load_result = if ctx.state.graph_filter.is_active() {
+        load_more_filtered_history(ctx, target_count)
+    } else {
+        load_more_unfiltered_history(ctx, target_count)
+    };
 
-    // Si c'est le premier chargement (current_count == 0), on charge INITIAL_COMMIT_COUNT
-    // Sinon, on charge à partir de current_count
-    let skip = if current_count == 0 { 0 } else { current_count };
-
-    match ctx.state.repo.build_graph_offset(skip, additional_count) {
-        Ok(additional_rows) => {
-            if additional_rows.is_empty() {
-                // Plus de commits à charger
-                ctx.state.graph_view.can_load_more = false;
-                ctx.state
-                    .set_flash_message("Fin de l'historique atteinte".to_string());
-            } else {
-                // Ajouter les nouveaux commits au graphe existant
-                ctx.state.graph_view.append_commits(additional_rows);
-
-                // Mettre à jour l'état de pagination
-                let new_count = ctx.state.graph_view.loaded_count;
-                let total = ctx.state.repo.estimate_total_commits();
-                ctx.state
-                    .graph_view
-                    .update_pagination_state(new_count, total);
-
-                // Message de confirmation
-                let msg = if let Some(total) = total {
-                    format!("{} / {} commits chargés", new_count, total)
-                } else {
-                    format!("{} commits chargés", new_count)
-                };
-                ctx.state.set_flash_message(msg);
-            }
-        }
-        Err(e) => {
-            ctx.state
-                .set_flash_message(format!("Erreur chargement: {}", e));
-        }
+    if let Err(e) = load_result {
+        ctx.state
+            .set_flash_message(format!("Erreur chargement: {}", e));
     }
 
     // Marquer la fin du chargement
     ctx.state.graph_view.finish_loading_more();
 
     Ok(())
+}
+
+fn load_more_unfiltered_history(ctx: &mut HandlerContext, target_count: usize) -> Result<()> {
+    match ctx.state.repo.build_graph_with_more(target_count) {
+        Ok((graph, has_more)) => {
+            let graph_len = graph.len();
+
+            if graph_len == 0 {
+                ctx.state.graph_view.can_load_more = false;
+                ctx.state
+                    .set_flash_message("Fin de l'historique atteinte".to_string());
+            } else {
+                ctx.state.replace_graph(graph);
+
+                let total = ctx.state.repo.estimate_total_commits();
+                ctx.state
+                    .graph_view
+                    .update_pagination_state(graph_len, total, has_more);
+
+                let msg = if let Some(total) = total {
+                    format!("{} / {} commits chargés", graph_len, total)
+                } else {
+                    format!("{} commits chargés", graph_len)
+                };
+                ctx.state.set_flash_message(msg);
+            }
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn load_more_filtered_history(ctx: &mut HandlerContext, target_count: usize) -> Result<()> {
+    match ctx
+        .state
+        .repo
+        .build_graph_filtered_with_more(target_count, &ctx.state.graph_filter)
+    {
+        Ok((graph, has_more)) => {
+            let graph_len = graph.len();
+
+            if graph.is_empty() {
+                ctx.state.graph_view.can_load_more = false;
+                ctx.state
+                    .set_flash_message("Fin de l'historique filtré atteinte".to_string());
+            } else {
+                ctx.state.replace_graph(graph);
+
+                let total = None;
+                ctx.state
+                    .graph_view
+                    .update_pagination_state(graph_len, total, has_more);
+
+                let msg = format!("{} commits filtrés chargés", graph_len);
+                ctx.state.set_flash_message(msg);
+            }
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Déclenche un chargement supplémentaire quand la sélection approche du bas.
+pub fn maybe_load_more_history(state: &mut crate::state::AppState) -> Result<bool> {
+    if !matches!(state.view_mode, ViewMode::Graph)
+        || state.show_branch_panel
+        || state.graph_view.is_empty()
+        || !state.graph_view.can_load_more
+        || state.graph_view.is_loading_more
+    {
+        return Ok(false);
+    }
+
+    let remaining = state
+        .graph_view
+        .len()
+        .saturating_sub(state.graph_view.selected_index() + 1);
+
+    if remaining > 5 {
+        return Ok(false);
+    }
+
+    let previously_selected = state.selected_commit().map(|commit| commit.oid);
+    let previous_loaded = state.graph_view.loaded_count;
+    let mut ctx = HandlerContext { state };
+    handle_load_more_history(&mut ctx)?;
+
+    if ctx.state.graph_view.loaded_count == previous_loaded {
+        return Ok(false);
+    }
+
+    if let Some(oid) = previously_selected {
+        if ctx.state.selected_commit().map(|commit| commit.oid) == Some(oid) {
+            navigation::refresh_commit_file_data(ctx.state);
+        }
+    }
+
+    Ok(true)
+}
+
+/// Charge tout l'historique restant jusqu'à la fin.
+pub fn load_all_history(state: &mut crate::state::AppState) -> Result<bool> {
+    if !matches!(state.view_mode, ViewMode::Graph)
+        || state.show_branch_panel
+        || state.graph_view.is_loading_more
+    {
+        return Ok(false);
+    }
+
+    let mut loaded_any = false;
+    while state.graph_view.can_load_more {
+        let previous_loaded = state.graph_view.loaded_count;
+        let mut ctx = HandlerContext { state };
+        handle_load_more_history(&mut ctx)?;
+
+        if ctx.state.graph_view.loaded_count == previous_loaded {
+            break;
+        }
+
+        loaded_any = true;
+    }
+
+    Ok(loaded_any)
 }

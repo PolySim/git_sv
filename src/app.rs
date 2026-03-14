@@ -25,16 +25,18 @@ impl App {
         state.current_branch = state.repo.current_branch().ok();
 
         // Construire le graphe initial et l'assigner via l'API unifiée
-        let initial_graph = state
+        let (initial_graph, can_load_more) = state
             .repo
-            .build_graph(crate::state::INITIAL_COMMIT_COUNT)
+            .build_graph_with_more(crate::state::INITIAL_COMMIT_COUNT)
             .unwrap_or_default();
         let graph_len = initial_graph.len();
         state.replace_graph(initial_graph);
 
         // Initialiser l'état de pagination
         let total = state.repo.estimate_total_commits();
-        state.graph_view.update_pagination_state(graph_len, total);
+        state
+            .graph_view
+            .update_pagination_state(graph_len, total, can_load_more);
 
         // Charger les fichiers du commit sélectionné
         state.refresh_commit_files();

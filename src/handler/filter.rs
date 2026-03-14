@@ -3,7 +3,7 @@
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::FilterAction;
-use crate::state::AppState;
+use crate::state::{AppState, ViewMode};
 
 /// Handler pour les opérations de filtrage.
 pub struct FilterHandler;
@@ -71,8 +71,8 @@ fn handle_apply(state: &mut AppState) -> Result<()> {
     state.search_state.is_active = false;
     state.search_state.query.clear();
 
-    // Rafraîchir le graph avec les nouveaux filtres
-    state.dirty = true;
+    // Réinitialiser la pagination avant de recharger les résultats filtrés.
+    reset_graph_pagination(state);
 
     // Afficher un message si des filtres sont actifs
     if state.graph_filter.is_active() {
@@ -117,10 +117,15 @@ fn handle_clear(state: &mut AppState) -> Result<()> {
     state.search_state.is_active = false;
     state.search_state.query.clear();
 
-    // Rafraîchir le graph sans filtres
-    state.dirty = true;
+    // Repartir d'un chargement initial sans filtres.
+    reset_graph_pagination(state);
 
     state.set_flash_message("Filtres effacés".to_string());
 
     Ok(())
+}
+
+fn reset_graph_pagination(state: &mut AppState) {
+    state.graph_view.reset_pagination();
+    state.dirty = matches!(state.view_mode, ViewMode::Graph);
 }

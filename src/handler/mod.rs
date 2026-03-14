@@ -291,26 +291,21 @@ impl EventHandler {
 
         // Construire le graphe avec ou sans filtres
         // Utiliser le nombre de commits actuellement chargés pour préserver la pagination
-        let commit_limit = if self.state.graph_filter.is_active() {
-            // En mode filtre, on recharge tout car le filtre peut changer
-            crate::state::INITIAL_COMMIT_COUNT
-        } else {
-            // Sinon, utiliser le nombre actuellement chargé pour ne pas perdre de commits
-            self.state
-                .graph_view
-                .loaded_count
-                .max(crate::state::INITIAL_COMMIT_COUNT)
-        };
+        let commit_limit = self
+            .state
+            .graph_view
+            .loaded_count
+            .max(crate::state::INITIAL_COMMIT_COUNT);
 
-        let new_graph = if self.state.graph_filter.is_active() {
+        let (new_graph, can_load_more) = if self.state.graph_filter.is_active() {
             self.state
                 .repo
-                .build_graph_filtered(commit_limit, &self.state.graph_filter)
+                .build_graph_filtered_with_more(commit_limit, &self.state.graph_filter)
                 .unwrap_or_default()
         } else {
             self.state
                 .repo
-                .build_graph(commit_limit)
+                .build_graph_with_more(commit_limit)
                 .unwrap_or_default()
         };
 
@@ -325,10 +320,14 @@ impl EventHandler {
         self.state.replace_graph(new_graph);
 
         // Mettre à jour l'état de pagination
-        let total = self.state.repo.estimate_total_commits();
+        let total = if self.state.graph_filter.is_active() {
+            None
+        } else {
+            self.state.repo.estimate_total_commits()
+        };
         self.state
             .graph_view
-            .update_pagination_state(graph_len, total);
+            .update_pagination_state(graph_len, total, can_load_more);
 
         // Rafraîchir les fichiers du commit sélectionné
         self.state.refresh_commit_files();

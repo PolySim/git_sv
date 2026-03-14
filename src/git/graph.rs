@@ -186,7 +186,7 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
         let oid = ci.oid;
 
         // Trouver la colonne de ce commit.
-        let column = find_or_assign_column(&mut active_columns, oid);
+        let (column, merged_columns) = find_or_assign_column(&mut active_columns, oid);
 
         // Récupérer les refs de ce commit.
         let refs = refs_map.get(&oid).cloned().unwrap_or_default();
@@ -225,7 +225,7 @@ pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<Grap
         };
 
         // Générer les cellules pour la ligne du commit.
-        let cells = build_commit_cells(column, &active_columns, color_index);
+        let cells = build_commit_cells(column, &active_columns, color_index, &merged_columns);
 
         // Libérer la colonne courante.
         if column < active_columns.len() {
@@ -272,6 +272,7 @@ fn build_commit_cells(
     commit_col: usize,
     active_columns: &[ColumnState],
     _commit_color: usize,
+    merged_columns: &[usize],
 ) -> Vec<Option<GraphCell>> {
     let num_cols = active_columns.len().max(commit_col + 1);
     let mut cells: Vec<Option<GraphCell>> = Vec::with_capacity(num_cols);
@@ -290,6 +291,42 @@ fn build_commit_cells(
             // Colonne inactive.
             cells.push(None);
         }
+    }
+
+    for &merged_col in merged_columns {
+        if merged_col == commit_col {
+            continue;
+        }
+
+        let (start, end) = if merged_col > commit_col {
+            (commit_col + 1, merged_col)
+        } else {
+            (merged_col + 1, commit_col)
+        };
+
+        for cell in cells.iter_mut().take(end).skip(start) {
+            match cell {
+                Some(existing) if existing.edge_type == EdgeType::Vertical => {
+                    existing.edge_type = EdgeType::Cross;
+                }
+                Some(_) => {}
+                None => {
+                    *cell = Some(GraphCell {
+                        edge_type: EdgeType::Horizontal,
+                        color_index: active_columns[commit_col].color_index,
+                    });
+                }
+            }
+        }
+
+        cells[merged_col] = Some(GraphCell {
+            edge_type: if merged_col > commit_col {
+                EdgeType::MergeFromLeft
+            } else {
+                EdgeType::MergeFromRight
+            },
+            color_index: active_columns[merged_col].color_index,
+        });
     }
 
     cells
@@ -574,15 +611,27 @@ fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<RefInfo>>> {
 }
 
 /// Trouve la colonne existante pour un OID, ou en assigne une nouvelle.
-fn find_or_assign_column(active_columns: &mut Vec<ColumnState>, oid: Oid) -> usize {
-    // Chercher si cet OID est déjà attendu dans une colonne.
-    for (i, state) in active_columns.iter().enumerate() {
-        if state.expected_oid == Some(oid) {
-            return i;
+fn find_or_assign_column(active_columns: &mut Vec<ColumnState>, oid: Oid) -> (usize, Vec<usize>) {
+    // Chercher si cet OID est déjà attendu dans une ou plusieurs colonnes.
+    let matching_columns = active_columns
+        .iter()
+        .enumerate()
+        .filter_map(|(i, state)| (state.expected_oid == Some(oid)).then_some(i))
+        .collect::<Vec<_>>();
+
+    if let Some(&column) = matching_columns.first() {
+        // Si plusieurs colonnes attendent le même commit, on ne garde que la plus à gauche.
+        // Les autres représentent des branches déjà refermées sur ce commit.
+        for &duplicate_col in matching_columns.iter().skip(1) {
+            active_columns[duplicate_col].expected_oid = None;
+            active_columns[duplicate_col].branch_name = None;
         }
+
+        return (column, matching_columns.into_iter().skip(1).collect());
     }
+
     // Sinon, trouver la première colonne libre.
-    assign_new_column(active_columns, oid)
+    (assign_new_column(active_columns, oid), Vec::new())
 }
 
 /// Assigne un OID à la première colonne libre, ou en crée une nouvelle.
@@ -642,18 +691,46 @@ mod tests {
         let oid2 = Oid::from_bytes(&[2; 20]).unwrap();
 
         // Premier OID : nouvelle colonne
-        let col1 = find_or_assign_column(&mut columns, oid1);
+        let (col1, merges1) = find_or_assign_column(&mut columns, oid1);
         assert_eq!(col1, 0);
+        assert!(merges1.is_empty());
         assert_eq!(columns.len(), 1);
 
         // Deuxième OID différent : nouvelle colonne
-        let col2 = find_or_assign_column(&mut columns, oid2);
+        let (col2, merges2) = find_or_assign_column(&mut columns, oid2);
         assert_eq!(col2, 1);
+        assert!(merges2.is_empty());
         assert_eq!(columns.len(), 2);
 
         // Même OID que le premier : colonne existante
-        let col1_again = find_or_assign_column(&mut columns, oid1);
+        let (col1_again, merges3) = find_or_assign_column(&mut columns, oid1);
         assert_eq!(col1_again, 0);
+        assert!(merges3.is_empty());
+    }
+
+    #[test]
+    fn test_find_or_assign_column_clears_duplicate_expected_oid() {
+        let oid = Oid::from_bytes(&[42; 20]).unwrap();
+        let mut columns = vec![
+            ColumnState {
+                expected_oid: Some(oid),
+                color_index: 0,
+                branch_name: Some("main".to_string()),
+            },
+            ColumnState {
+                expected_oid: Some(oid),
+                color_index: 1,
+                branch_name: Some("feature".to_string()),
+            },
+        ];
+
+        let (col, merged_columns) = find_or_assign_column(&mut columns, oid);
+
+        assert_eq!(col, 0);
+        assert_eq!(merged_columns, vec![1]);
+        assert_eq!(columns[0].expected_oid, Some(oid));
+        assert_eq!(columns[1].expected_oid, None);
+        assert_eq!(columns[1].branch_name, None);
     }
 
     #[test]

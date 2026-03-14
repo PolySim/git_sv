@@ -327,19 +327,23 @@ impl GraphViewState {
     // ═══════════════════════════════════════════════════
 
     /// Met à jour l'état de pagination après un chargement.
-    pub fn update_pagination_state(&mut self, loaded_count: usize, total_commits: Option<usize>) {
+    pub fn update_pagination_state(
+        &mut self,
+        loaded_count: usize,
+        total_commits: Option<usize>,
+        can_load_more: bool,
+    ) {
         self.loaded_count = loaded_count;
         self.total_commits = total_commits;
+        self.can_load_more = can_load_more && loaded_count < crate::state::MAX_TOTAL_COMMITS;
+    }
 
-        // Déterminer si on peut charger plus
-        if let Some(total) = total_commits {
-            self.can_load_more =
-                loaded_count < total && loaded_count < crate::state::MAX_TOTAL_COMMITS;
-        } else {
-            // Si on ne connaît pas le total, on suppose qu'on peut charger plus
-            // tant qu'on n'a pas atteint la limite de sécurité
-            self.can_load_more = loaded_count < crate::state::MAX_TOTAL_COMMITS;
-        }
+    /// Réinitialise l'état de pagination pour repartir d'un chargement initial.
+    pub fn reset_pagination(&mut self) {
+        self.loaded_count = 0;
+        self.total_commits = None;
+        self.can_load_more = true;
+        self.is_loading_more = false;
     }
 
     /// Ajoute des commits au graphe existant (pour le chargement progressif).

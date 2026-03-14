@@ -230,6 +230,13 @@ fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
         is_diff_fullscreen,
     );
 
+    let graph_visible_height = layout.graph.height.saturating_sub(2) as usize;
+
+    state
+        .graph_view
+        .rows
+        .set_visible_height((graph_visible_height / 2).max(1));
+
     // Rendu de la status bar en haut.
     status_bar::render(
         frame,

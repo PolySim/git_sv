@@ -250,7 +250,12 @@ fn build_commit_line(
                 let color = get_branch_color(cell.color_index);
                 let ch = match cell.edge_type {
                     EdgeType::Vertical => "│",
-                    _ => " ",
+                    EdgeType::Horizontal => "─",
+                    EdgeType::Cross => "┼",
+                    EdgeType::MergeFromRight => "╰",
+                    EdgeType::MergeFromLeft => "╯",
+                    EdgeType::ForkRight => "╮",
+                    EdgeType::ForkLeft => "╭",
                 };
                 spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
 
@@ -630,6 +635,36 @@ mod tests {
 
         // La ligne devrait avoir des spans
         assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn test_build_commit_line_renders_branch_closure_symbol() {
+        let row = GraphRow {
+            node: CommitNode {
+                oid: Oid::from_bytes(&[3; 20]).unwrap_or(Oid::zero()),
+                message: "Branch closes".to_string(),
+                author: "Alice".to_string(),
+                timestamp: 1609459200,
+                parents: vec![Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero())],
+                refs: vec![],
+                branch_name: None,
+                column: 0,
+                color_index: 0,
+            },
+            cells: vec![
+                None,
+                Some(GraphCell {
+                    edge_type: EdgeType::MergeFromLeft,
+                    color_index: 1,
+                }),
+            ],
+            connection: None,
+        };
+
+        let line = build_commit_line(&row, false, 80, 2);
+        let line_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+
+        assert!(line_text.contains("╯"));
     }
 
     #[test]

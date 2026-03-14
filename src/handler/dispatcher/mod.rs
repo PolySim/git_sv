@@ -234,6 +234,14 @@ impl ActionDispatcher {
     }
 }
 
+pub(crate) fn maybe_load_more_history(state: &mut AppState) -> Result<bool> {
+    pickers::maybe_load_more_history(state)
+}
+
+pub(crate) fn load_all_history(state: &mut AppState) -> Result<bool> {
+    pickers::load_all_history(state)
+}
+
 impl Default for ActionDispatcher {
     fn default() -> Self {
         Self::new()

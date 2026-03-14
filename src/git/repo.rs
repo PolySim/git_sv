@@ -105,14 +105,33 @@ impl GitRepo {
         self.build_graph_offset(0, max_count)
     }
 
+    /// Construit le graphe de commits et indique s'il reste de l'historique à charger.
+    pub fn build_graph_with_more(&self, max_count: usize) -> Result<(Vec<GraphRow>, bool)> {
+        self.build_graph_offset_with_more(0, max_count)
+    }
+
     /// Construit le graphe de commits à partir d'un offset.
     ///
     /// Cette méthode permet le chargement progressif en chargeant les commits
     /// à partir d'un offset donné.
     pub fn build_graph_offset(&self, skip: usize, max_count: usize) -> Result<Vec<GraphRow>> {
-        let commits = self.log_all_branches_offset(skip, max_count)?;
-        let graph = super::graph::build_graph(&self.repo, &commits)?;
+        let (graph, _) = self.build_graph_offset_with_more(skip, max_count)?;
         Ok(graph)
+    }
+
+    /// Construit le graphe de commits à partir d'un offset et indique s'il reste
+    /// potentiellement d'autres commits à charger.
+    pub fn build_graph_offset_with_more(
+        &self,
+        skip: usize,
+        max_count: usize,
+    ) -> Result<(Vec<GraphRow>, bool)> {
+        let fetch_count = max_count.saturating_add(1);
+        let commits = self.log_all_branches_offset(skip, fetch_count)?;
+        let has_more = commits.len() > max_count;
+        let commits = commits.into_iter().take(max_count).collect::<Vec<_>>();
+        let graph = super::graph::build_graph(&self.repo, &commits)?;
+        Ok((graph, has_more))
     }
 
     /// Estime le nombre total de commits dans le repository.
@@ -146,36 +165,20 @@ impl GitRepo {
         max_count: usize,
         filter: &crate::state::GraphFilter,
     ) -> Result<Vec<GraphRow>> {
-        // Récupérer plus de commits que demandé car le filtrage peut réduire la liste
-        // Augmenter le facteur si un filtre par chemin est actif (plus sélectif)
-        let fetch_count = if filter.path.is_some() {
-            max_count * 5
-        } else {
-            max_count * 3
-        };
-
-        let mut commits = self.log_all_branches(fetch_count)?;
-
-        // Si un filtre par chemin est actif, charger les chemins modifiés pour chaque commit
-        if filter.path.is_some() {
-            for commit in &mut commits {
-                if commit.changed_paths.is_none() {
-                    if let Err(e) = commit.load_changed_paths(&self.repo) {
-                        eprintln!("Erreur chargement chemins pour {}: {}", commit.oid, e);
-                    }
-                }
-            }
-        }
-
-        // Appliquer le filtre
-        let filtered_commits = filter.filter_commits(&commits);
-
-        // Limiter au nombre demandé
-        let limited_commits: Vec<_> = filtered_commits.into_iter().take(max_count).collect();
-
-        // Construire le graphe avec les commits filtrés
-        let graph = super::graph::build_graph(&self.repo, &limited_commits)?;
+        let (graph, _) = self.build_graph_filtered_with_more(max_count, filter)?;
         Ok(graph)
+    }
+
+    /// Construit le graphe de commits avec filtrage et indique s'il reste
+    /// potentiellement d'autres résultats à charger.
+    pub fn build_graph_filtered_with_more(
+        &self,
+        max_count: usize,
+        filter: &crate::state::GraphFilter,
+    ) -> Result<(Vec<GraphRow>, bool)> {
+        let (commits, has_more) = self.log_filtered_with_more(max_count, filter)?;
+        let graph = super::graph::build_graph(&self.repo, &commits)?;
+        Ok((graph, has_more))
     }
 
     /// Retourne le log filtré des commits.
@@ -184,25 +187,60 @@ impl GitRepo {
         max_count: usize,
         filter: &crate::state::GraphFilter,
     ) -> Result<Vec<CommitInfo>> {
-        let fetch_count = max_count * 2;
-        let mut commits = self.log_all_branches(fetch_count)?;
+        let (commits, _) = self.log_filtered_with_more(max_count, filter)?;
+        Ok(commits)
+    }
 
-        // Si un filtre par chemin est actif, charger les chemins modifiés
-        if filter.path.is_some() {
-            for commit in &mut commits {
-                if commit.changed_paths.is_none() {
-                    if let Err(e) = commit.load_changed_paths(&self.repo) {
-                        eprintln!("Erreur chargement chemins pour {}: {}", commit.oid, e);
+    /// Retourne le log filtré des commits avec indication de résultats supplémentaires.
+    pub fn log_filtered_with_more(
+        &self,
+        max_count: usize,
+        filter: &crate::state::GraphFilter,
+    ) -> Result<(Vec<CommitInfo>, bool)> {
+        let chunk_size = max_count.max(crate::state::COMMIT_BATCH_SIZE).max(1);
+        let mut skip = 0;
+        let mut results = Vec::with_capacity(max_count.saturating_add(1));
+        let mut has_more = false;
+
+        loop {
+            let mut commits = self.log_all_branches_offset(skip, chunk_size)?;
+
+            if commits.is_empty() {
+                break;
+            }
+
+            if filter.path.is_some() {
+                for commit in &mut commits {
+                    if commit.changed_paths.is_none() {
+                        if let Err(e) = commit.load_changed_paths(&self.repo) {
+                            eprintln!("Erreur chargement chemins pour {}: {}", commit.oid, e);
+                        }
                     }
                 }
             }
+
+            for commit in filter.filter_commits(&commits) {
+                results.push(commit);
+                if results.len() > max_count {
+                    has_more = true;
+                    results.truncate(max_count);
+                    break;
+                }
+            }
+
+            if has_more {
+                break;
+            }
+
+            let fetched_len = commits.len();
+            skip += fetched_len;
+
+            if fetched_len < chunk_size {
+                break;
+            }
         }
 
-        // Appliquer le filtre
-        let filtered_commits = filter.filter_commits(&commits);
-
-        // Limiter au nombre demandé
-        Ok(filtered_commits.into_iter().take(max_count).collect())
+        Ok((results, has_more))
     }
 
     /// Recherche des commits par message ou auteur.

@@ -96,6 +96,7 @@ fn handle_move_down(state: &mut AppState) {
                 state.graph_view.select_next();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
+                let _ = crate::handler::dispatcher::maybe_load_more_history(state);
             }
         }
         ViewMode::Staging => {
@@ -138,6 +139,7 @@ fn handle_page_down(state: &mut AppState) {
                 state.graph_view.page_down();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
+                let _ = crate::handler::dispatcher::maybe_load_more_history(state);
             }
         }
     }
@@ -167,6 +169,7 @@ fn handle_go_bottom(state: &mut AppState) {
         }
         _ => {
             if !state.show_branch_panel && !state.graph_view.is_empty() {
+                let _ = crate::handler::dispatcher::load_all_history(state);
                 state.graph_view.go_bottom();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
@@ -595,6 +598,8 @@ mod tests {
     fn test_go_bottom() {
         let mut state = create_test_state_with_graph(20);
         state.graph_view.rows.select(5);
+        state.graph_view.loaded_count = 20;
+        state.graph_view.can_load_more = false;
 
         let mut handler = NavigationHandler;
         let mut ctx = HandlerContext { state: &mut state };

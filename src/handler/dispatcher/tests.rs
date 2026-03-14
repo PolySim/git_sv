@@ -249,6 +249,19 @@ fn test_dispatch_toggle_diff_fullscreen_restores_file_focus_when_closing() {
 }
 
 #[test]
+fn test_load_all_history_noop_when_no_more_history() {
+    let (dir, repo) = setup_test_repo();
+    let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+    state.graph_view.loaded_count = state.graph_view.len();
+    state.graph_view.can_load_more = false;
+
+    let loaded = super::load_all_history(&mut state).unwrap();
+
+    assert!(!loaded);
+    assert_eq!(state.graph_view.loaded_count, state.graph_view.len());
+}
+
+#[test]
 fn test_ui_flow_branch_creation_from_keyboard_input() {
     let mut harness = UiTestHarness::new();
 
