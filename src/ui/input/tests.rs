@@ -63,6 +63,18 @@ fn test_ctrl_p_triggers_force_push() {
 }
 
 #[test]
+fn test_b_switches_to_branches_view_from_graph() {
+    let state = create_test_state();
+
+    let action = map_key(
+        KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE),
+        &state,
+    );
+
+    assert_eq!(action, Some(AppAction::SwitchView(ViewMode::Branches)));
+}
+
+#[test]
 fn test_bottom_left_space_opens_diff_panel() {
     let mut state = create_test_state();
     state.focus = FocusPanel::BottomLeft;

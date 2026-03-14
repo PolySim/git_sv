@@ -74,9 +74,6 @@ pub enum AppAction {
     /// Basculer le mode du panneau bas-gauche
     SwitchBottomMode,
 
-    /// Fermer le panneau de branches
-    CloseBranchPanel,
-
     /// Confirmer une action destructive
     ConfirmAction,
 

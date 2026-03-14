@@ -1,7 +1,6 @@
 //! Point d'entrée du rendu UI : dispatche vers les vues selon le `ViewMode`.
 
 pub mod blame_view;
-pub mod branch_panel;
 pub mod branches_layout;
 pub mod branches_view;
 pub mod common;
@@ -97,17 +96,6 @@ fn render_global_overlays(frame: &mut Frame, state: &AppState) {
 }
 
 fn render_graph_overlays(frame: &mut Frame, state: &AppState) {
-    if state.show_branch_panel {
-        branch_panel::render(
-            frame,
-            branch_panel::BranchPanelRenderContext {
-                branches: &state.branches,
-                branch_selected: state.branch_selected,
-                area: frame.area(),
-            },
-        );
-    }
-
     if state.filter_popup.is_open {
         filter_popup::render(
             frame,

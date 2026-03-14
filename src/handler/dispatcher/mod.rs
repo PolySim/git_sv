@@ -96,11 +96,6 @@ impl ActionDispatcher {
                 Ok(())
             }
 
-            AppAction::CloseBranchPanel => {
-                ctx.state.show_branch_panel = false;
-                Ok(())
-            }
-
             AppAction::SwitchView(view_mode) => {
                 ctx.state.view_mode = view_mode;
                 ctx.state.dirty = true;

@@ -189,23 +189,6 @@ pub(crate) fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         }
     }
 
-    // Contexte: panneau de branches ouvert
-    if state.show_branch_panel {
-        return match key.code {
-            KeyCode::Esc | KeyCode::Char('b') => Some(AppAction::CloseBranchPanel),
-            KeyCode::Char('j') | KeyCode::Down => {
-                Some(AppAction::Navigation(NavigationAction::MoveDown))
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                Some(AppAction::Navigation(NavigationAction::MoveUp))
-            }
-            KeyCode::Enter => Some(AppAction::Branch(BranchAction::Checkout)),
-            KeyCode::Char('n') => Some(AppAction::Branch(BranchAction::Create)),
-            KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::Delete)),
-            _ => None,
-        };
-    }
-
     // Navigation contextuelle selon le focus.
     match state.focus {
         FocusPanel::BottomLeft => {
@@ -283,7 +266,7 @@ pub(crate) fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('c') => Some(AppAction::Git(GitAction::CommitPrompt)),
         KeyCode::Char('s') => Some(AppAction::Git(GitAction::StashPrompt)),
         KeyCode::Char('m') => Some(AppAction::Git(GitAction::MergePrompt)),
-        KeyCode::Char('b') => Some(AppAction::Branch(BranchAction::List)),
+        KeyCode::Char('b') => Some(AppAction::SwitchView(ViewMode::Branches)),
         KeyCode::Char('P') => Some(AppAction::Git(GitAction::Push)),
         KeyCode::Char('p') => Some(AppAction::Git(GitAction::Pull)),
         KeyCode::Char('f') => Some(AppAction::Git(GitAction::Fetch)),

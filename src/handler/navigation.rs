@@ -60,12 +60,7 @@ impl ActionHandler for NavigationHandler {
 fn handle_move_up(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Graph => {
-            if state.show_branch_panel {
-                if state.branch_selected > 0 {
-                    state.branch_selected -= 1;
-                    state.dirty = true;
-                }
-            } else {
+            {
                 state.graph_view.select_previous();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
@@ -87,12 +82,7 @@ fn handle_move_up(state: &mut AppState) {
 fn handle_move_down(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Graph => {
-            if state.show_branch_panel {
-                if state.branch_selected + 1 < state.branches.len() {
-                    state.branch_selected += 1;
-                    state.dirty = true;
-                }
-            } else if !state.graph_view.is_empty() {
+            if !state.graph_view.is_empty() {
                 state.graph_view.select_next();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
@@ -119,7 +109,7 @@ fn handle_page_up(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel && !state.graph_view.is_empty() {
+            if !state.graph_view.is_empty() {
                 state.graph_view.page_up();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
@@ -135,7 +125,7 @@ fn handle_page_down(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel && !state.graph_view.is_empty() {
+            if !state.graph_view.is_empty() {
                 state.graph_view.page_down();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
@@ -152,7 +142,7 @@ fn handle_go_top(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel {
+            {
                 state.graph_view.go_top();
                 // Charger les fichiers du nouveau commit sélectionné
                 refresh_commit_file_data(state);
@@ -168,7 +158,7 @@ fn handle_go_bottom(state: &mut AppState) {
             state.dirty = true;
         }
         _ => {
-            if !state.show_branch_panel && !state.graph_view.is_empty() {
+            if !state.graph_view.is_empty() {
                 let _ = crate::handler::dispatcher::load_all_history(state);
                 state.graph_view.go_bottom();
                 // Charger les fichiers du nouveau commit sélectionné

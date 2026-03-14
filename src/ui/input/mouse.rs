@@ -48,7 +48,6 @@ fn handle_mouse_click(
 
     match hit.zone {
         ClickableZone::Modal => handle_modal_click(state, &hit),
-        ClickableZone::BranchPanel => handle_branch_panel_click(state, &hit),
         ClickableZone::NavBar => {
             // Clic sur un tab de navigation
             calculate_nav_tab(hit.relative_x).map(AppAction::SwitchView)
@@ -147,40 +146,6 @@ fn handle_modal_click(
         }
 
         return Some(AppAction::CancelAction);
-    }
-
-    None
-}
-
-fn handle_branch_panel_click(
-    state: &AppState,
-    hit: &crate::ui::hit_test::HitTestResult,
-) -> Option<AppAction> {
-    use crate::ui::common::centered_rect;
-
-    let popup = centered_rect(60, 50, state.screen_area);
-
-    // Clic hors popup -> fermer.
-    if hit.relative_x < popup.x
-        || hit.relative_x >= popup.x + popup.width
-        || hit.relative_y < popup.y
-        || hit.relative_y >= popup.y + popup.height
-    {
-        return Some(AppAction::CloseBranchPanel);
-    }
-
-    // Zone liste : header + items.
-    let item_y = hit.relative_y.saturating_sub(popup.y + 1) as usize;
-    if item_y < state.branches.len() {
-        let current = state.branch_selected as isize;
-        let target = item_y as isize;
-        if target > current {
-            return Some(AppAction::Navigation(NavigationAction::MoveDown));
-        }
-        if target < current {
-            return Some(AppAction::Navigation(NavigationAction::MoveUp));
-        }
-        return Some(AppAction::Branch(BranchAction::Checkout));
     }
 
     None

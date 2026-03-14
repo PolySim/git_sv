@@ -175,7 +175,6 @@ fn load_more_filtered_history(ctx: &mut HandlerContext, target_count: usize) -> 
 /// Déclenche un chargement supplémentaire quand la sélection approche du bas.
 pub fn maybe_load_more_history(state: &mut crate::state::AppState) -> Result<bool> {
     if !matches!(state.view_mode, ViewMode::Graph)
-        || state.show_branch_panel
         || state.graph_view.is_empty()
         || !state.graph_view.can_load_more
         || state.graph_view.is_loading_more
@@ -212,10 +211,7 @@ pub fn maybe_load_more_history(state: &mut crate::state::AppState) -> Result<boo
 
 /// Charge tout l'historique restant jusqu'à la fin.
 pub fn load_all_history(state: &mut crate::state::AppState) -> Result<bool> {
-    if !matches!(state.view_mode, ViewMode::Graph)
-        || state.show_branch_panel
-        || state.graph_view.is_loading_more
-    {
+    if !matches!(state.view_mode, ViewMode::Graph) || state.graph_view.is_loading_more {
         return Ok(false);
     }
 

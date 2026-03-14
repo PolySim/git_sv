@@ -11,7 +11,6 @@ pub use cache::DiffCache;
 pub use filter::{FilterField, FilterPopupState, GraphFilter};
 pub use view::*;
 
-use crate::git::branch::BranchInfo;
 use crate::git::repo::{GitRepo, StatusEntry};
 use ratatui::layout::Rect;
 use std::time::{Duration, Instant};
@@ -74,9 +73,6 @@ pub struct AppState {
     /// Entrées de status (pour la vue staging).
     pub status_entries: Vec<StatusEntry>,
 
-    /// Branches (pour le panneau de branches).
-    pub branches: Vec<BranchInfo>,
-
     // ═══════════════════════════════════════════════════
     // Vues optionnelles (chargées à la demande)
     // ═══════════════════════════════════════════════════
@@ -112,12 +108,6 @@ pub struct AppState {
 
     /// Spinner de chargement actif.
     pub loading_spinner: Option<crate::ui::loading::LoadingSpinner>,
-
-    /// Panneau de branches ouvert.
-    pub show_branch_panel: bool,
-
-    /// Index de la branche sélectionnée dans le panneau.
-    pub branch_selected: usize,
 
     /// Indique si un merge est en cours (MERGE_HEAD existe).
     pub is_merging: bool,
@@ -158,7 +148,6 @@ impl AppState {
             focus: FocusPanel::Graph,
             screen_area: Rect::default(),
             status_entries: Vec::new(),
-            branches: Vec::new(),
             staging_state: StagingState::new(),
             branches_view_state: BranchesViewState::new(),
             blame_state: None,
@@ -169,8 +158,6 @@ impl AppState {
             flash_message: None,
             pending_confirmation: None,
             loading_spinner: None,
-            show_branch_panel: false,
-            branch_selected: 0,
             is_merging: false,
             should_quit: false,
             diff_cache: DiffCache::new(DIFF_CACHE_CAPACITY),

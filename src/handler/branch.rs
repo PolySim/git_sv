@@ -13,7 +13,6 @@ impl ActionHandler for BranchHandler {
 
     fn handle(&mut self, ctx: &mut HandlerContext, action: BranchAction) -> Result<()> {
         match action {
-            BranchAction::List => handle_list(ctx.state),
             BranchAction::Checkout => handle_checkout(ctx.state),
             BranchAction::Create => handle_create(ctx.state),
             BranchAction::Delete => handle_delete(ctx.state),
@@ -90,40 +89,9 @@ fn handle_focus_detail(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
-fn handle_list(state: &mut AppState) -> Result<()> {
-    if matches!(state.view_mode, ViewMode::Graph | ViewMode::Branches) {
-        state.show_branch_panel = !state.show_branch_panel;
-        if state.show_branch_panel {
-            match crate::git::branch::list_all_branches(&state.repo.repo) {
-                Ok((local, remote)) => {
-                    // Legacy (pour le panneau overlay en Graph view)
-                    state.branches = local.clone();
-                    state.branch_selected = 0;
-                    // Nouveau système (pour la vue Branches)
-                    state.branches_view_state.local_branches.set_items(local);
-                    state.branches_view_state.remote_branches.set_items(remote);
-                }
-                Err(e) => {
-                    state.set_flash_message(format!("Erreur: {}", e));
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 fn handle_checkout(state: &mut AppState) -> Result<()> {
     let branch_info = if state.view_mode == ViewMode::Branches {
-        // Lire depuis le nouvel état BranchesViewState
         state.branches_view_state.selected_branch_info()
-    } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
-        // Legacy: panel overlay dans la vue Graph
-        state.branches.get(state.branch_selected).map(|b| {
-            (
-                b,
-                crate::state::SelectedBranch::Local(state.branch_selected),
-            )
-        })
     } else {
         None
     };
@@ -141,10 +109,6 @@ fn handle_checkout(state: &mut AppState) -> Result<()> {
         let branch_name = branch.name.clone();
         match crate::git::branch::checkout_branch(&state.repo.repo, &branch_name) {
             Ok(_) => {
-                // Fermer le panel si applicable
-                if state.show_branch_panel {
-                    state.show_branch_panel = false;
-                }
                 state.mark_dirty();
                 state.set_flash_message(format!("Branche '{}' check-out ✓", branch_name));
             }
@@ -167,18 +131,10 @@ fn handle_create(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_delete(state: &mut AppState) -> Result<()> {
-    use crate::state::SelectedBranch;
     use crate::ui::confirm_dialog::ConfirmAction;
 
     let selected_info = if state.view_mode == ViewMode::Branches {
-        // Lire depuis le nouvel état BranchesViewState
         state.branches_view_state.selected_branch_info()
-    } else if state.view_mode == ViewMode::Graph && state.show_branch_panel {
-        // Legacy: panel overlay
-        state
-            .branches
-            .get(state.branch_selected)
-            .map(|b| (b, SelectedBranch::Local(state.branch_selected)))
     } else {
         None
     };
@@ -718,15 +674,7 @@ mod tests {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
         state.view_mode = ViewMode::Graph;
-        state.show_branch_panel = false;
         let mut handler = BranchHandler;
-
-        {
-            let mut ctx = HandlerContext { state: &mut state };
-            handler.handle(&mut ctx, BranchAction::List).unwrap();
-        }
-
-        assert!(state.show_branch_panel);
     }
 
     #[test]

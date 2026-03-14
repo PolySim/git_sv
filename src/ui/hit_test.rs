@@ -30,8 +30,6 @@ pub enum ClickableZone {
     StatusBar,
     /// Zone d'un popup modal (merge picker, reset picker, confirmation)
     Modal,
-    /// Zone du panneau de branches
-    BranchPanel,
     /// Zone en dehors des éléments interactifs
     Outside,
 }
@@ -275,18 +273,6 @@ fn hit_test_modals(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
     if state.filter_popup.is_open {
         return Some(HitTestResult {
             zone: ClickableZone::Modal,
-            relative_x: x,
-            relative_y: y,
-            rect: Rect::new(0, 0, u16::MAX, u16::MAX),
-        });
-    }
-
-    // Branch panel (overlay)
-    if state.show_branch_panel {
-        // Le panel de branches occupe une partie de l'écran
-        // On le traite comme un modal pour bloquer le reste
-        return Some(HitTestResult {
-            zone: ClickableZone::BranchPanel,
             relative_x: x,
             relative_y: y,
             rect: Rect::new(0, 0, u16::MAX, u16::MAX),

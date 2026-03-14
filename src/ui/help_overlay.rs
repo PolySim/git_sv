@@ -120,8 +120,8 @@ fn build_help_content() -> Vec<Line<'static>> {
         key_line(keybindings::git_actions::STASH, text("Stash", "Stash")),
         key_line(keybindings::git_actions::MERGE, text("Merge", "Merge")),
         key_line(
-            keybindings::git_actions::BRANCH_PANEL,
-            text("Panneau branches", "Branches panel"),
+            keybindings::git_actions::BRANCHES,
+            text("Vue branches", "Branches view"),
         ),
         key_line(keybindings::git_actions::PUSH, text("Push", "Push")),
         key_line(

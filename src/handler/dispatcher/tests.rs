@@ -185,20 +185,6 @@ fn test_dispatch_none_action() {
 }
 
 #[test]
-fn test_dispatch_close_branch_panel() {
-    let (dir, repo) = setup_test_repo();
-    let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
-    state.show_branch_panel = true;
-    let mut dispatcher = ActionDispatcher::new();
-
-    dispatcher
-        .dispatch(&mut state, AppAction::CloseBranchPanel)
-        .unwrap();
-
-    assert!(!state.show_branch_panel);
-}
-
-#[test]
 fn test_dispatch_switch_bottom_mode() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();

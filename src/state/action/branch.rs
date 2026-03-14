@@ -4,8 +4,6 @@
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BranchAction {
-    /// Lister les branches
-    List,
     /// Checkout une branche
     Checkout,
     /// Créer une branche

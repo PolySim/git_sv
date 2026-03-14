@@ -54,8 +54,8 @@ pub mod git_actions {
     pub const FORCE_PUSH: &str = "Ctrl+P";
     /// Fetch.
     pub const FETCH: &str = "f";
-    /// Ouvrir le panneau branches (overlay).
-    pub const BRANCH_PANEL: &str = "b";
+    /// Ouvrir la vue branches.
+    pub const BRANCHES: &str = "b";
     /// Nouveau commit.
     pub const COMMIT: &str = "c";
     /// Stash rapide.
