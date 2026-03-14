@@ -147,7 +147,9 @@ pub mod staging {
     /// Amend commit.
     pub const AMEND: &str = "A";
     /// Basculer le focus.
-    pub const SWITCH_FOCUS: &[&str] = &["Tab", "Space"];
+    pub const SWITCH_FOCUS: &[&str] = &["Tab"];
+    /// Ouvrir le diff depuis la liste active.
+    pub const OPEN_DIFF: &str = "Space";
 }
 
 /// Diff et affichage.

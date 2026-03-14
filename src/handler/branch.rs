@@ -674,7 +674,6 @@ mod tests {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
         state.view_mode = ViewMode::Graph;
-        let mut handler = BranchHandler;
     }
 
     #[test]

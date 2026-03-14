@@ -51,6 +51,43 @@ fn test_filter_popup_arrow_down_moves_to_next_field() {
 }
 
 #[test]
+fn test_help_mode_esc_closes_help() {
+    let mut state = create_test_state();
+    state.toggle_help();
+
+    let action = map_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
+
+    assert_eq!(action, Some(AppAction::ToggleHelp));
+}
+
+#[test]
+fn test_branches_tab_switches_section() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::Branches;
+
+    let action = map_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &state);
+
+    assert_eq!(
+        action,
+        Some(AppAction::Branch(
+            crate::state::action::BranchAction::NextSection
+        ))
+    );
+}
+
+#[test]
+fn test_graph_question_mark_opens_help() {
+    let state = create_test_state();
+
+    let action = map_key(
+        KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE),
+        &state,
+    );
+
+    assert_eq!(action, Some(AppAction::ToggleHelp));
+}
+
+#[test]
 fn test_ctrl_p_triggers_force_push() {
     let state = create_test_state();
 
