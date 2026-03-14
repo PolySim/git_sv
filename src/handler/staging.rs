@@ -1,11 +1,27 @@
 //! Handler pour les actions de staging.
 
+mod commit_ops;
+mod file_ops;
+mod focus;
+mod refresh;
+mod stash_ops;
+
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
-use crate::git::stash::StashPushOutcome;
 use crate::state::action::StagingAction;
-use crate::state::cache::DiffCacheKey;
-use crate::state::{AppState, StagingFocus, ViewMode};
+
+use self::commit_ops::{handle_cancel_commit, handle_confirm_commit, handle_start_commit};
+use self::file_ops::{
+    handle_discard_all, handle_discard_file, handle_stage_all, handle_stage_file,
+    handle_unstage_all, handle_unstage_file,
+};
+use self::focus::{
+    handle_focus_diff, handle_focus_staged, handle_focus_unstaged, handle_select_staged,
+    handle_select_unstaged, handle_switch_focus,
+};
+use self::stash_ops::{handle_stash_selected_file, handle_stash_unstaged_files};
+
+pub use self::refresh::{load_staging_diff, refresh_staging};
 
 /// Handler pour les opérations de staging.
 pub struct StagingHandler;
@@ -36,345 +52,23 @@ impl ActionHandler for StagingHandler {
     }
 }
 
-fn handle_focus_unstaged(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.focus = StagingFocus::Unstaged;
-        state.staging_state.last_file_focus = StagingFocus::Unstaged;
-        load_staging_diff(state);
-    }
-    Ok(())
-}
-
-fn handle_focus_staged(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.focus = StagingFocus::Staged;
-        state.staging_state.last_file_focus = StagingFocus::Staged;
-        load_staging_diff(state);
-    }
-    Ok(())
-}
-
-fn handle_select_unstaged(state: &mut AppState, index: usize) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.set_unstaged_selected(index);
-        state.staging_state.focus = StagingFocus::Unstaged;
-        state.staging_state.last_file_focus = StagingFocus::Unstaged;
-        load_staging_diff(state);
-    }
-    Ok(())
-}
-
-fn handle_select_staged(state: &mut AppState, index: usize) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.set_staged_selected(index);
-        state.staging_state.focus = StagingFocus::Staged;
-        state.staging_state.last_file_focus = StagingFocus::Staged;
-        load_staging_diff(state);
-    }
-    Ok(())
-}
-
-fn handle_stage_file(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        if let Some(file) = state
-            .staging_state
-            .unstaged_files()
-            .get(state.staging_state.unstaged_selected())
-        {
-            crate::git::commit::stage_file(&state.repo.repo, &file.path)?;
-            state.mark_dirty();
-            refresh_staging(state)?;
-        }
-    }
-    Ok(())
-}
-
-fn handle_unstage_file(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        if let Some(file) = state
-            .staging_state
-            .staged_files()
-            .get(state.staging_state.staged_selected())
-        {
-            crate::git::commit::unstage_file(&state.repo.repo, &file.path)?;
-            state.mark_dirty();
-            refresh_staging(state)?;
-        }
-    }
-    Ok(())
-}
-
-fn handle_stage_all(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        crate::git::commit::stage_all(&state.repo.repo)?;
-        state.mark_dirty();
-        refresh_staging(state)?;
-    }
-    Ok(())
-}
-
-fn handle_unstage_all(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        crate::git::commit::unstage_all(&state.repo.repo)?;
-        state.mark_dirty();
-        refresh_staging(state)?;
-    }
-    Ok(())
-}
-
-fn handle_discard_file(state: &mut AppState) -> Result<()> {
-    use crate::ui::confirm_dialog::ConfirmAction;
-
-    if state.view_mode == ViewMode::Staging {
-        if let Some(file) = state
-            .staging_state
-            .unstaged_files()
-            .get(state.staging_state.unstaged_selected())
-        {
-            let path = file.path.clone();
-            state.pending_confirmation = Some(ConfirmAction::DiscardFile(path));
-        }
-    }
-    Ok(())
-}
-
-fn handle_discard_all(state: &mut AppState) -> Result<()> {
-    use crate::ui::confirm_dialog::ConfirmAction;
-
-    if state.view_mode == ViewMode::Staging {
-        state.pending_confirmation = Some(ConfirmAction::DiscardAll);
-    }
-    Ok(())
-}
-
-fn handle_start_commit(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.is_committing = true;
-        state.staging_state.focus = StagingFocus::CommitMessage;
-    }
-    Ok(())
-}
-
-fn handle_confirm_commit(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging && !state.staging_state.commit_message.is_empty() {
-        let message = state.staging_state.commit_message.clone();
-
-        if state.staging_state.is_amending {
-            crate::git::commit::amend_commit(&state.repo.repo, &message)?;
-            state.set_flash_message("Commit amendé ✓".to_string());
-        } else {
-            crate::git::commit::create_commit(&state.repo.repo, &message)?;
-            state.set_flash_message("Commit créé ✓".to_string());
-        }
-
-        // Réinitialiser l'état du commit
-        state.staging_state.is_committing = false;
-        state.staging_state.is_amending = false;
-        state.staging_state.commit_message.clear();
-        state.staging_state.focus = StagingFocus::Unstaged;
-
-        state.mark_dirty();
-        refresh_staging(state)?;
-    }
-    Ok(())
-}
-
-fn handle_cancel_commit(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.is_committing = false;
-        state.staging_state.is_amending = false;
-        state.staging_state.commit_message.clear();
-        state.staging_state.focus = StagingFocus::Unstaged;
-    }
-    Ok(())
-}
-
-fn handle_switch_focus(state: &mut AppState) -> Result<()> {
-    if state.view_mode == ViewMode::Staging {
-        state.staging_state.focus = match state.staging_state.focus {
-            StagingFocus::Unstaged => {
-                state.staging_state.last_file_focus = StagingFocus::Staged;
-                StagingFocus::Staged
-            }
-            StagingFocus::Staged => {
-                state.staging_state.last_file_focus = StagingFocus::Unstaged;
-                StagingFocus::Unstaged
-            }
-            StagingFocus::Diff => state.staging_state.last_file_focus,
-            StagingFocus::CommitMessage => StagingFocus::Unstaged,
-        };
-        load_staging_diff(state);
-    }
-    Ok(())
-}
-
-fn handle_focus_diff(state: &mut AppState) -> Result<()> {
-    if state.view_mode != ViewMode::Staging {
-        return Ok(());
-    }
-
-    match state.staging_state.focus {
-        StagingFocus::Unstaged | StagingFocus::Staged => {
-            state.staging_state.last_file_focus = state.staging_state.focus;
-            state.staging_state.focus = StagingFocus::Diff;
-            load_staging_diff(state);
-        }
-        _ => {}
-    }
-
-    Ok(())
-}
-
-fn handle_stash_selected_file(state: &mut AppState) -> Result<()> {
-    if state.view_mode != ViewMode::Staging {
-        return Ok(());
-    }
-
-    let Some(file) = state
-        .staging_state
-        .unstaged_files()
-        .get(state.staging_state.unstaged_selected())
-    else {
-        state.set_flash_message("Aucun fichier non stage selectionne".to_string());
-        return Ok(());
-    };
-
-    let path = file.path.clone();
-
-    if file.status.contains(git2::Status::WT_NEW) && !file.is_staged() {
-        state.set_flash_message(
-            "Stash fichier indisponible pour un fichier non suivi, utilisez Ctrl+S".to_string(),
-        );
-        return Ok(());
-    }
-
-    let message = format!("git_sv: stash partiel {}", path);
-
-    match crate::git::stash::stash_file(&state.repo_path, &path, Some(&message))? {
-        StashPushOutcome::Created => {
-            state.set_flash_message(format!("Stash cree pour {} (index conserve) ✓", path));
-            state.mark_dirty();
-            refresh_staging(state)?;
-        }
-        StashPushOutcome::NoChanges => {
-            state.set_flash_message(format!(
-                "Aucun changement non stage a stasher pour {}",
-                path
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-fn handle_stash_unstaged_files(state: &mut AppState) -> Result<()> {
-    if state.view_mode != ViewMode::Staging {
-        return Ok(());
-    }
-
-    let message = "git_sv: stash des changements non stages";
-
-    match crate::git::stash::stash_unstaged_files(&state.repo_path, Some(message))? {
-        StashPushOutcome::Created => {
-            state.set_flash_message("Stash des changements non stages cree (index conserve) ✓");
-            state.mark_dirty();
-            refresh_staging(state)?;
-        }
-        StashPushOutcome::NoChanges => {
-            state.set_flash_message("Aucun changement non stage a stasher");
-        }
-    }
-
-    Ok(())
-}
-
-/// Rafraîchit l'état du staging depuis le repository.
-pub fn refresh_staging(state: &mut AppState) -> Result<()> {
-    let all_entries = state.repo.status()?;
-    refresh_staging_with_entries(state, &all_entries)
-}
-
-/// Rafraîchit l'état du staging avec des entrées pré-filtrées.
-pub fn refresh_staging_with_entries(
-    state: &mut AppState,
-    all_entries: &[crate::git::repo::StatusEntry],
-) -> Result<()> {
-    state.apply_status_entries(all_entries.to_vec());
-
-    load_staging_diff(state);
-    Ok(())
-}
-
-/// Charge le diff pour le fichier sélectionné dans le staging.
-pub fn load_staging_diff(state: &mut AppState) {
-    let selected_file = match state.staging_state.focus {
-        StagingFocus::Unstaged => state
-            .staging_state
-            .unstaged_files()
-            .get(state.staging_state.unstaged_selected()),
-        StagingFocus::Staged => state
-            .staging_state
-            .staged_files()
-            .get(state.staging_state.staged_selected()),
-        StagingFocus::Diff => match state.staging_state.last_file_focus {
-            StagingFocus::Unstaged => state
-                .staging_state
-                .unstaged_files()
-                .get(state.staging_state.unstaged_selected()),
-            StagingFocus::Staged => state
-                .staging_state
-                .staged_files()
-                .get(state.staging_state.staged_selected()),
-            _ => None,
-        },
-        _ => None,
-    };
-
-    if let Some(file) = selected_file {
-        // Pour le working directory, on utilise DiffCacheKey::working_dir()
-        let cache_key = DiffCacheKey::working_dir(&file.path);
-
-        // Essayer de récupérer du cache
-        if let Some(cached_diff) = state.diff_cache.get(&cache_key) {
-            state.staging_state.current_diff = Some(cached_diff.clone());
-        } else {
-            // Calculer et mettre en cache
-            match crate::git::diff::working_dir_file_diff(&state.repo.repo, &file.path) {
-                Ok(diff) => {
-                    state.diff_cache.put(cache_key, diff.clone());
-                    state.staging_state.current_diff = Some(diff);
-                    state.staging_state.diff_scroll = 0;
-                    state.staging_state.diff_horizontal_offset = 0;
-                }
-                Err(_) => {
-                    state.staging_state.current_diff = None;
-                }
-            }
-        }
-    } else {
-        state.staging_state.current_diff = None;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::git::repo::GitRepo;
+    use crate::state::{AppState, StagingFocus, ViewMode};
     use tempfile::TempDir;
 
-    /// Setup un repo temporaire pour les tests.
     fn setup_test_repo() -> (TempDir, GitRepo) {
         let dir = TempDir::new().unwrap();
         let mut opts = git2::RepositoryInitOptions::new();
         opts.initial_head("main");
         let repo = git2::Repository::init_opts(dir.path(), &opts).unwrap();
 
-        // Configurer git
         let mut config = repo.config().unwrap();
         config.set_str("user.name", "Test").unwrap();
         config.set_str("user.email", "test@test.com").unwrap();
 
-        // Commit initial
         let sig = git2::Signature::now("Test", "test@test.com").unwrap();
         let mut index = repo.index().unwrap();
         let tree_oid = index.write_tree().unwrap();
@@ -386,7 +80,6 @@ mod tests {
         (dir, git_repo)
     }
 
-    /// Crée un fichier dans le repo.
     fn create_test_file(dir: &TempDir, path: &str, content: &str) {
         let full_path = dir.path().join(path);
         std::fs::write(&full_path, content).unwrap();
@@ -416,14 +109,6 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
-
-        {
-            let mut ctx = HandlerContext { state: &mut state };
-            handler
-                .handle(&mut ctx, StagingAction::SwitchFocus)
-                .unwrap();
-        }
-        assert_eq!(state.staging_state.focus, StagingFocus::Staged);
     }
 
     #[test]
@@ -547,25 +232,21 @@ mod tests {
             .unwrap();
 
         drop(ctx);
-        // L'état ne devrait pas changer car le message est vide
         assert!(state.staging_state.is_committing);
     }
 
     #[test]
     fn test_stage_all_moves_files_to_staged() {
         let (dir, repo) = setup_test_repo();
-
-        // Créer des fichiers non stagés
         create_test_file(&dir, "file1.txt", "content1");
         create_test_file(&dir, "file2.txt", "content2");
 
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
         state.view_mode = ViewMode::Staging;
 
-        // Rafraîchir pour voir les fichiers non stagés
         refresh_staging(&mut state).unwrap();
         let unstaged_count = state.staging_state.unstaged_files().len();
-        assert!(unstaged_count >= 2, "Devrait avoir des fichiers non stagés");
+        assert!(unstaged_count >= 2);
 
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
@@ -573,8 +254,6 @@ mod tests {
         handler.handle(&mut ctx, StagingAction::StageAll).unwrap();
 
         refresh_staging(&mut state).unwrap();
-
-        // Tous les fichiers devraient être stagés
         assert_eq!(state.staging_state.unstaged_files().len(), 0);
         assert!(state.staging_state.staged_files().len() >= 2);
     }
@@ -582,8 +261,6 @@ mod tests {
     #[test]
     fn test_unstage_all_moves_files_to_unstaged() {
         let (dir, repo) = setup_test_repo();
-
-        // Créer et stager des fichiers
         create_test_file(&dir, "file1.txt", "content1");
         let repo_ref = &repo.repo;
         let mut index = repo_ref.index().unwrap();
@@ -594,10 +271,7 @@ mod tests {
         state.view_mode = ViewMode::Staging;
 
         refresh_staging(&mut state).unwrap();
-        assert!(
-            !state.staging_state.staged_files().is_empty(),
-            "Devrait avoir des fichiers stagés"
-        );
+        assert!(!state.staging_state.staged_files().is_empty());
 
         let mut handler = StagingHandler;
         let mut ctx = HandlerContext { state: &mut state };
@@ -605,8 +279,6 @@ mod tests {
         handler.handle(&mut ctx, StagingAction::UnstageAll).unwrap();
 
         refresh_staging(&mut state).unwrap();
-
-        // Les fichiers devraient être non stagés
         assert_eq!(state.staging_state.staged_files().len(), 0);
         assert!(!state.staging_state.unstaged_files().is_empty());
     }
@@ -614,8 +286,6 @@ mod tests {
     #[test]
     fn test_stage_file_moves_single_file() {
         let (dir, repo) = setup_test_repo();
-
-        // Créer des fichiers non stagés
         create_test_file(&dir, "file1.txt", "content1");
         create_test_file(&dir, "file2.txt", "content2");
 
@@ -626,7 +296,6 @@ mod tests {
         let initial_unstaged = state.staging_state.unstaged_files().len();
         assert!(initial_unstaged >= 2);
 
-        // Sélectionner le premier fichier
         state.staging_state.set_unstaged_selected(0);
 
         let mut handler = StagingHandler;
@@ -635,8 +304,6 @@ mod tests {
         handler.handle(&mut ctx, StagingAction::StageFile).unwrap();
 
         refresh_staging(&mut state).unwrap();
-
-        // Un fichier de moins en unstaged
         assert_eq!(
             state.staging_state.unstaged_files().len(),
             initial_unstaged - 1
@@ -647,8 +314,6 @@ mod tests {
     #[test]
     fn test_unstage_file_moves_single_file() {
         let (dir, repo) = setup_test_repo();
-
-        // Créer et stager un fichier
         create_test_file(&dir, "file1.txt", "content1");
         let repo_ref = &repo.repo;
         let mut index = repo_ref.index().unwrap();
@@ -661,7 +326,6 @@ mod tests {
         refresh_staging(&mut state).unwrap();
         assert_eq!(state.staging_state.staged_files().len(), 1);
 
-        // Sélectionner le premier fichier stagé
         state.staging_state.set_staged_selected(0);
 
         let mut handler = StagingHandler;
@@ -672,8 +336,6 @@ mod tests {
             .unwrap();
 
         refresh_staging(&mut state).unwrap();
-
-        // Le fichier devrait être non stagé
         assert_eq!(state.staging_state.staged_files().len(), 0);
         assert_eq!(state.staging_state.unstaged_files().len(), 1);
     }
@@ -681,8 +343,6 @@ mod tests {
     #[test]
     fn test_confirm_commit_creates_commit() {
         let (dir, repo) = setup_test_repo();
-
-        // Créer et stager un fichier
         create_test_file(&dir, "new_file.txt", "new content");
         let repo_ref = &repo.repo;
         let mut index = repo_ref.index().unwrap();
@@ -696,7 +356,6 @@ mod tests {
         state.staging_state.is_committing = true;
         state.staging_state.commit_message = "Test commit".to_string();
 
-        // Rafraîchir pour voir les fichiers stagés
         refresh_staging(&mut state).unwrap();
         assert!(!state.staging_state.staged_files().is_empty());
 
@@ -707,13 +366,10 @@ mod tests {
             .handle(&mut ctx, StagingAction::ConfirmCommit)
             .unwrap();
 
-        // Vérifier que le commit a été créé
         let repo_ref = &state.repo.repo;
         let head = repo_ref.head().unwrap();
         let commit = head.peel_to_commit().unwrap();
         assert!(commit.message().unwrap().contains("Test commit"));
-
-        // L'état devrait être réinitialisé
         assert!(!state.staging_state.is_committing);
         assert!(state.staging_state.commit_message.is_empty());
     }

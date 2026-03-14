@@ -7,14 +7,6 @@ use crate::git::conflict::{
     ConflictResolution, ConflictResolutionMode, LineSource, MergeFile, ResolvedLine,
 };
 
-/// Genere le contenu resolu d'un fichier en fonction des resolutions.
-pub fn generate_resolved_content(file: &MergeFile, mode: ConflictResolutionMode) -> Vec<String> {
-    generate_resolved_content_with_source(file, mode)
-        .into_iter()
-        .map(|line| line.content)
-        .collect()
-}
-
 /// Genere le contenu resolu avec provenance de chaque ligne.
 pub fn generate_resolved_content_with_source(
     file: &MergeFile,

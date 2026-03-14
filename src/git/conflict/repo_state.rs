@@ -2,15 +2,6 @@ use git2::Repository;
 
 use crate::error::{GitSvError, Result};
 
-/// Verifie si le repository a des conflits non resolus.
-pub fn has_conflicts(repo: &Repository) -> Result<bool> {
-    let index = repo
-        .index()
-        .map_err(|e| GitSvError::Other(format!("Impossible d'acceder a l'index: {}", e)))?;
-
-    Ok(index.has_conflicts())
-}
-
 /// Recupere le nom court de la branche courante (HEAD).
 pub fn get_current_branch_name(repo: &Repository) -> String {
     match repo.head() {
@@ -25,40 +16,6 @@ pub fn get_current_branch_name(repo: &Repository) -> String {
         }
         Err(_) => "HEAD".to_string(),
     }
-}
-
-/// Recupere le nom de la branche mergee depuis MERGE_HEAD ou un message d'operation.
-pub fn get_merge_branch_name(repo: &Repository, operation_msg: Option<&str>) -> String {
-    if let Some(msg) = operation_msg {
-        if let Some(start) = msg.find('\'') {
-            if let Some(end) = msg[start + 1..].find('\'') {
-                return msg[start + 1..start + 1 + end].to_string();
-            }
-        }
-    }
-
-    let merge_head_path = repo.path().join("MERGE_HEAD");
-    if let Ok(merge_head_content) = std::fs::read_to_string(&merge_head_path) {
-        let merge_head_oid = merge_head_content.trim();
-        if let Ok(oid) = git2::Oid::from_str(merge_head_oid) {
-            if let Ok(branches) = repo.branches(None) {
-                for (branch, _) in branches.flatten() {
-                    if let Some(target) = branch.get().target() {
-                        if target == oid {
-                            if let Some(name) = branch.name().ok().flatten() {
-                                return name.to_string();
-                            }
-                        }
-                    }
-                }
-            }
-            return format!("{:.7}", oid);
-        }
-    }
-
-    operation_msg
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "MERGE_HEAD".to_string())
 }
 
 /// Verifie si le repository est en etat de merge.

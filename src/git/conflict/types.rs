@@ -31,13 +31,6 @@ pub enum ConflictType {
     BothAdded,
 }
 
-/// Resolution par ligne dans une section (ancienne structure, gardee pour compatibilite).
-#[derive(Debug, Clone, PartialEq)]
-pub struct LineResolution {
-    pub line_index: usize,
-    pub source: ConflictResolution,
-}
-
 /// Resolution au niveau ligne - permet de choisir individuellement quelles lignes inclure.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineLevelResolution {
@@ -55,13 +48,6 @@ impl LineLevelResolution {
             touched: false,
         }
     }
-
-    /// Verifie si au moins une ligne est selectionnee de chaque cote.
-    pub fn has_selection(&self) -> bool {
-        let has_ours = self.ours_lines_included.iter().any(|&b| b);
-        let has_theirs = self.theirs_lines_included.iter().any(|&b| b);
-        has_ours || has_theirs
-    }
 }
 
 /// Resolution possible pour une section de conflit.
@@ -72,13 +58,6 @@ pub enum ConflictResolution {
     Both,
 }
 
-/// Cote de resolution (determine par le panneau actif).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ResolutionSide {
-    Ours,
-    Theirs,
-}
-
 /// Section de conflit enrichie.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConflictSection {
@@ -87,7 +66,6 @@ pub struct ConflictSection {
     pub theirs: Vec<String>,
     pub context_after: Vec<String>,
     pub resolution: Option<ConflictResolution>,
-    pub line_resolutions: Vec<LineResolution>,
     pub line_level_resolution: Option<LineLevelResolution>,
 }
 

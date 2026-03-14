@@ -34,7 +34,6 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
                         theirs,
                         context_after,
                         resolution: None,
-                        line_resolutions: Vec::new(),
                         line_level_resolution: Some(line_resolution),
                     });
 
@@ -115,7 +114,6 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
                     theirs: theirs_content.clone(),
                     context_after: vec![],
                     resolution: None,
-                    line_resolutions: vec![],
                     line_level_resolution: Some(LineLevelResolution::new(0, theirs_content.len())),
                 }]
             }
@@ -127,7 +125,6 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
                     theirs: vec![],
                     context_after: vec![],
                     resolution: None,
-                    line_resolutions: vec![],
                     line_level_resolution: Some(LineLevelResolution::new(ours_content.len(), 0)),
                 }]
             }
