@@ -1,7 +1,6 @@
 //! Resolution de conflits de merge : detection, modes (fichier/bloc/ligne), finalisation.
 
 mod content;
-mod merge_files;
 mod parse;
 mod repo_state;
 mod resolve;
