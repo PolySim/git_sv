@@ -30,8 +30,80 @@ pub mod theme;
 #[cfg(test)]
 mod tests;
 
-use crate::state::{AppState, FocusPanel, ViewMode};
-use ratatui::Frame;
+use crate::git::diff::DiffViewMode;
+use crate::state::{AppState, BottomLeftMode, FocusPanel, ViewMode};
+use ratatui::{layout::Rect, Frame};
+
+/// Snapshot immuable de l'état pour le rendu de la vue graphe.
+struct GraphViewSnapshot {
+    is_diff_fullscreen: bool,
+    is_search_active: bool,
+    graph_len: usize,
+    selected_index: usize,
+    current_branch: Option<String>,
+    filter_active: bool,
+    loaded_count: usize,
+    total_commits: Option<usize>,
+    can_load_more: bool,
+    is_loading_more: bool,
+    focus: FocusPanel,
+    bottom_left_mode: BottomLeftMode,
+    diff_scroll_offset: usize,
+    diff_horizontal_offset: usize,
+    diff_view_mode: DiffViewMode,
+    flash_message: Option<String>,
+    is_merging: bool,
+    unresolved_conflicts: usize,
+    selected_hash: Option<String>,
+    current_view: ViewMode,
+}
+
+impl AppState {
+    /// Crée un snapshot immuable pour le rendu de la vue graphe.
+    fn graph_view_snapshot(&self) -> GraphViewSnapshot {
+        let unresolved_conflicts = self
+            .conflicts_state
+            .as_ref()
+            .map(|conflicts| {
+                conflicts
+                    .all_files
+                    .iter()
+                    .filter(|file| !file.is_resolved && file.has_conflicts)
+                    .count()
+            })
+            .unwrap_or(0);
+
+        let selected_hash = self.graph_view.selected_commit().map(|node| {
+            let hash = node.oid.to_string();
+            hash[..7].to_string()
+        });
+
+        GraphViewSnapshot {
+            is_diff_fullscreen: self.graph_view.diff_fullscreen,
+            is_search_active: self.search_state.is_active,
+            graph_len: self.graph_view.len(),
+            selected_index: self.graph_view.selected_index(),
+            current_branch: self.current_branch.clone(),
+            filter_active: self.filters.graph_filter.is_active(),
+            loaded_count: self.graph_view.loaded_count,
+            total_commits: self.graph_view.total_commits,
+            can_load_more: self.graph_view.can_load_more,
+            is_loading_more: self.graph_view.is_loading_more,
+            focus: self.focus,
+            bottom_left_mode: self.bottom_left_mode,
+            diff_scroll_offset: self.graph_view.diff_scroll_offset,
+            diff_horizontal_offset: self.graph_view.diff_horizontal_offset,
+            diff_view_mode: self.graph_view.diff_view_mode,
+            flash_message: self
+                .current_flash_message()
+                .map(|message| message.to_string()),
+            is_merging: self.ui.is_merging,
+            unresolved_conflicts,
+            selected_hash,
+            current_view: self.view_mode,
+        }
+    }
+}
 
 fn render_conflicts(frame: &mut Frame, state: &mut AppState) {
     let flash_msg = state.current_flash_message().map(|s| s.to_string());
@@ -106,6 +178,160 @@ fn render_graph_overlays(frame: &mut Frame, state: &AppState) {
             },
         );
     }
+}
+
+fn render_graph_status_bar(
+    frame: &mut Frame,
+    snap: &GraphViewSnapshot,
+    state: &AppState,
+    area: Rect,
+) {
+    status_bar::render(
+        frame,
+        status_bar::StatusBarRenderContext {
+            current_branch: snap.current_branch.as_deref(),
+            status_entries: &state.status_entries,
+            flash_message: snap.flash_message.as_deref(),
+            filter: &state.filters.graph_filter,
+            is_merging: snap.is_merging,
+            area,
+        },
+    );
+}
+
+fn render_graph_nav_bar(frame: &mut Frame, snap: &GraphViewSnapshot, area: Rect) {
+    nav_bar::render(
+        frame,
+        nav_bar::NavBarRenderContext {
+            current_view: snap.current_view,
+            area,
+            unresolved_conflicts: snap.unresolved_conflicts,
+        },
+    );
+}
+
+fn render_graph_panel(
+    frame: &mut Frame,
+    snap: &GraphViewSnapshot,
+    state: &mut AppState,
+    area: Rect,
+) {
+    let list_state = &mut state.graph_view.list_state;
+    let rows = state.graph_view.rows.items();
+
+    graph_view::render(
+        frame,
+        graph_view::GraphRenderContext {
+            graph: rows,
+            current_branch: snap.current_branch.as_deref(),
+            filter_active: snap.filter_active,
+            selected_index: snap.selected_index,
+            loaded_count: snap.loaded_count,
+            total_commits: snap.total_commits,
+            can_load_more: snap.can_load_more,
+            is_loading_more: snap.is_loading_more,
+            area,
+            state: list_state,
+            is_focused: snap.focus == FocusPanel::Graph,
+        },
+    );
+}
+
+fn render_graph_files_panel(
+    frame: &mut Frame,
+    snap: &GraphViewSnapshot,
+    state: &AppState,
+    area: Rect,
+) {
+    files_view::render(
+        frame,
+        files_view::FilesRenderContext {
+            commit_files: &state.graph_view.commit_files,
+            status_entries: &state.status_entries,
+            selected_commit_hash: snap.selected_hash.as_deref(),
+            mode: snap.bottom_left_mode,
+            area,
+            is_focused: snap.focus == FocusPanel::BottomLeft,
+            file_selected_index: state.graph_view.file_selected_index,
+        },
+    );
+}
+
+fn render_graph_diff_panel(
+    frame: &mut Frame,
+    snap: &GraphViewSnapshot,
+    state: &mut AppState,
+    default_area: Rect,
+    diff_fullscreen_area: Option<Rect>,
+) {
+    if let Some(area) = diff_fullscreen_area {
+        let total_lines = diff_view::render(
+            frame,
+            diff_view::DiffRenderContext {
+                diff: state.graph_view.selected_file_diff.as_ref(),
+                scroll_offset: snap.diff_scroll_offset,
+                horizontal_offset: snap.diff_horizontal_offset,
+                area,
+                is_focused: snap.focus == FocusPanel::BottomRight,
+                view_mode: snap.diff_view_mode,
+                is_fullscreen: true,
+            },
+        );
+        state.graph_view.diff_total_lines = total_lines;
+        return;
+    }
+
+    if matches!(snap.focus, FocusPanel::BottomLeft | FocusPanel::BottomRight) {
+        let total_lines = diff_view::render(
+            frame,
+            diff_view::DiffRenderContext {
+                diff: state.graph_view.selected_file_diff.as_ref(),
+                scroll_offset: snap.diff_scroll_offset,
+                horizontal_offset: snap.diff_horizontal_offset,
+                area: default_area,
+                is_focused: snap.focus == FocusPanel::BottomRight,
+                view_mode: snap.diff_view_mode,
+                is_fullscreen: false,
+            },
+        );
+        state.graph_view.diff_total_lines = total_lines;
+        return;
+    }
+
+    let rows = state.graph_view.rows.items();
+    detail_view::render(
+        frame,
+        detail_view::DetailRenderContext {
+            graph: rows,
+            selected_index: snap.selected_index,
+            area: default_area,
+            is_focused: false,
+        },
+    );
+}
+
+fn render_graph_help_bar(frame: &mut Frame, snap: &GraphViewSnapshot, area: Rect) {
+    help_bar::render(
+        frame,
+        help_bar::HelpBarRenderContext {
+            selected_index: snap.selected_index,
+            total_commits: snap.graph_len,
+            bottom_left_mode: snap.bottom_left_mode,
+            filter_active: snap.filter_active,
+            is_merging: snap.is_merging,
+            area,
+        },
+    );
+}
+
+fn render_graph_search_bar(frame: &mut Frame, state: &AppState, area: Rect) {
+    search_bar::render(
+        frame,
+        search_bar::SearchBarRenderContext {
+            search_state: &state.search_state,
+            area,
+        },
+    );
 }
 
 /// Point d'entrée du rendu : dessine tous les panneaux.
@@ -199,209 +425,39 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
     render_global_overlays(frame, state);
 }
 
-/// Rend la vue Graph (vue principale).
-///
-/// Utilise l'API unifiée de GraphViewState pour accéder à toutes les données.
-///
-/// Note: Cette fonction utilise des emprunts soigneusement gérés pour éviter
-/// les conflits d'emprunt mutables/immuables sur `state`.
 fn render_graph_view(frame: &mut Frame, state: &mut AppState) {
-    // Première phase: extraire toutes les valeurs immutables nécessaires
-    let is_diff_fullscreen = state.graph_view.diff_fullscreen;
-    let graph_len = state.graph_view.len();
-    let selected_index = state.graph_view.selected_index();
-
-    // Utiliser le layout avec support du mode diff plein écran
+    let snap = state.graph_view_snapshot();
     let layout = layout::build_layout_with_diff_mode(
         frame.area(),
-        state.search_state.is_active,
-        is_diff_fullscreen,
+        snap.is_search_active,
+        snap.is_diff_fullscreen,
     );
 
     let graph_visible_height = layout.graph.height.saturating_sub(2) as usize;
-
     state
         .graph_view
         .rows
         .set_visible_height((graph_visible_height / 2).max(1));
 
-    // Rendu de la status bar en haut.
-    status_bar::render(
-        frame,
-        status_bar::StatusBarRenderContext {
-            current_branch: state.current_branch.as_deref(),
-            status_entries: &state.status_entries,
-            flash_message: state.current_flash_message(),
-            filter: &state.filters.graph_filter,
-            is_merging: state.ui.is_merging,
-            area: layout.status_bar,
-        },
-    );
+    render_graph_status_bar(frame, &snap, state, layout.status_bar);
+    render_graph_nav_bar(frame, &snap, layout.nav_bar);
 
-    // Rendu de la barre de navigation.
-    let unresolved_count = state
-        .conflicts_state
-        .as_ref()
-        .map(|cs| {
-            cs.all_files
-                .iter()
-                .filter(|f| !f.is_resolved && f.has_conflicts)
-                .count()
-        })
-        .unwrap_or(0);
-    nav_bar::render(
-        frame,
-        nav_bar::NavBarRenderContext {
-            current_view: state.view_mode,
-            area: layout.nav_bar,
-            unresolved_conflicts: unresolved_count,
-        },
-    );
-
-    // Rendu du graphe (masqué en mode diff plein écran).
-    if !is_diff_fullscreen {
-        let is_graph_focused = state.focus == FocusPanel::Graph;
-        let filter_active = state.filters.graph_filter.is_active();
-        let current_branch = state.current_branch.clone();
-
-        // Rendre le graphe avec emprunt mutable de list_state seulement
-        let list_state = &mut state.graph_view.list_state;
-        // Emprunter les rows de manière séparée
-        let rows = state.graph_view.rows.items();
-
-        // Extraire les infos de pagination
-        let loaded_count = state.graph_view.loaded_count;
-        let total_commits = state.graph_view.total_commits;
-        let can_load_more = state.graph_view.can_load_more;
-        let is_loading_more = state.graph_view.is_loading_more;
-
-        graph_view::render(
-            frame,
-            graph_view::GraphRenderContext {
-                graph: rows,
-                current_branch: current_branch.as_deref(),
-                filter_active,
-                selected_index,
-                loaded_count,
-                total_commits,
-                can_load_more,
-                is_loading_more,
-                area: layout.graph,
-                state: list_state,
-                is_focused: is_graph_focused,
-            },
-        );
+    if !snap.is_diff_fullscreen {
+        render_graph_panel(frame, &snap, state, layout.graph);
+        render_graph_files_panel(frame, &snap, state, layout.bottom_left);
     }
 
-    // Obtenir le hash du commit sélectionné pour le titre.
-    let selected_hash = state.graph_view.selected_commit().map(|node| {
-        let hash = node.oid.to_string();
-        hash[..7].to_string()
-    });
-
-    // Rendu du panneau de fichiers (masqué en mode diff plein écran).
-    if !is_diff_fullscreen {
-        let is_files_focused = state.focus == FocusPanel::BottomLeft;
-        let file_selected_index = state.graph_view.file_selected_index;
-
-        files_view::render(
-            frame,
-            files_view::FilesRenderContext {
-                commit_files: &state.graph_view.commit_files,
-                status_entries: &state.status_entries,
-                selected_commit_hash: selected_hash.as_deref(),
-                mode: state.bottom_left_mode,
-                area: layout.bottom_left,
-                is_focused: is_files_focused,
-                file_selected_index,
-            },
-        );
-    }
-
-    let is_diff_visible = matches!(
-        state.focus,
-        FocusPanel::BottomLeft | FocusPanel::BottomRight
-    );
-    let is_diff_focused = state.focus == FocusPanel::BottomRight;
-
-    // Rendu du diff - gérer les deux cas (plein écran et normal)
-    if let Some(diff_area) = layout.diff_fullscreen {
-        // En mode plein écran, le diff est toujours visible.
-        // Extraire les valeurs nécessaires pour éviter l'emprunt mutable conflictuel
-        let diff_scroll_offset = state.graph_view.diff_scroll_offset;
-        let diff_horizontal_offset = state.graph_view.diff_horizontal_offset;
-        let diff_view_mode = state.graph_view.diff_view_mode;
-        let is_bottom_right_focused = state.focus == FocusPanel::BottomRight;
-
-        let total_lines = diff_view::render(
-            frame,
-            diff_view::DiffRenderContext {
-                diff: state.graph_view.selected_file_diff.as_ref(),
-                scroll_offset: diff_scroll_offset,
-                horizontal_offset: diff_horizontal_offset,
-                area: diff_area,
-                is_focused: is_bottom_right_focused,
-                view_mode: diff_view_mode,
-                is_fullscreen: true,
-            },
-        );
-        state.graph_view.diff_total_lines = total_lines;
-    } else if is_diff_visible {
-        // Mode normal avec diff visible
-        let diff_scroll_offset = state.graph_view.diff_scroll_offset;
-        let diff_horizontal_offset = state.graph_view.diff_horizontal_offset;
-        let diff_view_mode = state.graph_view.diff_view_mode;
-
-        let total_lines = diff_view::render(
-            frame,
-            diff_view::DiffRenderContext {
-                diff: state.graph_view.selected_file_diff.as_ref(),
-                scroll_offset: diff_scroll_offset,
-                horizontal_offset: diff_horizontal_offset,
-                area: layout.bottom_right,
-                is_focused: is_diff_focused,
-                view_mode: diff_view_mode,
-                is_fullscreen: false,
-            },
-        );
-        state.graph_view.diff_total_lines = total_lines;
-    } else {
-        // Mode détail (pas de diff visible)
-        let rows = state.graph_view.rows.items();
-
-        detail_view::render(
-            frame,
-            detail_view::DetailRenderContext {
-                graph: rows,
-                selected_index,
-                area: layout.bottom_right,
-                is_focused: false,
-            },
-        );
-    }
-
-    // Rendu de la barre d'aide.
-    help_bar::render(
+    render_graph_diff_panel(
         frame,
-        help_bar::HelpBarRenderContext {
-            selected_index,
-            total_commits: graph_len,
-            bottom_left_mode: state.bottom_left_mode,
-            filter_active: state.filters.graph_filter.is_active(),
-            is_merging: state.ui.is_merging,
-            area: layout.help_bar,
-        },
+        &snap,
+        state,
+        layout.bottom_right,
+        layout.diff_fullscreen,
     );
+    render_graph_help_bar(frame, &snap, layout.help_bar);
 
-    // Rendu de la barre de recherche (si active).
     if let Some(search_area) = layout.search_bar {
-        search_bar::render(
-            frame,
-            search_bar::SearchBarRenderContext {
-                search_state: &state.search_state,
-                area: search_area,
-            },
-        );
+        render_graph_search_bar(frame, state, search_area);
     }
 
     render_graph_overlays(frame, state);
