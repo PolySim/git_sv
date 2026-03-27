@@ -315,7 +315,9 @@ pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<St
         }
         return Err(crate::error::GitSvError::OperationFailed {
             operation: "git_add",
-            details: String::from_utf8_lossy(&add_output.stderr).trim().to_string(),
+            details: String::from_utf8_lossy(&add_output.stderr)
+                .trim()
+                .to_string(),
         });
     }
 
@@ -355,10 +357,12 @@ fn get_mixed_status_files(repo_path: &str) -> Result<Vec<String>> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let files = stdout
         .lines()
-        .filter(|line| line.len() >= 2 && {
-            let xy = line.as_bytes();
-            // XY où X != ' ' (staged) et Y != ' '/'?' (unstaged)
-            xy[0] != b' ' && xy[0] != b'?' && xy[1] != b' ' && xy[1] != b'?'
+        .filter(|line| {
+            line.len() >= 2 && {
+                let xy = line.as_bytes();
+                // XY où X != ' ' (staged) et Y != ' '/'?' (unstaged)
+                xy[0] != b' ' && xy[0] != b'?' && xy[1] != b' ' && xy[1] != b'?'
+            }
         })
         .map(|line| line[3..].to_string())
         .collect();
