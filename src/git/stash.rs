@@ -174,7 +174,7 @@ pub fn stash_file_diff(repo: &Repository, stash_oid: Oid, file_path: &str) -> Re
             file_lines.push(format!(
                 "{}{}",
                 prefix,
-                String::from_utf8_lossy(line.content()).trim_end_matches('\n')
+                String::from_utf8_lossy(line.content()).trim_end_matches('\n').replace('\t', "    ")
             ));
         }
         true

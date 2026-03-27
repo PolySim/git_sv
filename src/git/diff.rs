@@ -209,6 +209,7 @@ fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
                 line_type,
                 content: String::from_utf8_lossy(line.content())
                     .trim_end()
+                    .replace('\t', "    ")
                     .to_string(),
                 old_lineno: line.old_lineno(),
                 new_lineno: line.new_lineno(),
