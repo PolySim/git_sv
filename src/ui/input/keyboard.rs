@@ -438,7 +438,21 @@ fn map_branches_section_key(key: KeyEvent, state: &AppState) -> Option<AppAction
 }
 
 fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
-    map_staging_global_key(key, state).or_else(|| map_staging_focus_key(key, state))
+    map_staging_ctrl_key(key)
+        .or_else(|| map_staging_global_key(key, state))
+        .or_else(|| map_staging_focus_key(key, state))
+}
+
+fn map_staging_ctrl_key(key: KeyEvent) -> Option<AppAction> {
+    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Char('s') => Some(AppAction::Staging(StagingAction::StashUnstagedFiles)),
+        KeyCode::Char('p') => Some(AppAction::Git(GitAction::ForcePush)),
+        _ => None,
+    }
 }
 
 fn map_staging_global_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
@@ -474,11 +488,6 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('c') => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
             KeyCode::Char('A') if !state.ui.is_merging => {
                 Some(AppAction::Git(GitAction::AmendCommit))
-            }
-            _ if key.modifiers.contains(KeyModifiers::CONTROL)
-                && key.code == KeyCode::Char('S') =>
-            {
-                Some(AppAction::Staging(StagingAction::StashUnstagedFiles))
             }
             _ => None,
         },

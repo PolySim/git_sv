@@ -20,17 +20,17 @@ pub(super) fn handle_stash_selected_file(state: &mut AppState) -> Result<()> {
     };
 
     let path = file.path.clone();
-
-    if file.status.contains(git2::Status::WT_NEW) && !file.is_staged() {
-        state.set_flash_message(crate::utils::flash_error_message(
-            "stash fichier indisponible pour un fichier non suivi, utilisez Ctrl+S",
-        ));
-        return Ok(());
-    }
+    let is_untracked = file.status.contains(git2::Status::WT_NEW) && !file.is_staged();
 
     let message = format!("git_sv: stash partiel {}", path);
 
-    match crate::git::stash::stash_file(&state.repo_path, &path, Some(&message))? {
+    let outcome = if is_untracked {
+        crate::git::stash::stash_untracked_file(&state.repo_path, &path, Some(&message))?
+    } else {
+        crate::git::stash::stash_file(&state.repo_path, &path, Some(&message))?
+    };
+
+    match outcome {
         StashPushOutcome::Created => {
             state.set_flash_message(flash_success(format!(
                 "Stash créé pour {} (index conservé)",
