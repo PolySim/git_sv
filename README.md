@@ -54,7 +54,7 @@ cargo build --release
 ./target/release/git_sv
 ```
 
-### Homebrew
+### Homebrew (macOS/Linux)
 
 Les releases publient la formule Homebrew dans le tap externe `PolySim/homebrew-tap`.
 
@@ -64,6 +64,21 @@ brew install git_sv
 ```
 
 Le fichier `homebrew/git_sv.rb` du depot sert de gabarit local et reste desactive tant qu'il n'est pas synchronise avec une release publiee.
+
+### Scoop (Windows)
+
+Les releases publient le manifest Scoop dans le bucket `PolySim/scoop-git_sv`.
+
+```powershell
+scoop bucket add git_sv https://github.com/PolySim/scoop-git_sv
+scoop install git_sv
+```
+
+Pour mettre a jour :
+
+```powershell
+scoop update git_sv
+```
 
 ### OpenSSL
 
