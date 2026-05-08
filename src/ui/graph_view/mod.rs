@@ -56,8 +56,11 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
     let visible_commits = (visible_height / 2).max(1);
     let scroll_offset = selected_index.saturating_sub(visible_commits / 2);
 
-    let items = if graph.is_empty() {
-        vec![ListItem::new(build_empty_state_line(filter_active))]
+    let (items, selected_visual_index) = if graph.is_empty() {
+        (
+            vec![ListItem::new(build_empty_state_line(filter_active))],
+            Some(0),
+        )
     } else {
         build_graph_items(
             graph,
@@ -67,6 +70,8 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
             visible_commits,
         )
     };
+
+    state.select(selected_visual_index);
 
     let branch_name = current_branch.unwrap_or("???");
     let title = build_title(
@@ -107,8 +112,9 @@ fn build_graph_items(
     available_width: u16,
     scroll_offset: usize,
     visible_count: usize,
-) -> Vec<ListItem<'static>> {
-    let mut items = Vec::with_capacity(graph.len() * 2);
+) -> (Vec<ListItem<'static>>, Option<usize>) {
+    let mut items = Vec::with_capacity(visible_count.saturating_mul(2));
+    let mut selected_visual_index = None;
 
     let end_offset = (scroll_offset + visible_count).min(graph.len());
     let visible_rows = &graph[scroll_offset..end_offset];
@@ -118,8 +124,14 @@ fn build_graph_items(
         .max()
         .unwrap_or(1);
 
-    for (i, row) in graph.iter().enumerate() {
-        let is_selected = i == selected_index;
+    for (relative_index, row) in visible_rows.iter().enumerate() {
+        let absolute_index = scroll_offset + relative_index;
+        let is_selected = absolute_index == selected_index;
+
+        if is_selected {
+            selected_visual_index = Some(items.len());
+        }
+
         items.push(ListItem::new(build_commit_line(
             row,
             is_selected,
@@ -132,7 +144,7 @@ fn build_graph_items(
         }
     }
 
-    items
+    (items, selected_visual_index)
 }
 
 #[cfg(test)]
@@ -188,10 +200,20 @@ mod tests {
     #[test]
     fn test_build_graph_items() {
         let graph = create_test_graph();
-        let items = build_graph_items(&graph, 0, 80, 0, graph.len());
+        let (items, selected_visual_index) = build_graph_items(&graph, 0, 80, 0, graph.len());
 
         assert!(!items.is_empty());
         assert!(items.len() >= graph.len());
+        assert_eq!(selected_visual_index, Some(0));
+    }
+
+    #[test]
+    fn test_build_graph_items_limits_to_visible_window() {
+        let graph = create_test_graph();
+        let (items, selected_visual_index) = build_graph_items(&graph, 1, 80, 1, 1);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(selected_visual_index, Some(0));
     }
 
     #[test]
