@@ -1,12 +1,30 @@
 //! Suppression des modifications non committées (discard).
 
 use git2::Repository;
+use std::fs;
 
 use crate::error::Result;
 
 /// Discard les modifications d'un fichier spécifique (git checkout -- file).
 /// Cette opération restaure le fichier à son état dans HEAD.
 pub fn discard_file(repo: &Repository, file_path: &str) -> Result<()> {
+    let status = repo.status_file(std::path::Path::new(file_path))?;
+
+    if status.is_wt_new() && !status.is_index_new() {
+        let workdir = repo.workdir().ok_or_else(|| {
+            git2::Error::from_str("Impossible de trouver le chemin du repository")
+        })?;
+        let full_path = workdir.join(file_path);
+
+        if full_path.is_dir() {
+            fs::remove_dir_all(&full_path)?;
+        } else if full_path.exists() {
+            fs::remove_file(&full_path)?;
+        }
+
+        return Ok(());
+    }
+
     let mut checkout_builder = git2::build::CheckoutBuilder::new();
     checkout_builder.force();
     checkout_builder.path(file_path);
@@ -76,5 +94,19 @@ mod tests {
         // Vérifier que les fichiers sont restaurés
         assert_eq!(std::fs::read_to_string(&file1_path).unwrap(), "content1\n");
         assert_eq!(std::fs::read_to_string(&file2_path).unwrap(), "content2\n");
+    }
+
+    #[test]
+    fn test_discard_file_removes_untracked_file() {
+        let (temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "tracked.txt", "tracked\n", "Initial commit");
+
+        let file_path = temp_dir.path().join("untracked.txt");
+        std::fs::write(&file_path, "temp\n").unwrap();
+        assert!(file_path.exists());
+
+        discard_file(&repo, "untracked.txt").unwrap();
+
+        assert!(!file_path.exists());
     }
 }
