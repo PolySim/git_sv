@@ -26,6 +26,7 @@ impl ActionHandler for GitHandler {
             GitAction::CommitPrompt => handle_commit_prompt(ctx.state),
             GitAction::StashPrompt => handle_stash_prompt(ctx.state),
             GitAction::MergePrompt => handle_merge_prompt(ctx.state),
+            GitAction::RebasePrompt => handle_rebase_prompt(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
@@ -350,6 +351,38 @@ fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
             state.set_flash_message(flash_error("chargement branches", e));
         }
     }
+    Ok(())
+}
+
+fn handle_rebase_prompt(state: &mut AppState) -> Result<()> {
+    match crate::git::branch::list_all_branches(&state.repo.repo) {
+        Ok((local, remote)) => {
+            let current = state.current_branch.clone().unwrap_or_default();
+
+            let mut branch_names: Vec<String> = local
+                .iter()
+                .filter(|b| b.name != current)
+                .map(|b| b.name.clone())
+                .collect();
+
+            for b in &remote {
+                branch_names.push(b.name.clone());
+            }
+
+            if branch_names.is_empty() {
+                state.set_flash_message(flash_error_message(
+                    "aucune autre branche disponible pour rebase",
+                ));
+                return Ok(());
+            }
+
+            state.merge_picker = Some(crate::state::MergePickerState::new_rebase(branch_names));
+        }
+        Err(e) => {
+            state.set_flash_message(flash_error("chargement branches", e));
+        }
+    }
+
     Ok(())
 }
 

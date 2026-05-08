@@ -397,6 +397,7 @@ fn map_branches_section_key(key: KeyEvent, state: &AppState) -> Option<AppAction
             KeyCode::Char('r') => Some(AppAction::Branch(BranchAction::Rename)),
             KeyCode::Char('R') => Some(AppAction::Branch(BranchAction::ToggleRemote)),
             KeyCode::Char('m') => Some(AppAction::Git(GitAction::MergePrompt)),
+            KeyCode::Char('e') => Some(AppAction::Git(GitAction::RebasePrompt)),
             _ => None,
         },
         BranchesSection::Worktrees => match key.code {

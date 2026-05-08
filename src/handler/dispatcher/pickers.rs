@@ -1,7 +1,7 @@
 use super::super::traits::HandlerContext;
 use crate::error::Result;
 use crate::handler::navigation;
-use crate::state::ViewMode;
+use crate::state::{BranchPickerMode, ViewMode};
 use crate::utils::{flash_error, flash_success};
 
 /// Gère la confirmation du merge picker.
@@ -14,35 +14,71 @@ pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()
         .as_ref()
         .and_then(|picker| picker.branches.selected_item())
         .cloned();
+    let picker_mode = ctx
+        .state
+        .merge_picker
+        .as_ref()
+        .map(|picker| picker.mode)
+        .unwrap_or(BranchPickerMode::Merge);
 
     if let Some(branch_name) = branch_to_merge {
-        match crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, &branch_name) {
+        let result = match picker_mode {
+            BranchPickerMode::Merge => {
+                crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, &branch_name)
+            }
+            BranchPickerMode::Rebase => {
+                crate::git::rebase::rebase_branch_with_result(&ctx.state.repo.repo, &branch_name)
+            }
+        };
+
+        match result {
             Ok(MergeResult::UpToDate) => {
-                ctx.state.set_flash_message(flash_success(format!(
-                    "Branche '{}' est déjà à jour",
-                    branch_name
-                )));
+                let message = match picker_mode {
+                    BranchPickerMode::Merge => {
+                        format!("Branche '{}' est déjà à jour", branch_name)
+                    }
+                    BranchPickerMode::Rebase => {
+                        format!("Branche courante déjà à jour sur '{}'", branch_name)
+                    }
+                };
+                ctx.state.set_flash_message(flash_success(message));
             }
             Ok(MergeResult::FastForward) => {
-                ctx.state.set_flash_message(flash_success(format!(
-                    "Fast-forward vers '{}'",
-                    branch_name
-                )));
+                let message = match picker_mode {
+                    BranchPickerMode::Merge => format!("Fast-forward vers '{}'", branch_name),
+                    BranchPickerMode::Rebase => {
+                        format!("Rebase fast-forward sur '{}'", branch_name)
+                    }
+                };
+                ctx.state.set_flash_message(flash_success(message));
                 ctx.state.mark_dirty();
             }
             Ok(MergeResult::Success) => {
-                ctx.state.set_flash_message(flash_success(format!(
-                    "Branche '{}' mergée avec succès",
-                    branch_name
-                )));
+                let message = match picker_mode {
+                    BranchPickerMode::Merge => {
+                        format!("Branche '{}' mergée avec succès", branch_name)
+                    }
+                    BranchPickerMode::Rebase => {
+                        format!("Rebase effectué sur '{}'", branch_name)
+                    }
+                };
+                ctx.state.set_flash_message(flash_success(message));
                 ctx.state.mark_dirty();
             }
             Ok(MergeResult::Conflicts(conflicts)) => {
-                ctx.state.set_flash_message(format!(
-                    "Conflits lors du merge avec '{}' ({} fichiers)",
-                    branch_name,
-                    conflicts.len()
-                ));
+                let message = match picker_mode {
+                    BranchPickerMode::Merge => format!(
+                        "Conflits lors du merge avec '{}' ({} fichiers)",
+                        branch_name,
+                        conflicts.len()
+                    ),
+                    BranchPickerMode::Rebase => format!(
+                        "Conflits lors du rebase sur '{}' ({} fichiers)",
+                        branch_name,
+                        conflicts.len()
+                    ),
+                };
+                ctx.state.set_flash_message(message);
                 // Activer la vue conflits
                 let current = ctx
                     .state
@@ -51,14 +87,21 @@ pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()
                     .unwrap_or_else(|| "HEAD".to_string());
                 ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
                     conflicts,
-                    format!("merge {}", branch_name),
+                    match picker_mode {
+                        BranchPickerMode::Merge => format!("merge {}", branch_name),
+                        BranchPickerMode::Rebase => format!("rebase {}", branch_name),
+                    },
                     current,
                     branch_name,
                 ));
                 ctx.state.view_mode = ViewMode::Conflicts;
             }
             Err(e) => {
-                ctx.state.set_flash_message(flash_error("merge", e));
+                let operation = match picker_mode {
+                    BranchPickerMode::Merge => "merge",
+                    BranchPickerMode::Rebase => "rebase",
+                };
+                ctx.state.set_flash_message(flash_error(operation, e));
             }
         }
     }

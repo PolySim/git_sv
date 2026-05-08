@@ -625,8 +625,8 @@ fn render_branches_help(
         match section {
             BranchesSection::Branches => {
                 text(
-                    "Tab/Shift+Tab:section  Entree:checkout  n:nouvelle  d:supprimer  r:renommer  m:fusion  R:distantes  P:push  Ctrl+P:force push  1:graphe  2:staging",
-                    "Tab/Shift+Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging",
+                    "Tab/Shift+Tab:section  Entree:checkout  n:nouvelle  d:supprimer  r:renommer  m:fusion  e:rebase  R:distantes  P:push  Ctrl+P:force push  1:graphe  2:staging",
+                    "Tab/Shift+Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  e:rebase  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging",
                 )
             }
             BranchesSection::Worktrees => {

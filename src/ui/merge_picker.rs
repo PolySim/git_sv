@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::state::MergePickerState;
+use crate::state::{BranchPickerMode, MergePickerState};
 
 pub struct MergePickerRenderContext<'a> {
     pub state: &'a MergePickerState,
@@ -36,10 +36,16 @@ pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
 
     // Construire le titre avec la branche courante
     let current_branch_name = current_branch.unwrap_or("???");
-    let title = text_owned(
-        format!(" Fusionner dans '{}' ", current_branch_name),
-        format!(" Merge into '{}' ", current_branch_name),
-    );
+    let title = match state.mode {
+        BranchPickerMode::Merge => text_owned(
+            format!(" Fusionner dans '{}' ", current_branch_name),
+            format!(" Merge into '{}' ", current_branch_name),
+        ),
+        BranchPickerMode::Rebase => text_owned(
+            format!(" Rebase '{}' sur ", current_branch_name),
+            format!(" Rebase '{}' onto ", current_branch_name),
+        ),
+    };
 
     // Construire la liste des branches
     let items: Vec<ListItem> = state
@@ -75,11 +81,11 @@ pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
     frame.render_stateful_widget(list, popup_area, &mut list_state);
 
     // Rendre la barre d'aide en bas
-    render_help_bar(frame, popup_area);
+    render_help_bar(frame, popup_area, state.mode);
 }
 
 /// Rend la barre d'aide du merge picker.
-fn render_help_bar(frame: &mut Frame, popup_area: Rect) {
+fn render_help_bar(frame: &mut Frame, popup_area: Rect, mode: BranchPickerMode) {
     let theme = current_theme();
     // Calculer la zone pour la barre d'aide (en dessous du popup)
     let help_area = Rect {
@@ -89,10 +95,16 @@ fn render_help_bar(frame: &mut Frame, popup_area: Rect) {
         height: 1,
     };
 
-    let help_text = text(
-        "j/k:naviguer  Enter:fusionner  Esc:annuler",
-        "j/k:navigate  Enter:merge  Esc:cancel",
-    );
+    let help_text = match mode {
+        BranchPickerMode::Merge => text(
+            "j/k:naviguer  Enter:fusionner  Esc:annuler",
+            "j/k:navigate  Enter:merge  Esc:cancel",
+        ),
+        BranchPickerMode::Rebase => text(
+            "j/k:naviguer  Enter:rebase  Esc:annuler",
+            "j/k:navigate  Enter:rebase  Esc:cancel",
+        ),
+    };
 
     let line = Line::from(vec![Span::styled(
         help_text,

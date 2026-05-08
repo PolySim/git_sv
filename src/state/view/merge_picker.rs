@@ -2,6 +2,14 @@
 
 use crate::state::selection::ListSelection;
 
+/// Mode du sélecteur de branche.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BranchPickerMode {
+    #[default]
+    Merge,
+    Rebase,
+}
+
 /// État du sélecteur de branche pour le merge.
 #[derive(Debug, Clone, Default)]
 pub struct MergePickerState {
@@ -9,6 +17,8 @@ pub struct MergePickerState {
     pub branches: ListSelection<String>,
     /// Actif ou non.
     pub is_active: bool,
+    /// Mode de l'opération en cours.
+    pub mode: BranchPickerMode,
 }
 
 impl MergePickerState {
@@ -17,6 +27,16 @@ impl MergePickerState {
         Self {
             branches: ListSelection::with_items(branches),
             is_active: true,
+            mode: BranchPickerMode::Merge,
+        }
+    }
+
+    /// Crée un nouveau picker pour un rebase.
+    pub fn new_rebase(branches: Vec<String>) -> Self {
+        Self {
+            branches: ListSelection::with_items(branches),
+            is_active: true,
+            mode: BranchPickerMode::Rebase,
         }
     }
 

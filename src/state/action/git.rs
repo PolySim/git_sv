@@ -26,6 +26,8 @@ pub enum GitAction {
     StashPrompt,
     /// Ouvrir le dialogue de merge
     MergePrompt,
+    /// Ouvrir le dialogue de rebase
+    RebasePrompt,
     /// Ouvrir le dialogue de reset
     ResetPrompt,
     /// Annuler le merge en cours

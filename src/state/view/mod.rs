@@ -15,7 +15,7 @@ pub use branches::{
 };
 pub use conflicts::{ConflictPanelFocus, ConflictsState};
 pub use graph::GraphViewState;
-pub use merge_picker::MergePickerState;
+pub use merge_picker::{BranchPickerMode, MergePickerState};
 pub use reset_picker::ResetPickerState;
 pub use search::SearchState;
 pub use staging::{StagingFocus, StagingState};
