@@ -17,12 +17,10 @@ pub(super) fn handle_move_up(state: &mut AppState) {
 
 pub(super) fn handle_move_down(state: &mut AppState) {
     match state.view_mode {
-        ViewMode::Graph => {
-            if !state.graph_view.is_empty() {
-                state.graph_view.select_next();
-                refresh_commit_file_data(state);
-                let _ = crate::handler::dispatcher::maybe_load_more_history(state);
-            }
+        ViewMode::Graph if !state.graph_view.is_empty() => {
+            state.graph_view.select_next();
+            refresh_commit_file_data(state);
+            let _ = crate::handler::dispatcher::maybe_load_more_history(state);
         }
         ViewMode::Staging => handle_staging_navigation(state, 1),
         ViewMode::Branches => handle_branches_navigation(state, 1),
