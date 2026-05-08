@@ -10,6 +10,26 @@ use crate::git::conflict::MergeResult;
 
 pub use types::{flash_message_for_pull_result, FetchSuccess, PushSuccess};
 
+fn current_branch_push_context(repo: &Repository) -> Result<(String, String, bool)> {
+    let head = repo.head()?;
+    let branch_name = head
+        .shorthand()
+        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?
+        .to_string();
+    let has_upstream = repo
+        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
+        .is_ok();
+    let remote_name = resolve_remote_name(repo, &branch_name);
+
+    Ok((branch_name, remote_name, has_upstream))
+}
+
+fn set_branch_upstream(repo: &Repository, branch_name: &str, remote_name: &str) -> Result<()> {
+    let mut branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
+    branch.set_upstream(Some(&format!("{}/{}", remote_name, branch_name)))?;
+    Ok(())
+}
+
 /// Résout le nom du remote à partir du nom de branche.
 fn resolve_remote_name(repo: &Repository, branch_name: &str) -> String {
     repo.branch_upstream_name(&format!("refs/heads/{}", branch_name))
@@ -41,17 +61,7 @@ pub fn get_default_remote(repo: &Repository) -> Result<String> {
 
 /// Push la branche courante vers le remote.
 pub fn push_current_branch(repo: &Repository) -> Result<PushSuccess> {
-    let head = repo.head()?;
-    let branch_name = head
-        .shorthand()
-        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?
-        .to_string();
-
-    let has_upstream = repo
-        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
-        .is_ok();
-
-    let remote_name = resolve_remote_name(repo, &branch_name);
+    let (branch_name, remote_name, has_upstream) = current_branch_push_context(repo)?;
     let remote = repo.find_remote(&remote_name)?;
     let raw_url = remote.url().unwrap_or("");
     let resolved_url = ssh::resolve_remote_url(raw_url);
@@ -71,6 +81,10 @@ pub fn push_current_branch(repo: &Repository) -> Result<PushSuccess> {
 
     if result.is_err() {
         return push_current_branch_cli(repo);
+    }
+
+    if !has_upstream {
+        set_branch_upstream(repo, &branch_name, &remote_name)?;
     }
 
     Ok(PushSuccess {
@@ -103,15 +117,7 @@ fn push_current_branch_cli_path_with_options(
     use std::process::Command;
 
     let repo = Repository::open(repo_path)?;
-    let head = repo.head()?;
-    let branch_name = head
-        .shorthand()
-        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?
-        .to_string();
-
-    let has_upstream = repo
-        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
-        .is_ok();
+    let (branch_name, remote_name, has_upstream) = current_branch_push_context(&repo)?;
 
     let mut cmd = Command::new("git");
     cmd.arg("push");
@@ -121,7 +127,9 @@ fn push_current_branch_cli_path_with_options(
     }
 
     if !has_upstream {
-        cmd.arg("--set-upstream");
+        cmd.args(["--set-upstream", &remote_name, &branch_name]);
+    } else {
+        cmd.args([&remote_name, &branch_name]);
     }
 
     let output = cmd
@@ -136,7 +144,7 @@ fn push_current_branch_cli_path_with_options(
 
     Ok(PushSuccess {
         branch_name,
-        remote_name: get_default_remote(&repo)?,
+        remote_name,
         force,
         upstream_set: !has_upstream,
     })
@@ -323,19 +331,11 @@ pub fn force_push_current_branch_cli(repo: &Repository) -> Result<PushSuccess> {
 fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Result<PushSuccess> {
     use std::process::Command;
 
-    let head = repo.head()?;
-    let branch_name = head
-        .shorthand()
-        .ok_or_else(|| git2::Error::from_str("HEAD détachée, impossible de pousser"))?
-        .to_string();
+    let (branch_name, remote_name, has_upstream) = current_branch_push_context(repo)?;
 
     let repo_path = repo
         .workdir()
         .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
-
-    let has_upstream = repo
-        .branch_upstream_name(&format!("refs/heads/{}", branch_name))
-        .is_ok();
 
     let mut cmd = Command::new("git");
     cmd.arg("push");
@@ -345,7 +345,9 @@ fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Resul
     }
 
     if !has_upstream {
-        cmd.arg("--set-upstream");
+        cmd.args(["--set-upstream", &remote_name, &branch_name]);
+    } else {
+        cmd.args([&remote_name, &branch_name]);
     }
 
     let output = cmd
@@ -360,8 +362,20 @@ fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Resul
 
     Ok(PushSuccess {
         branch_name,
-        remote_name: resolve_remote_name(repo, head.shorthand().unwrap_or("HEAD")),
+        remote_name,
         force,
         upstream_set: !has_upstream,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_first_push_args_include_remote_and_branch() {
+        let remote_name = "origin";
+        let branch_name = "feature/test";
+        let args = ["--set-upstream", remote_name, branch_name];
+
+        assert_eq!(args, ["--set-upstream", "origin", "feature/test"]);
+    }
 }
