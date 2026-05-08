@@ -3,6 +3,7 @@
 //! Supporte le mode unifié et le mode side-by-side.
 
 use git2::{Oid, Repository};
+use std::fs;
 
 use crate::error::Result;
 
@@ -242,6 +243,11 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
 
 /// Récupère le diff d'un fichier du working directory (non committé).
 pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
+    let status = repo.status_file(std::path::Path::new(file_path))?;
+    if status.is_wt_new() && !status.is_index_new() {
+        return build_untracked_file_diff(repo, file_path);
+    }
+
     let head = repo.head()?;
     let head_oid = head
         .target()
@@ -305,6 +311,33 @@ fn find_and_extract_file_diff(
     Err(crate::error::GitSvError::Git(git2::Error::from_str(
         error_msg,
     )))
+}
+
+fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
+    let full_path = workdir.join(file_path);
+    let content = fs::read_to_string(&full_path)?;
+
+    let lines: Vec<DiffLine> = content
+        .lines()
+        .enumerate()
+        .map(|(index, line)| DiffLine {
+            line_type: DiffLineType::Addition,
+            content: line.replace('\t', "    "),
+            old_lineno: None,
+            new_lineno: Some((index + 1) as u32),
+        })
+        .collect();
+
+    Ok(FileDiff {
+        path: file_path.to_string(),
+        status: DiffStatus::Added,
+        additions: lines.len(),
+        deletions: 0,
+        lines,
+    })
 }
 
 fn diff_paths(delta: &git2::DiffDelta<'_>) -> (String, Option<String>) {
@@ -499,5 +532,25 @@ mod tests {
 
         assert_eq!(file_diff.path, "docs/test.txt");
         assert!(matches!(file_diff.status, DiffStatus::Deleted));
+    }
+
+    #[test]
+    fn test_working_dir_file_diff_untracked_shows_file_content() {
+        let (temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "tracked.txt", "tracked\n", "Initial commit");
+        std::fs::write(temp_dir.path().join("untracked.txt"), "line 1\nline 2\n").unwrap();
+
+        let file_diff = working_dir_file_diff(&repo, "untracked.txt").unwrap();
+
+        assert_eq!(file_diff.path, "untracked.txt");
+        assert!(matches!(file_diff.status, DiffStatus::Added));
+        assert_eq!(file_diff.additions, 2);
+        assert_eq!(file_diff.deletions, 0);
+        assert_eq!(file_diff.lines.len(), 2);
+        assert_eq!(file_diff.lines[0].line_type, DiffLineType::Addition);
+        assert_eq!(file_diff.lines[0].content, "line 1");
+        assert_eq!(file_diff.lines[0].new_lineno, Some(1));
+        assert_eq!(file_diff.lines[1].content, "line 2");
     }
 }
