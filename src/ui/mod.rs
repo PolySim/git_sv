@@ -398,7 +398,10 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             }
             help_overlay::render(
                 frame,
-                help_overlay::HelpOverlayRenderContext { area: frame.area() },
+                help_overlay::HelpOverlayRenderContext {
+                    area: frame.area(),
+                    active_view: state.previous_view_mode.unwrap_or(ViewMode::Graph),
+                },
             );
         }
         ViewMode::Branches => {

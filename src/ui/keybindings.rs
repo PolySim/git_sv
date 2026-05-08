@@ -100,6 +100,8 @@ pub mod branches {
     pub const TOGGLE_REMOTE: &str = "R";
     /// Merge.
     pub const MERGE: &str = "m";
+    /// Rebase.
+    pub const REBASE: &str = "e";
     /// Section suivante.
     pub const NEXT_SECTION: &str = "Tab";
     /// Section précédente.

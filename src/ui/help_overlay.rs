@@ -9,17 +9,19 @@ use ratatui::{
 };
 
 use crate::i18n::{text, text_owned};
+use crate::state::ViewMode;
 use crate::ui::common::centered_rect;
 use crate::ui::keybindings;
 use crate::ui::theme::current_theme;
 
 pub struct HelpOverlayRenderContext {
     pub area: Rect,
+    pub active_view: ViewMode,
 }
 
 /// Rend l'overlay d'aide complet centré sur l'écran.
 pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
-    let HelpOverlayRenderContext { area } = ctx;
+    let HelpOverlayRenderContext { area, active_view } = ctx;
 
     let theme = current_theme();
     // Créer une zone centrale pour le popup (70% largeur, 80% hauteur).
@@ -29,7 +31,7 @@ pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
     frame.render_widget(Clear, popup_area);
 
     // Construire le contenu de l'aide.
-    let content = build_help_content();
+    let content = build_help_content(active_view);
 
     let paragraph = Paragraph::new(content)
         .block(
@@ -46,144 +48,355 @@ pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
 }
 
 /// Construit le contenu textuel de l'overlay d'aide.
-fn build_help_content() -> Vec<Line<'static>> {
+fn build_help_content(active_view: ViewMode) -> Vec<Line<'static>> {
     let theme = current_theme();
-    vec![
-        Line::from(""),
-        // ── Navigation ──
-        section_header(text("Navigation", "Navigation")),
-        separator(),
-        key_line_multi(
-            keybindings::navigation::DOWN,
-            text("Commit suivant", "Next commit"),
+    let mut lines = vec![Line::from("")];
+
+    append_global_help(&mut lines);
+    lines.push(Line::from(""));
+    append_view_help(&mut lines, active_view);
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        text_owned("Esc ou ? pour fermer", "Esc or ? to close"),
+        Style::default()
+            .fg(theme.text_secondary)
+            .add_modifier(Modifier::ITALIC),
+    )]));
+
+    lines
+}
+
+fn append_global_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text("Global", "Global")));
+    lines.push(separator());
+    lines.push(key_line(
+        keybindings::global::VIEW_GRAPH,
+        text("Vue Graph", "Graph view"),
+    ));
+    lines.push(key_line(
+        keybindings::global::VIEW_STAGING,
+        text("Vue Staging", "Staging view"),
+    ));
+    lines.push(key_line(
+        keybindings::global::VIEW_BRANCHES,
+        text("Vue Branches", "Branches view"),
+    ));
+    lines.push(key_line(
+        keybindings::global::VIEW_CONFLICTS,
+        text("Vue Conflits (si actifs)", "Conflicts view (if active)"),
+    ));
+    lines.push(key_line(keybindings::global::HELP, text("Aide", "Help")));
+    lines.push(key_line(
+        keybindings::global::REFRESH,
+        text("Rafraichir", "Refresh"),
+    ));
+    lines.push(key_line(
+        keybindings::global::COPY,
+        text("Copier dans le presse-papiers", "Copy to clipboard"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::global::QUIT,
+        text("Quitter", "Quit"),
+    ));
+}
+
+fn append_view_help(lines: &mut Vec<Line<'static>>, active_view: ViewMode) {
+    match active_view {
+        ViewMode::Graph | ViewMode::Help => append_graph_help(lines),
+        ViewMode::Staging => append_staging_help(lines),
+        ViewMode::Branches => append_branches_help(lines),
+        ViewMode::Blame => append_blame_help(lines),
+        ViewMode::Conflicts => append_conflicts_help(lines),
+    }
+}
+
+fn append_graph_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text("Vue Graph", "Graph View")));
+    lines.push(separator());
+    lines.push(key_line_multi(
+        keybindings::navigation::DOWN,
+        text("Commit suivant", "Next commit"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::UP,
+        text("Commit precedent", "Previous commit"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::TOP,
+        text("Premier commit", "First commit"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::BOTTOM,
+        text("Dernier commit", "Last commit"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::PAGE_DOWN,
+        text("Page suivante", "Next page"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::PAGE_UP,
+        text("Page precedente", "Previous page"),
+    ));
+    lines.push(key_line(
+        keybindings::navigation::SWITCH_PANEL,
+        text("Basculer panneaux", "Switch panels"),
+    ));
+    lines.push(key_line("Espace", text("Ouvrir le diff", "Open diff")));
+    lines.push(key_line(
+        "Enter",
+        text(
+            "Plein ecran / action contextuelle",
+            "Fullscreen / contextual action",
         ),
-        key_line_multi(
-            keybindings::navigation::UP,
-            text("Commit precedent", "Previous commit"),
-        ),
-        key_line_multi(
-            keybindings::navigation::TOP,
-            text("Premier commit", "First commit"),
-        ),
-        key_line_multi(
-            keybindings::navigation::BOTTOM,
-            text("Dernier commit", "Last commit"),
-        ),
-        key_line_multi(
-            keybindings::navigation::PAGE_DOWN,
-            text("Page suivante", "Next page"),
-        ),
-        key_line_multi(
-            keybindings::navigation::PAGE_UP,
-            text("Page precedente", "Previous page"),
-        ),
-        key_line(
-            keybindings::navigation::SWITCH_PANEL,
-            text("Basculer panneaux", "Switch panels"),
-        ),
-        key_line(
-            "Enter",
-            text(
-                "Contextuel (selectionner/valider/plein ecran)",
-                "Contextual (select/confirm/fullscreen)",
-            ),
-        ),
-        key_line("Espace", text("Ouvrir le panneau diff", "Open diff panel")),
-        Line::from(""),
-        // ── Vues ──
-        section_header(text("Vues", "Views")),
-        separator(),
-        key_line(
-            keybindings::global::VIEW_GRAPH,
-            text("Vue Graph", "Graph view"),
-        ),
-        key_line(
-            keybindings::global::VIEW_STAGING,
-            text("Vue Staging", "Staging view"),
-        ),
-        key_line(
-            keybindings::global::VIEW_BRANCHES,
-            text("Vue Branches", "Branches view"),
-        ),
-        key_line(
-            keybindings::global::VIEW_CONFLICTS,
-            text("Vue Conflits (si actifs)", "Conflicts view (if active)"),
-        ),
-        Line::from(""),
-        // ── Actions Git ──
-        section_header(text("Actions Git", "Git Actions")),
-        separator(),
-        key_line(
-            keybindings::git_actions::COMMIT,
-            text("Nouveau commit", "New commit"),
-        ),
-        key_line(keybindings::git_actions::STASH, text("Stash", "Stash")),
-        key_line(keybindings::git_actions::MERGE, text("Merge", "Merge")),
-        key_line(
-            keybindings::git_actions::BRANCHES,
-            text("Vue branches", "Branches view"),
-        ),
-        key_line(keybindings::git_actions::PUSH, text("Push", "Push")),
-        key_line(
-            keybindings::git_actions::FORCE_PUSH,
-            text("Force push", "Force push"),
-        ),
-        key_line(keybindings::git_actions::PULL, text("Pull", "Pull")),
-        key_line(keybindings::git_actions::FETCH, text("Fetch", "Fetch")),
-        key_line(
-            keybindings::git_actions::CHERRY_PICK,
-            text("Cherry-pick", "Cherry-pick"),
-        ),
-        key_line(
-            keybindings::git_actions::BLAME,
-            text("Blame du fichier", "File blame"),
-        ),
-        key_line(keybindings::git_actions::RESET, text("Reset", "Reset")),
-        Line::from(""),
-        // ── Recherche & Filtre ──
-        section_header(text("Recherche & Filtre", "Search & Filter")),
-        separator(),
-        key_line(
-            keybindings::search::OPEN,
-            text("Ouvrir la recherche", "Open search"),
-        ),
-        key_line(
-            keybindings::search::NEXT,
-            text("Resultat suivant", "Next result"),
-        ),
-        key_line(
-            keybindings::search::PREVIOUS,
-            text("Resultat precedent", "Previous result"),
-        ),
-        key_line(
-            keybindings::search::FILTER,
-            text("Filtre avance", "Advanced filter"),
-        ),
-        Line::from(""),
-        // ── Interface ──
-        section_header(text("Interface", "Interface")),
-        separator(),
-        key_line(
-            keybindings::diff::TOGGLE_VIEW,
-            text(
-                "Basculer diff (unifie/split)",
-                "Toggle diff (unified/split)",
-            ),
-        ),
-        key_line(keybindings::global::REFRESH, text("Rafraichir", "Refresh")),
-        key_line(
-            keybindings::global::COPY,
-            text("Copier dans le presse-papiers", "Copy to clipboard"),
-        ),
-        key_line_multi(keybindings::global::QUIT, text("Quitter", "Quit")),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            text_owned("Esc ou ? pour fermer", "Esc or ? to close"),
-            Style::default()
-                .fg(theme.text_secondary)
-                .add_modifier(Modifier::ITALIC),
-        )]),
-    ]
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::COMMIT,
+        text("Nouveau commit", "New commit"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::STASH,
+        text("Stash rapide", "Quick stash"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::MERGE,
+        text("Merge", "Merge"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::PUSH,
+        text("Push", "Push"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::FORCE_PUSH,
+        text("Force push", "Force push"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::BLAME,
+        text("Blame du fichier", "File blame"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::RESET,
+        text("Reset", "Reset"),
+    ));
+    lines.push(key_line(
+        keybindings::search::OPEN,
+        text("Ouvrir la recherche", "Open search"),
+    ));
+    lines.push(key_line(
+        keybindings::search::FILTER,
+        text("Filtre avance", "Advanced filter"),
+    ));
+    lines.push(key_line(
+        keybindings::diff::TOGGLE_VIEW,
+        text("Basculer le mode diff", "Toggle diff mode"),
+    ));
+}
+
+fn append_staging_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text("Vue Staging", "Staging View")));
+    lines.push(separator());
+    lines.push(key_line_multi(
+        keybindings::navigation::DOWN,
+        text("Selection suivante", "Next selection"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::UP,
+        text("Selection precedente", "Previous selection"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::staging::STAGE,
+        text("Indexer le fichier", "Stage file"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::STAGE_ALL,
+        text("Indexer tous les fichiers", "Stage all files"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::staging::UNSTAGE,
+        text("Desindexer le fichier", "Unstage file"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::UNSTAGE_ALL,
+        text("Desindexer tous les fichiers", "Unstage all files"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::DISCARD,
+        text("Abandonner le fichier", "Discard file"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::DISCARD_ALL,
+        text("Abandonner tous les fichiers", "Discard all files"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::STASH_FILE,
+        text("Stash du fichier", "Stash file"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::STASH_ALL,
+        text("Stash des non indexes", "Stash unstaged files"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::staging::SWITCH_FOCUS,
+        text("Basculer le focus", "Switch focus"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::OPEN_DIFF,
+        text("Ouvrir le diff", "Open diff"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::COMMIT_MESSAGE,
+        text("Ecrire un commit", "Write commit"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::AMEND,
+        text("Amender le commit", "Amend commit"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::PUSH,
+        text("Push", "Push"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::FORCE_PUSH,
+        text("Force push", "Force push"),
+    ));
+    lines.push(key_line(
+        keybindings::diff::TOGGLE_VIEW,
+        text("Basculer le mode diff", "Toggle diff mode"),
+    ));
+}
+
+fn append_branches_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text("Vue Branches", "Branches View")));
+    lines.push(separator());
+    lines.push(key_line_multi(
+        keybindings::navigation::DOWN,
+        text("Selection suivante", "Next selection"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::UP,
+        text("Selection precedente", "Previous selection"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::CHECKOUT,
+        text("Checkout branche", "Checkout branch"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::NEW,
+        text("Nouvelle branche locale", "New local branch"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::DELETE,
+        text("Supprimer branche", "Delete branch"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::RENAME,
+        text("Renommer branche", "Rename branch"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::MERGE,
+        text("Fusionner une branche", "Merge a branch"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::REBASE,
+        text("Rebase sur une branche", "Rebase onto a branch"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::TOGGLE_REMOTE,
+        text("Afficher/masquer les distantes", "Toggle remotes"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::NEXT_SECTION,
+        text("Section suivante", "Next section"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::PREV_SECTION,
+        text("Section precedente", "Previous section"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::WORKTREE_NEW,
+        text("Nouveau worktree", "New worktree"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::WORKTREE_DELETE,
+        text("Supprimer worktree", "Delete worktree"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::STASH_SAVE,
+        text("Sauver un stash", "Save stash"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::STASH_APPLY,
+        text("Appliquer un stash", "Apply stash"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::STASH_POP,
+        text("Pop un stash", "Pop stash"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::STASH_DROP,
+        text("Supprimer un stash", "Drop stash"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::PUSH,
+        text("Push", "Push"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::FORCE_PUSH,
+        text("Force push", "Force push"),
+    ));
+}
+
+fn append_blame_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text("Vue Blame", "Blame View")));
+    lines.push(separator());
+    lines.push(key_line_multi(
+        keybindings::navigation::DOWN,
+        text("Ligne suivante", "Next line"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::UP,
+        text("Ligne precedente", "Previous line"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::blame::CLOSE,
+        text("Fermer le blame", "Close blame"),
+    ));
+    lines.push(key_line(
+        keybindings::blame::JUMP,
+        text("Aller au commit", "Jump to commit"),
+    ));
+}
+
+fn append_conflicts_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text("Vue Conflits", "Conflicts View")));
+    lines.push(separator());
+    lines.push(key_line_multi(
+        keybindings::conflicts::SWITCH_PANEL,
+        text("Basculer les panneaux", "Switch panels"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::conflicts::ACCEPT_OURS,
+        text("Accepter ours", "Accept ours"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::conflicts::ACCEPT_THEIRS,
+        text("Accepter theirs", "Accept theirs"),
+    ));
+    lines.push(key_line(
+        keybindings::conflicts::ACCEPT_BOTH,
+        text("Accepter les deux", "Accept both"),
+    ));
+    lines.push(key_line(
+        keybindings::conflicts::MARK_RESOLVED,
+        text("Marquer comme resolu", "Mark resolved"),
+    ));
+    lines.push(key_line(
+        keybindings::conflicts::FINALIZE,
+        text("Finaliser l'operation", "Finalize operation"),
+    ));
+    lines.push(key_line(
+        keybindings::conflicts::ABORT,
+        text("Annuler l'operation", "Abort operation"),
+    ));
 }
 
 fn section_header(title: &str) -> Line<'static> {
@@ -217,4 +430,40 @@ fn key_line_multi(keys: &[&str], desc: &str) -> Line<'static> {
         Span::styled(keys_str, Style::default().fg(theme.primary)),
         Span::raw(format!("{}{}", " ".repeat(padding), desc)),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines_to_text(lines: Vec<Line<'static>>) -> String {
+        lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn test_branches_help_contains_rebase() {
+        let content = lines_to_text(build_help_content(ViewMode::Branches));
+
+        assert!(content.contains("Rebase"));
+        assert!(content.contains("e"));
+        assert!(!content.contains("Indexer le fichier"));
+    }
+
+    #[test]
+    fn test_staging_help_contains_discard_and_stage() {
+        let content = lines_to_text(build_help_content(ViewMode::Staging));
+
+        assert!(content.contains("Indexer le fichier") || content.contains("Stage file"));
+        assert!(content.contains("Abandonner le fichier") || content.contains("Discard file"));
+        assert!(!content.contains("Nouvelle branche locale"));
+    }
 }
