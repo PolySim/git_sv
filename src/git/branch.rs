@@ -153,10 +153,31 @@ pub fn list_all_branches(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<Bran
 }
 
 /// Crée une nouvelle branche à partir de HEAD.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn create_branch(repo: &Repository, name: &str) -> Result<()> {
-    let head = repo.head()?;
-    let commit = head.peel_to_commit()?;
+    create_branch_from_start_point(repo, name, None)
+}
+
+/// Crée une nouvelle branche à partir d'une référence de départ.
+pub fn create_branch_from_start_point(
+    repo: &Repository,
+    name: &str,
+    start_point: Option<&str>,
+) -> Result<()> {
+    let commit = match start_point {
+        Some(reference_name) => repo.revparse_single(reference_name)?.peel_to_commit()?,
+        None => repo.head()?.peel_to_commit()?,
+    };
+
     repo.branch(name, &commit, false)?;
+
+    if let Some(reference_name) = start_point {
+        if let Some(remote_name) = reference_name.strip_prefix("refs/remotes/") {
+            let mut branch = repo.find_branch(name, BranchType::Local)?;
+            branch.set_upstream(Some(remote_name))?;
+        }
+    }
+
     Ok(())
 }
 
@@ -250,6 +271,32 @@ mod tests {
         let new_branch = branches.iter().find(|b| b.name == "new-feature").unwrap();
         assert!(!new_branch.is_head); // N'est pas HEAD
         assert!(!new_branch.is_remote);
+    }
+
+    #[test]
+    fn test_create_branch_from_start_point() {
+        let (_temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "test.txt", "content", "Initial commit");
+        create_branch(&repo, "feature/base").unwrap();
+
+        create_branch_from_start_point(&repo, "feature/copy", Some("refs/heads/feature/base"))
+            .unwrap();
+
+        let feature_base = repo
+            .find_branch("feature/base", BranchType::Local)
+            .unwrap()
+            .get()
+            .target()
+            .unwrap();
+        let feature_copy = repo
+            .find_branch("feature/copy", BranchType::Local)
+            .unwrap()
+            .get()
+            .target()
+            .unwrap();
+
+        assert_eq!(feature_copy, feature_base);
     }
 
     #[test]

@@ -69,8 +69,11 @@ impl ActionHandler for BranchHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::branch::BranchInfo;
     use crate::git::repo::GitRepo;
-    use crate::state::{AppState, BranchesFocus, BranchesSection, InputAction, ViewMode};
+    use crate::state::{
+        AppState, BranchesFocus, BranchesSection, InputAction, SelectedBranch, ViewMode,
+    };
     use tempfile::TempDir;
 
     fn setup_test_repo() -> (TempDir, GitRepo) {
@@ -196,6 +199,41 @@ mod tests {
         );
         assert!(state.branches_view_state.input_text.is_empty());
         assert_eq!(state.branches_view_state.input_cursor, 0);
+    }
+
+    #[test]
+    fn test_handle_create_branch_prefills_remote_name() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        state.view_mode = ViewMode::Branches;
+        state
+            .branches_view_state
+            .remote_branches
+            .set_items(vec![BranchInfo {
+                name: "origin/feature/test".to_string(),
+                is_head: false,
+                is_remote: true,
+                last_commit_message: None,
+                last_commit_date: None,
+                ahead: None,
+                behind: None,
+            }]);
+        state.branches_view_state.show_remote = true;
+        state.branches_view_state.selected_branch = Some(SelectedBranch::Remote(0));
+        let mut handler = BranchHandler;
+
+        {
+            let mut ctx = HandlerContext { state: &mut state };
+            handler.handle(&mut ctx, BranchAction::Create).unwrap();
+        }
+
+        assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
+        assert_eq!(
+            state.branches_view_state.input_action,
+            Some(InputAction::CreateBranch)
+        );
+        assert_eq!(state.branches_view_state.input_text, "feature/test");
+        assert_eq!(state.branches_view_state.input_cursor, "feature/test".len());
     }
 
     #[test]

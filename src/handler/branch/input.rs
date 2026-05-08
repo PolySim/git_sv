@@ -1,13 +1,15 @@
 use crate::error::Result;
-use crate::state::{AppState, BranchesFocus, BranchesSection, InputAction, ViewMode};
+use crate::state::{
+    AppState, BranchesFocus, BranchesSection, InputAction, SelectedBranch, ViewMode,
+};
 use crate::utils::{flash_error, flash_error_message, flash_success};
 
 pub(super) fn handle_create(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
         state.branches_view_state.focus = BranchesFocus::Input;
         state.branches_view_state.input_action = Some(InputAction::CreateBranch);
-        state.branches_view_state.input_text.clear();
-        state.branches_view_state.input_cursor = 0;
+        state.branches_view_state.input_text = default_branch_name(state);
+        state.branches_view_state.input_cursor = state.branches_view_state.input_text.len();
     }
     Ok(())
 }
@@ -58,9 +60,26 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
 
     match state.branches_view_state.input_action {
         Some(InputAction::CreateBranch) => {
-            match crate::git::branch::create_branch(&state.repo.repo, &input) {
+            let start_point = selected_branch_start_point(state);
+            let selected_remote = matches!(
+                state.branches_view_state.selected_branch,
+                Some(SelectedBranch::Remote(_))
+            );
+
+            match crate::git::branch::create_branch_from_start_point(
+                &state.repo.repo,
+                &input,
+                start_point.as_deref(),
+            ) {
                 Ok(_) => {
-                    state.set_flash_message(flash_success(format!("Branche '{}' créée", input)));
+                    refresh_branches_after_create(state, &input);
+
+                    let message = if selected_remote {
+                        format!("Branche locale '{}' créée depuis la remote", input)
+                    } else {
+                        format!("Branche '{}' créée", input)
+                    };
+                    state.set_flash_message(flash_success(message));
                     state.mark_dirty();
                 }
                 Err(e) => state.set_flash_message(flash_error_message(e)),
@@ -189,4 +208,49 @@ pub(super) fn handle_cancel_input(state: &mut AppState) -> Result<()> {
     state.branches_view_state.input_text.clear();
     state.branches_view_state.input_cursor = 0;
     Ok(())
+}
+
+fn default_branch_name(state: &AppState) -> String {
+    let Some((branch, selected)) = state.branches_view_state.selected_branch_info() else {
+        return String::new();
+    };
+
+    if selected.is_remote() {
+        branch
+            .name
+            .split_once('/')
+            .map(|(_, name)| name.to_string())
+            .unwrap_or_else(|| branch.name.clone())
+    } else {
+        String::new()
+    }
+}
+
+fn selected_branch_start_point(state: &AppState) -> Option<String> {
+    state
+        .branches_view_state
+        .selected_branch_info()
+        .map(|(branch, selected)| {
+            if selected.is_remote() {
+                format!("refs/remotes/{}", branch.name)
+            } else {
+                format!("refs/heads/{}", branch.name)
+            }
+        })
+}
+
+fn refresh_branches_after_create(state: &mut AppState, branch_name: &str) {
+    if let Ok((local, remote)) = crate::git::branch::list_all_branches(&state.repo.repo) {
+        state.branches_view_state.local_branches.set_items(local);
+        state.branches_view_state.remote_branches.set_items(remote);
+
+        if let Some(index) = state
+            .branches_view_state
+            .local_branches
+            .iter()
+            .position(|branch| branch.name == branch_name)
+        {
+            state.branches_view_state.selected_branch = Some(SelectedBranch::Local(index));
+        }
+    }
 }
