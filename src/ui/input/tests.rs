@@ -5,7 +5,7 @@ use crate::git::tests::test_utils::create_test_repo;
 use crate::state::action::{
     FilterAction, GitAction, NavigationAction, SearchAction, StagingAction,
 };
-use crate::state::{AppAction, AppState, FocusPanel, StagingFocus, ViewMode};
+use crate::state::{AppAction, AppState, FocusPanel, ResetPickerState, StagingFocus, ViewMode};
 use crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
@@ -183,4 +183,21 @@ fn test_mouse_scroll_graph_moves_down() {
         action,
         Some(AppAction::Navigation(NavigationAction::MoveDown))
     );
+}
+
+#[test]
+fn test_reset_picker_m_key_selects_mixed() {
+    let mut state = create_test_state();
+    state.reset_picker = Some(ResetPickerState::new(
+        git2::Oid::zero(),
+        "abc1234".to_string(),
+        "Test".to_string(),
+    ));
+
+    let action = map_key(
+        KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+        &state,
+    );
+
+    assert_eq!(action, Some(AppAction::ResetPickerSelectMixed));
 }

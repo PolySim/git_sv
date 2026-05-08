@@ -50,6 +50,14 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
         Style::default().fg(theme.text_secondary)
     };
 
+    let mixed_style = if state.is_mixed_selected() {
+        Style::default()
+            .fg(theme.warning)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text_secondary)
+    };
+
     let hard_style = if state.is_hard_selected() {
         Style::default()
             .fg(theme.error)
@@ -64,6 +72,11 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
         "  "
     };
     let hard_indicator = if state.is_hard_selected() {
+        "▶ "
+    } else {
+        "  "
+    };
+    let mixed_indicator = if state.is_mixed_selected() {
         "▶ "
     } else {
         "  "
@@ -89,6 +102,18 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
                     "(keeps staged changes)",
                 ),
                 soft_style,
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw(mixed_indicator),
+            Span::styled("m", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(text(" - Mixed ", " - Mixed ")),
+            Span::styled(
+                text(
+                    "(retire de l'index mais garde les fichiers)",
+                    "(unstages changes but keeps files)",
+                ),
+                mixed_style,
             ),
         ]),
         Line::from(vec![

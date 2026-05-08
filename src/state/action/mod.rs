@@ -87,7 +87,10 @@ pub enum AppAction {
     MergePickerCancel,
 
     /// Navigation dans le reset picker
+    ResetPickerUp,
+    ResetPickerDown,
     ResetPickerSelectSoft,
+    ResetPickerSelectMixed,
     ResetPickerSelectHard,
     ResetPickerConfirm,
     ResetPickerCancel,

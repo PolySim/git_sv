@@ -35,6 +35,8 @@ pub enum ConfirmAction {
     AbortMerge,
     /// Reset soft vers un commit
     ResetSoft(git2::Oid),
+    /// Reset mixed vers un commit
+    ResetMixed(git2::Oid),
     /// Reset hard vers un commit
     ResetHard(git2::Oid),
 }
@@ -93,6 +95,16 @@ impl ConfirmAction {
                     ),
                 )
             }
+            ConfirmAction::ResetMixed(oid) => {
+                text_owned(
+                    format!(
+                        "Reset MIXED vers {oid:.7} ?\nLes modifications seront conservees dans le working tree mais retirees de l'index."
+                    ),
+                    format!(
+                        "MIXED reset to {oid:.7} ?\nChanges will be kept in the working tree but removed from the index."
+                    ),
+                )
+            }
             ConfirmAction::ResetHard(oid) => {
                 text_owned(
                     format!("⚠ RESET HARD vers {oid:.7} ?\n\n⚠ ATTENTION : Toutes les modifications non committees seront PERDUES !"),
@@ -127,6 +139,7 @@ impl ConfirmAction {
                 text("Confirmer l'annulation de la fusion", "Confirm merge abort")
             }
             ConfirmAction::ResetSoft(_) => text("Confirmer le reset soft", "Confirm soft reset"),
+            ConfirmAction::ResetMixed(_) => text("Confirmer le reset mixed", "Confirm mixed reset"),
             ConfirmAction::ResetHard(_) => {
                 text("⚠ Confirmer le reset hard", "⚠ Confirm hard reset")
             }

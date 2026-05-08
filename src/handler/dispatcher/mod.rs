@@ -145,6 +145,20 @@ impl ActionDispatcher {
             }
 
             // Reset picker actions
+            AppAction::ResetPickerUp => {
+                if let Some(ref mut reset) = ctx.state.reset_picker {
+                    reset.select_previous();
+                }
+                Ok(())
+            }
+
+            AppAction::ResetPickerDown => {
+                if let Some(ref mut reset) = ctx.state.reset_picker {
+                    reset.select_next();
+                }
+                Ok(())
+            }
+
             AppAction::ResetPickerSelectSoft => {
                 if let Some(ref mut reset) = ctx.state.reset_picker {
                     reset.selected_index = 0;
@@ -152,9 +166,16 @@ impl ActionDispatcher {
                 Ok(())
             }
 
-            AppAction::ResetPickerSelectHard => {
+            AppAction::ResetPickerSelectMixed => {
                 if let Some(ref mut reset) = ctx.state.reset_picker {
                     reset.selected_index = 1;
+                }
+                Ok(())
+            }
+
+            AppAction::ResetPickerSelectHard => {
+                if let Some(ref mut reset) = ctx.state.reset_picker {
+                    reset.selected_index = 2;
                 }
                 Ok(())
             }
@@ -165,6 +186,10 @@ impl ActionDispatcher {
                     if reset.is_soft_selected() {
                         ctx.state.open_confirmation(
                             crate::ui::confirm_dialog::ConfirmAction::ResetSoft(oid),
+                        );
+                    } else if reset.is_mixed_selected() {
+                        ctx.state.open_confirmation(
+                            crate::ui::confirm_dialog::ConfirmAction::ResetMixed(oid),
                         );
                     } else {
                         ctx.state.open_confirmation(

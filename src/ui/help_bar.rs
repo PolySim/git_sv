@@ -42,6 +42,7 @@ pub fn render(frame: &mut Frame, ctx: HelpBarRenderContext) {
         ("c", text("commit", "commit")),
         ("s", text("stash", "stash")),
         ("m", text("merge", "merge")),
+        ("R", text("reset", "reset")),
         ("P", text("push", "push")),
         ("Ctrl+P", text("force push", "force push")),
     ];

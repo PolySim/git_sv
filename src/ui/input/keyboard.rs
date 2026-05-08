@@ -163,12 +163,11 @@ fn map_merge_picker_key(key: KeyEvent) -> Option<AppAction> {
 
 fn map_reset_picker_key(key: KeyEvent) -> Option<AppAction> {
     match key.code {
-        KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('s') => {
-            Some(AppAction::ResetPickerSelectSoft)
-        }
-        KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') => {
-            Some(AppAction::ResetPickerSelectHard)
-        }
+        KeyCode::Char('j') | KeyCode::Down => Some(AppAction::ResetPickerDown),
+        KeyCode::Char('k') | KeyCode::Up => Some(AppAction::ResetPickerUp),
+        KeyCode::Char('s') => Some(AppAction::ResetPickerSelectSoft),
+        KeyCode::Char('m') => Some(AppAction::ResetPickerSelectMixed),
+        KeyCode::Char('h') => Some(AppAction::ResetPickerSelectHard),
         KeyCode::Enter => Some(AppAction::ResetPickerConfirm),
         KeyCode::Esc => Some(AppAction::ResetPickerCancel),
         _ => None,

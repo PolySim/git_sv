@@ -60,6 +60,20 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                     ctx.state.mark_dirty();
                 }
             }
+            ConfirmAction::ResetMixed(oid) => {
+                if let Err(e) = crate::git::commit::reset_to_commit(
+                    &ctx.state.repo.repo,
+                    oid,
+                    git2::ResetType::Mixed,
+                ) {
+                    ctx.state.set_flash_message(flash_error("reset mixed", e));
+                } else {
+                    ctx.state.set_flash_message(flash_success(format!(
+                        "Reset mixed vers {oid:.7} effectué"
+                    )));
+                    ctx.state.mark_dirty();
+                }
+            }
             ConfirmAction::ResetHard(oid) => {
                 if let Err(e) = crate::git::commit::reset_to_commit(
                     &ctx.state.repo.repo,

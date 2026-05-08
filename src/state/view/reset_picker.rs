@@ -13,7 +13,7 @@ pub struct ResetPickerState {
     pub commit_message: String,
     /// Actif ou non.
     pub is_active: bool,
-    /// Option sélectionnée : 0 = Soft, 1 = Hard.
+    /// Option sélectionnée : 0 = Soft, 1 = Mixed, 2 = Hard.
     pub selected_index: usize,
 }
 
@@ -34,8 +34,45 @@ impl ResetPickerState {
         self.selected_index == 0
     }
 
+    /// Retourne true si Mixed est sélectionné.
+    pub fn is_mixed_selected(&self) -> bool {
+        self.selected_index == 1
+    }
+
     /// Retourne true si Hard est sélectionné.
     pub fn is_hard_selected(&self) -> bool {
-        self.selected_index == 1
+        self.selected_index == 2
+    }
+
+    /// Sélectionne l'option précédente.
+    pub fn select_previous(&mut self) {
+        self.selected_index = self.selected_index.saturating_sub(1);
+    }
+
+    /// Sélectionne l'option suivante.
+    pub fn select_next(&mut self) {
+        self.selected_index = (self.selected_index + 1).min(2);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reset_picker_navigation_covers_mixed() {
+        let oid = Oid::zero();
+        let mut state = ResetPickerState::new(oid, "abc1234".to_string(), "Test".to_string());
+
+        assert!(state.is_soft_selected());
+
+        state.select_next();
+        assert!(state.is_mixed_selected());
+
+        state.select_next();
+        assert!(state.is_hard_selected());
+
+        state.select_previous();
+        assert!(state.is_mixed_selected());
     }
 }
