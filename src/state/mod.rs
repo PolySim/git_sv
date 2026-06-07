@@ -369,9 +369,15 @@ impl AppState {
     ///
     /// Charge les fichiers depuis le repo et met à jour l'état.
     pub fn refresh_commit_files(&mut self) {
-        if let Some(commit) = self.selected_commit() {
-            let files = self.repo.commit_diff(commit.oid).unwrap_or_default();
-            self.graph_view.set_commit_files(files);
+        if let Some(oid) = self.selected_commit().map(|commit| commit.oid) {
+            match self.repo.commit_diff(oid) {
+                Ok(files) => self.graph_view.set_commit_files(files),
+                Err(e) => {
+                    self.graph_view.commit_files.clear();
+                    self.graph_view.file_selected_index = 0;
+                    self.set_flash_message(crate::utils::flash_error("chargement fichiers", e));
+                }
+            }
         } else {
             self.graph_view.commit_files.clear();
             self.graph_view.file_selected_index = 0;
@@ -397,16 +403,39 @@ impl AppState {
     }
 
     fn refresh_with_commit_limit(&mut self, commit_limit: usize) -> crate::error::Result<()> {
-        self.current_branch = self.repo.current_branch().ok();
+        self.current_branch = match self.repo.current_branch() {
+            Ok(branch) => Some(branch),
+            Err(e) => {
+                self.set_flash_message(crate::utils::flash_error("branche courante", e));
+                None
+            }
+        };
 
         let (new_graph, can_load_more) = if self.filters.graph_filter.is_active() {
-            self.repo
+            match self
+                .repo
                 .build_graph_filtered_with_more(commit_limit, &self.filters.graph_filter)
-                .unwrap_or_default()
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    self.set_flash_message(crate::utils::flash_error("chargement graphe", e));
+                    (
+                        self.graph_view.rows.items().to_vec(),
+                        self.graph_view.can_load_more,
+                    )
+                }
+            }
         } else {
-            self.repo
-                .build_graph_with_more(commit_limit)
-                .unwrap_or_default()
+            match self.repo.build_graph_with_more(commit_limit) {
+                Ok(result) => result,
+                Err(e) => {
+                    self.set_flash_message(crate::utils::flash_error("chargement graphe", e));
+                    (
+                        self.graph_view.rows.items().to_vec(),
+                        self.graph_view.can_load_more,
+                    )
+                }
+            }
         };
 
         let graph_len = new_graph.len();
@@ -423,8 +452,12 @@ impl AppState {
         self.refresh_commit_files();
         self.refresh_selected_commit_diff();
 
-        let status_entries = self.repo.status().unwrap_or_default();
-        self.apply_status_entries(status_entries);
+        match self.repo.status() {
+            Ok(status_entries) => self.apply_status_entries(status_entries),
+            Err(e) => {
+                self.set_flash_message(crate::utils::flash_error("status", e));
+            }
+        }
 
         if self.view_mode == ViewMode::Branches {
             self.refresh_branches_view_data();

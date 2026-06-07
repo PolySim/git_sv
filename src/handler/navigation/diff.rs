@@ -84,11 +84,26 @@ pub(super) fn handle_scroll_stash_diff_down(state: &mut AppState) {
 }
 
 pub fn load_commit_file_diff(state: &mut AppState) {
-    if let Some(commit) = state.selected_commit() {
+    if let Some(commit_oid) = state.selected_commit().map(|commit| commit.oid) {
         let file_index = state.graph_view.file_selected_index;
         if let Some(file) = state.graph_view.commit_files.get(file_index) {
-            let diff = state.repo.file_diff(commit.oid, &file.path).ok();
-            state.graph_view.set_file_diff(diff);
+            let path = file.path.clone();
+            let cache_key = crate::state::cache::DiffCacheKey::new(commit_oid, &path);
+
+            if let Some(cached_diff) = state.diff_cache.get(&cache_key) {
+                state.graph_view.set_file_diff(Some(cached_diff.clone()));
+            } else {
+                match state.repo.file_diff(commit_oid, &path) {
+                    Ok(diff) => {
+                        state.diff_cache.put(cache_key, diff.clone());
+                        state.graph_view.set_file_diff(Some(diff));
+                    }
+                    Err(e) => {
+                        state.graph_view.clear_file_diff();
+                        state.set_flash_message(crate::utils::flash_error("chargement diff", e));
+                    }
+                }
+            }
             return;
         }
     }

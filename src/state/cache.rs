@@ -98,7 +98,6 @@ pub struct DiffCacheKey {
 }
 
 impl DiffCacheKey {
-    #[cfg(test)]
     pub fn new(commit_oid: Oid, file_path: impl Into<String>) -> Self {
         Self {
             commit_oid,

@@ -7,6 +7,11 @@ use std::fs;
 
 use crate::error::Result;
 
+/// Nombre maximum de lignes de diff matérialisées en mémoire.
+const MAX_DIFF_LINES: usize = 20_000;
+/// Taille maximum affichée pour un fichier non suivi.
+const MAX_UNTRACKED_DIFF_BYTES: u64 = 1_048_576;
+
 /// Mode d'affichage du diff.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DiffViewMode {
@@ -162,8 +167,14 @@ fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
     let mut lines = Vec::new();
     let mut additions = 0;
     let mut deletions = 0;
+    let mut truncated = false;
 
     for hunk_idx in 0..patch.num_hunks() {
+        if lines.len() >= MAX_DIFF_LINES {
+            truncated = true;
+            break;
+        }
+
         let Ok((hunk, _)) = patch.hunk(hunk_idx) else {
             continue;
         };
@@ -206,6 +217,11 @@ fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
                 _ => {}
             }
 
+            if lines.len() >= MAX_DIFF_LINES {
+                truncated = true;
+                break;
+            }
+
             lines.push(DiffLine {
                 line_type,
                 content: String::from_utf8_lossy(line.content())
@@ -216,6 +232,17 @@ fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
                 new_lineno: line.new_lineno(),
             });
         }
+
+        if truncated {
+            break;
+        }
+    }
+
+    if truncated {
+        lines.push(limit_message_line(format!(
+            "Diff tronque apres {} lignes pour proteger la memoire",
+            MAX_DIFF_LINES
+        )));
     }
 
     (lines, additions, deletions)
@@ -296,7 +323,13 @@ fn find_and_extract_file_diff(
             if let Ok(Some(patch)) = git2::Patch::from_diff(diff, idx) {
                 extract_diff_lines(&patch)
             } else {
-                (Vec::new(), 0, 0)
+                (
+                    vec![limit_message_line(
+                        "Diff non affichable (fichier binaire ou patch indisponible)",
+                    )],
+                    0,
+                    0,
+                )
             };
 
         return Ok(FileDiff {
@@ -318,10 +351,42 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         .workdir()
         .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
     let full_path = workdir.join(file_path);
-    let content = fs::read_to_string(&full_path)?;
+    let metadata = fs::metadata(&full_path)?;
+
+    if metadata.len() > MAX_UNTRACKED_DIFF_BYTES {
+        return Ok(limited_file_diff(
+            file_path,
+            DiffStatus::Added,
+            format!(
+                "Fichier non suivi trop volumineux pour affichage ({} octets)",
+                metadata.len()
+            ),
+        ));
+    }
+
+    let bytes = fs::read(&full_path)?;
+    if bytes.contains(&0) {
+        return Ok(limited_file_diff(
+            file_path,
+            DiffStatus::Added,
+            "Fichier binaire non suivi non affichable",
+        ));
+    }
+
+    let content = match String::from_utf8(bytes) {
+        Ok(content) => content,
+        Err(_) => {
+            return Ok(limited_file_diff(
+                file_path,
+                DiffStatus::Added,
+                "Fichier non suivi non UTF-8 non affichable",
+            ));
+        }
+    };
 
     let lines: Vec<DiffLine> = content
         .lines()
+        .take(MAX_DIFF_LINES)
         .enumerate()
         .map(|(index, line)| DiffLine {
             line_type: DiffLineType::Addition,
@@ -330,14 +395,43 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
             new_lineno: Some((index + 1) as u32),
         })
         .collect();
+    let truncated = content.lines().count() > MAX_DIFF_LINES;
+    let additions = lines.len();
+    let mut lines = lines;
+
+    if truncated {
+        lines.push(limit_message_line(format!(
+            "Diff tronque apres {} lignes pour proteger la memoire",
+            MAX_DIFF_LINES
+        )));
+    }
 
     Ok(FileDiff {
         path: file_path.to_string(),
         status: DiffStatus::Added,
-        additions: lines.len(),
+        additions,
         deletions: 0,
         lines,
     })
+}
+
+fn limited_file_diff(file_path: &str, status: DiffStatus, message: impl Into<String>) -> FileDiff {
+    FileDiff {
+        path: file_path.to_string(),
+        status,
+        lines: vec![limit_message_line(message)],
+        additions: 0,
+        deletions: 0,
+    }
+}
+
+fn limit_message_line(message: impl Into<String>) -> DiffLine {
+    DiffLine {
+        line_type: DiffLineType::HunkHeader,
+        content: message.into(),
+        old_lineno: None,
+        new_lineno: None,
+    }
 }
 
 fn diff_paths(delta: &git2::DiffDelta<'_>) -> (String, Option<String>) {
@@ -552,5 +646,21 @@ mod tests {
         assert_eq!(file_diff.lines[0].content, "line 1");
         assert_eq!(file_diff.lines[0].new_lineno, Some(1));
         assert_eq!(file_diff.lines[1].content, "line 2");
+    }
+
+    #[test]
+    fn test_working_dir_file_diff_untracked_binary_is_limited() {
+        let (temp_dir, repo) = create_test_repo();
+
+        commit_file(&repo, "tracked.txt", "tracked\n", "Initial commit");
+        std::fs::write(temp_dir.path().join("binary.bin"), [0, 1, 2, 3]).unwrap();
+
+        let file_diff = working_dir_file_diff(&repo, "binary.bin").unwrap();
+
+        assert_eq!(file_diff.path, "binary.bin");
+        assert!(matches!(file_diff.status, DiffStatus::Added));
+        assert_eq!(file_diff.additions, 0);
+        assert_eq!(file_diff.lines.len(), 1);
+        assert!(file_diff.lines[0].content.contains("binaire"));
     }
 }

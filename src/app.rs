@@ -6,7 +6,7 @@
 
 use crate::error::Result;
 use crate::git::repo::GitRepo;
-use crate::terminal::{restore_terminal, setup_terminal};
+use crate::terminal::TerminalSession;
 
 /// Application principale qui orchestre les composants.
 pub struct App {
@@ -28,12 +28,16 @@ impl App {
 
     /// Lance l'application.
     pub fn run(self) -> Result<()> {
-        let mut terminal = setup_terminal()?;
+        let mut session = TerminalSession::setup()?;
 
         let mut handler = crate::handler::EventHandler::new(self.state)?;
-        let result = handler.run(&mut terminal);
+        let result = handler.run(session.terminal_mut());
 
-        restore_terminal(&mut terminal)?;
-        result
+        match (result, session.restore()) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(err), Ok(())) => Err(err),
+            (Ok(()), Err(err)) => Err(err),
+            (Err(err), Err(_restore_err)) => Err(err),
+        }
     }
 }

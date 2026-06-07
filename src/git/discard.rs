@@ -39,7 +39,7 @@ pub fn discard_file(repo: &Repository, file_path: &str) -> Result<()> {
 pub fn discard_all(repo: &Repository) -> Result<()> {
     let mut checkout_builder = git2::build::CheckoutBuilder::new();
     checkout_builder.force();
-    checkout_builder.remove_untracked(false);
+    checkout_builder.remove_untracked(true);
 
     repo.checkout_head(Some(&mut checkout_builder))?;
 
@@ -94,6 +94,20 @@ mod tests {
         // Vérifier que les fichiers sont restaurés
         assert_eq!(std::fs::read_to_string(&file1_path).unwrap(), "content1\n");
         assert_eq!(std::fs::read_to_string(&file2_path).unwrap(), "content2\n");
+    }
+
+    #[test]
+    fn test_discard_all_removes_untracked_file() {
+        let (temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "tracked.txt", "tracked\n", "Initial commit");
+
+        let file_path = temp_dir.path().join("untracked.txt");
+        std::fs::write(&file_path, "temp\n").unwrap();
+        assert!(file_path.exists());
+
+        discard_all(&repo).unwrap();
+
+        assert!(!file_path.exists());
     }
 
     #[test]

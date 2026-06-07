@@ -77,6 +77,7 @@ pub fn render(frame: &mut Frame, ctx: HelpBarRenderContext) {
     keys.push((text("molette", "wheel"), text("scroll", "scroll")));
 
     // Construire la ligne avec les touches formatées.
+    let keys = fit_help_keys(keys, area.width);
     let mut spans = build_help_spans(&keys, theme);
 
     // Ajouter le compteur de commits à droite.
@@ -123,4 +124,43 @@ fn build_help_spans<'a>(
     }
 
     spans
+}
+
+fn fit_help_keys<'a>(keys: Vec<(&'a str, &'a str)>, width: u16) -> Vec<(&'a str, &'a str)> {
+    let reserved_counter_width = 12usize;
+    let available = usize::from(width).saturating_sub(reserved_counter_width);
+    let mut selected = Vec::new();
+    let mut used = 0usize;
+
+    for key in keys {
+        let item_width = help_item_width(key);
+        let separator_width = if selected.is_empty() { 0 } else { 2 };
+
+        if used + separator_width + item_width > available {
+            break;
+        }
+
+        used += separator_width + item_width;
+        selected.push(key);
+    }
+
+    selected
+}
+
+fn help_item_width((key, desc): (&str, &str)) -> usize {
+    key.chars().count() + 1 + desc.chars().count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fit_help_keys_limits_to_available_width() {
+        let keys = vec![("j/k", "navigate"), ("Enter", "details"), ("P", "push")];
+
+        let fitted = fit_help_keys(keys, 24);
+
+        assert_eq!(fitted, vec![("j/k", "navigate")]);
+    }
 }

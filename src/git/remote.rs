@@ -4,11 +4,47 @@ mod ssh;
 pub mod types;
 
 use git2::{FetchOptions, PushOptions, Repository};
+use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::error::Result;
 use crate::git::conflict::MergeResult;
 
 pub use types::{flash_message_for_pull_result, FetchSuccess, PushSuccess};
+
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+
+fn run_git_command_with_timeout(mut cmd: Command, operation: &'static str) -> Result<Output> {
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter {}: {}", operation, e)))?;
+    let start = Instant::now();
+
+    loop {
+        if child
+            .try_wait()
+            .map_err(|e| git2::Error::from_str(&format!("Erreur attendre {}: {}", operation, e)))?
+            .is_some()
+        {
+            return child.wait_with_output().map_err(Into::into);
+        }
+
+        if start.elapsed() >= GIT_COMMAND_TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(crate::error::GitSvError::OperationFailed {
+                operation,
+                details: format!(
+                    "délai dépassé après {} secondes",
+                    GIT_COMMAND_TIMEOUT.as_secs()
+                ),
+            });
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
 
 fn current_branch_push_context(repo: &Repository) -> Result<(String, String, bool)> {
     let head = repo.head()?;
@@ -114,8 +150,6 @@ fn push_current_branch_cli_path_with_options(
     repo_path: &std::path::Path,
     force: bool,
 ) -> Result<PushSuccess> {
-    use std::process::Command;
-
     let repo = Repository::open(repo_path)?;
     let (branch_name, remote_name, has_upstream) = current_branch_push_context(&repo)?;
 
@@ -132,10 +166,8 @@ fn push_current_branch_cli_path_with_options(
         cmd.args([&remote_name, &branch_name]);
     }
 
-    let output = cmd
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git push: {}", e)))?;
+    cmd.current_dir(repo_path);
+    let output = run_git_command_with_timeout(cmd, "git push")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -152,13 +184,9 @@ fn push_current_branch_cli_path_with_options(
 
 /// Pull via git CLI, version par chemin pour le thread background.
 pub fn pull_current_branch_cli_path(repo_path: &std::path::Path) -> Result<MergeResult> {
-    use std::process::Command;
-
-    let output = Command::new("git")
-        .args(["pull"])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git pull: {}", e)))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["pull"]).current_dir(repo_path);
+    let output = run_git_command_with_timeout(cmd, "git pull")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -183,14 +211,10 @@ pub fn pull_current_branch_cli_path(repo_path: &std::path::Path) -> Result<Merge
 
 /// Fetch via git CLI, version par chemin pour le thread background.
 pub fn fetch_all_cli_path(repo_path: &std::path::Path) -> Result<FetchSuccess> {
-    use std::process::Command;
-
     let repo = Repository::open(repo_path)?;
-    let output = Command::new("git")
-        .args(["fetch", "--all"])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git fetch: {}", e)))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["fetch", "--all"]).current_dir(repo_path);
+    let output = run_git_command_with_timeout(cmd, "git fetch")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -265,17 +289,13 @@ pub fn pull_current_branch_with_result(repo: &Repository) -> Result<MergeResult>
 
 /// Fetch toutes les refs depuis le remote en utilisant git CLI (fallback).
 pub fn fetch_all_cli(repo: &Repository) -> Result<()> {
-    use std::process::Command;
-
     let repo_path = repo
         .workdir()
         .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
 
-    let output = Command::new("git")
-        .args(["fetch", "--all"])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git fetch: {}", e)))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["fetch", "--all"]).current_dir(repo_path);
+    let output = run_git_command_with_timeout(cmd, "git fetch")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -329,8 +349,6 @@ pub fn force_push_current_branch_cli(repo: &Repository) -> Result<PushSuccess> {
 }
 
 fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Result<PushSuccess> {
-    use std::process::Command;
-
     let (branch_name, remote_name, has_upstream) = current_branch_push_context(repo)?;
 
     let repo_path = repo
@@ -350,10 +368,8 @@ fn push_current_branch_cli_with_options(repo: &Repository, force: bool) -> Resul
         cmd.args([&remote_name, &branch_name]);
     }
 
-    let output = cmd
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git push: {}", e)))?;
+    cmd.current_dir(repo_path);
+    let output = run_git_command_with_timeout(cmd, "git push")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

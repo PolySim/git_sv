@@ -165,7 +165,7 @@ fn find_git_dir(start_path: &Path) -> Result<PathBuf> {
     // Si on arrive ici, on n'a pas trouvé de .git/
     // Essayer avec la commande git pour les worktrees
     let output = std::process::Command::new("git")
-        .args(["rev-parse", "--git-dir"])
+        .args(["rev-parse", "--absolute-git-dir"])
         .current_dir(start_path)
         .output();
 
