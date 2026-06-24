@@ -40,53 +40,137 @@ En une phrase : `git_sv` cherche a apporter une experience proche d'un client Gi
 
 ## Installation
 
-### Via cargo
+Les releases officielles fournissent des binaires 64 bits pour Linux, Windows et macOS. Les gestionnaires de paquets sont la méthode recommandée : ils installent `git_sv` dans le `PATH` et simplifient les mises à jour.
+
+### Linux
+
+#### Homebrew (recommandé)
+
+Homebrew fonctionne sur la plupart des distributions Linux récentes :
 
 ```bash
-cargo install --git https://github.com/PolySim/git_sv.git
+brew tap PolySim/homebrew-tap
+brew install git_sv
+git_sv --version
 ```
 
-### Depuis les sources
+Mise à jour :
 
 ```bash
-git clone https://github.com/PolySim/git_sv.git
-cd git_sv
-cargo build --release
-./target/release/git_sv
+brew update
+brew upgrade git_sv
 ```
 
-### Homebrew (macOS/Linux)
+#### Archive binaire x86_64
 
-Les releases publient la formule Homebrew dans le tap externe `PolySim/homebrew-tap`.
+Cette méthode installe automatiquement le binaire de la dernière release dans `/usr/local/bin`. Elle nécessite `curl`, `tar` et une distribution utilisant glibc.
+
+```bash
+tmp_dir="$(mktemp -d)"
+asset_url="$(curl -fsSL https://api.github.com/repos/PolySim/git_sv/releases/latest \
+  | sed -n 's/.*"browser_download_url": "\([^"]*x86_64-unknown-linux-gnu.tar.gz\)".*/\1/p' \
+  | head -n 1)"
+test -n "$asset_url"
+curl -fL "$asset_url" -o "$tmp_dir/git_sv.tar.gz"
+tar -xzf "$tmp_dir/git_sv.tar.gz" -C "$tmp_dir"
+sudo install -m 0755 "$tmp_dir/git_sv" /usr/local/bin/git_sv
+rm -rf "$tmp_dir"
+git_sv --version
+```
+
+Pour mettre à jour une installation par archive, relancez les mêmes commandes.
+
+### Windows
+
+#### Scoop (recommandé)
+
+Depuis PowerShell :
+
+```powershell
+scoop bucket add git_sv https://github.com/PolySim/scoop-git_sv
+scoop install git_sv
+git_sv --version
+```
+
+Mise à jour :
+
+```powershell
+scoop update
+scoop update git_sv
+```
+
+#### Archive binaire x86_64
+
+Le script suivant télécharge la dernière release, installe `git_sv.exe` dans `%LOCALAPPDATA%\Programs\git_sv` et ajoute ce dossier au `PATH` utilisateur :
+
+```powershell
+$release = Invoke-RestMethod https://api.github.com/repos/PolySim/git_sv/releases/latest
+$asset = $release.assets |
+  Where-Object { $_.name -like '*x86_64-pc-windows-msvc.zip' } |
+  Select-Object -First 1
+if (-not $asset) { throw 'Archive Windows introuvable dans la dernière release' }
+
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\git_sv'
+$archive = Join-Path $env:TEMP 'git_sv.zip'
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+Invoke-WebRequest $asset.browser_download_url -OutFile $archive
+Expand-Archive -Path $archive -DestinationPath $installDir -Force
+Remove-Item $archive
+
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (($userPath -split ';') -notcontains $installDir) {
+  [Environment]::SetEnvironmentVariable('Path', "$userPath;$installDir", 'User')
+}
+$env:Path += ";$installDir"
+git_sv --version
+```
+
+Pour mettre à jour une installation par archive, relancez le script.
+
+### macOS
 
 ```bash
 brew tap PolySim/homebrew-tap
 brew install git_sv
 ```
 
-Le fichier `homebrew/git_sv.rb` du depot sert de gabarit local et reste desactive tant qu'il n'est pas synchronise avec une release publiee.
+### Compilation avec Cargo
 
-### Scoop (Windows)
-
-Les releases publient le manifest Scoop dans le bucket `PolySim/scoop-git_sv`.
-
-```powershell
-scoop bucket add git_sv https://github.com/PolySim/scoop-git_sv
-scoop install git_sv
-```
-
-Pour mettre a jour :
-
-```powershell
-scoop update git_sv
-```
-
-### OpenSSL
-
-Si votre systeme n'expose pas correctement OpenSSL, essayez :
+Cette méthode fonctionne sur Linux, Windows et macOS. Elle nécessite Git, la toolchain Rust stable et un compilateur C. Sous Windows, utilisez la toolchain Rust MSVC et installez la charge de travail « Desktop development with C++ » des Build Tools Visual Studio.
 
 ```bash
-cargo build --release --features vendored-ssl
+cargo install --git https://github.com/PolySim/git_sv.git --features vendored-ssl
+git_sv --version
+```
+
+Sous Debian/Ubuntu, les prérequis de compilation peuvent être installés avec :
+
+```bash
+sudo apt update
+sudo apt install build-essential pkg-config perl
+```
+
+Sous Fedora :
+
+```bash
+sudo dnf install gcc pkgconf-pkg-config perl
+```
+
+Pour construire manuellement le dépôt :
+
+```bash
+git clone https://github.com/PolySim/git_sv.git
+cd git_sv
+cargo build --locked --release --features vendored-ssl
+```
+
+Le binaire se trouve ensuite dans `target/release/git_sv` ou `target\release\git_sv.exe` sous Windows.
+
+### Vérification
+
+```bash
+git_sv --version
+git_sv --help
 ```
 
 ---
