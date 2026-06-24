@@ -12,6 +12,7 @@ use crate::git::repo::{FileStatusKind, StatusEntry};
 use crate::i18n::{text, text_owned};
 use crate::state::{StagingFocus, StagingState};
 use crate::ui::common::StatusBarConfig;
+use crate::ui::image_preview::ImagePreviewState;
 use crate::ui::theme::{current_theme, Theme};
 
 pub struct StagingRenderContext<'a> {
@@ -20,6 +21,7 @@ pub struct StagingRenderContext<'a> {
     pub repo_path: &'a str,
     pub flash_message: Option<&'a str>,
     pub is_merging: bool,
+    pub image_state: &'a mut ImagePreviewState,
 }
 
 struct FileListRenderContext<'a> {
@@ -56,6 +58,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         repo_path,
         flash_message,
         is_merging,
+        image_state,
     } = ctx;
 
     let theme = current_theme();
@@ -111,6 +114,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
             is_focused: staging_state.focus == StagingFocus::Diff,
             view_mode: staging_state.diff_view_mode,
             is_fullscreen: false,
+            image_state,
         },
     );
 

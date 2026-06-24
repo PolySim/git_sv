@@ -4,6 +4,8 @@
 
 use git2::{Oid, Repository};
 use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 
 use crate::error::Result;
 
@@ -11,6 +13,22 @@ use crate::error::Result;
 const MAX_DIFF_LINES: usize = 20_000;
 /// Taille maximum affichée pour un fichier non suivi.
 const MAX_UNTRACKED_DIFF_BYTES: u64 = 1_048_576;
+/// Taille maximale d'une image conservée pour la prévisualisation.
+const MAX_IMAGE_PREVIEW_BYTES: usize = 20 * 1_048_576;
+
+/// Format d'une image prévisualisable dans le terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageFormat {
+    Raster,
+    Svg,
+}
+
+/// Contenu brut d'une image, partagé entre le diff et son cache LRU.
+#[derive(Debug, Clone)]
+pub struct ImagePreview {
+    pub bytes: Arc<[u8]>,
+    pub format: ImageFormat,
+}
 
 /// Mode d'affichage du diff.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -92,6 +110,8 @@ pub struct FileDiff {
     pub additions: usize,
     /// Nombre total de suppressions.
     pub deletions: usize,
+    /// Image correspondant au nouvel état du fichier, si prise en charge.
+    pub image_preview: Option<ImagePreview>,
 }
 
 /// Calcule le diff d'un commit donné.
@@ -265,7 +285,17 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
     let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)?;
 
     // Trouver le delta correspondant au fichier.
-    find_and_extract_file_diff(&diff, file_path, "Fichier non trouvé dans le commit")
+    let mut file_diff =
+        find_and_extract_file_diff(&diff, file_path, "Fichier non trouvé dans le commit")?;
+    let source_tree = if file_diff.status == DiffStatus::Deleted {
+        parent_tree.as_ref()
+    } else {
+        Some(&commit_tree)
+    };
+    file_diff.image_preview = source_tree
+        .and_then(|tree| read_tree_file(repo, tree, file_path))
+        .and_then(|bytes| image_preview(file_path, bytes));
+    Ok(file_diff)
 }
 
 /// Récupère le diff d'un fichier du working directory (non committé).
@@ -285,11 +315,17 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
     let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), None)?;
 
     // Trouver le delta correspondant au fichier.
-    find_and_extract_file_diff(
+    let mut file_diff = find_and_extract_file_diff(
         &diff,
         file_path,
         "Fichier non trouvé dans le working directory",
-    )
+    )?;
+    let bytes = repo
+        .workdir()
+        .and_then(|workdir| fs::read(workdir.join(file_path)).ok())
+        .or_else(|| read_tree_file(repo, &head_tree, file_path));
+    file_diff.image_preview = bytes.and_then(|bytes| image_preview(file_path, bytes));
+    Ok(file_diff)
 }
 
 /// Trouve un fichier dans un diff et extrait son contenu.
@@ -338,6 +374,7 @@ fn find_and_extract_file_diff(
             lines,
             additions,
             deletions,
+            image_preview: None,
         });
     }
 
@@ -353,18 +390,34 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
     let full_path = workdir.join(file_path);
     let metadata = fs::metadata(&full_path)?;
 
-    if metadata.len() > MAX_UNTRACKED_DIFF_BYTES {
+    let format = image_format(file_path);
+    let max_size = if format.is_some() {
+        MAX_IMAGE_PREVIEW_BYTES as u64
+    } else {
+        MAX_UNTRACKED_DIFF_BYTES
+    };
+    if metadata.len() > max_size {
         return Ok(limited_file_diff(
             file_path,
             DiffStatus::Added,
             format!(
-                "Fichier non suivi trop volumineux pour affichage ({} octets)",
+                "Fichier non suivi trop volumineux pour prévisualisation ({} octets)",
                 metadata.len()
             ),
         ));
     }
 
     let bytes = fs::read(&full_path)?;
+    if let Some(preview) = image_preview(file_path, bytes.clone()) {
+        return Ok(FileDiff {
+            path: file_path.to_string(),
+            status: DiffStatus::Added,
+            lines: Vec::new(),
+            additions: 0,
+            deletions: 0,
+            image_preview: Some(preview),
+        });
+    }
     if bytes.contains(&0) {
         return Ok(limited_file_diff(
             file_path,
@@ -412,6 +465,7 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         additions,
         deletions: 0,
         lines,
+        image_preview: None,
     })
 }
 
@@ -422,7 +476,39 @@ fn limited_file_diff(file_path: &str, status: DiffStatus, message: impl Into<Str
         lines: vec![limit_message_line(message)],
         additions: 0,
         deletions: 0,
+        image_preview: None,
     }
+}
+
+fn image_preview(file_path: &str, bytes: Vec<u8>) -> Option<ImagePreview> {
+    if bytes.len() > MAX_IMAGE_PREVIEW_BYTES {
+        return None;
+    }
+
+    let format = image_format(file_path)?;
+
+    Some(ImagePreview {
+        bytes: Arc::from(bytes),
+        format,
+    })
+}
+
+fn image_format(file_path: &str) -> Option<ImageFormat> {
+    let extension = Path::new(file_path)
+        .extension()
+        .and_then(|extension| extension.to_str())?
+        .to_ascii_lowercase();
+    Some(match extension.as_str() {
+        "svg" => ImageFormat::Svg,
+        "gif" | "jpg" | "jpeg" | "png" | "webp" => ImageFormat::Raster,
+        _ => return None,
+    })
+}
+
+fn read_tree_file(repo: &Repository, tree: &git2::Tree<'_>, file_path: &str) -> Option<Vec<u8>> {
+    let entry = tree.get_path(Path::new(file_path)).ok()?;
+    let blob = repo.find_blob(entry.id()).ok()?;
+    Some(blob.content().to_vec())
 }
 
 fn limit_message_line(message: impl Into<String>) -> DiffLine {
@@ -582,6 +668,19 @@ mod tests {
     }
 
     #[test]
+    fn test_get_file_diff_exposes_svg_preview() {
+        let (_temp_dir, repo) = create_test_repo();
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><rect width="12" height="8"/></svg>"#;
+        let oid = commit_file(&repo, "logo.svg", svg, "Add logo");
+
+        let file_diff = get_file_diff(&repo, oid, "logo.svg").unwrap();
+        let preview = file_diff.image_preview.expect("prévisualisation SVG");
+
+        assert_eq!(preview.format, ImageFormat::Svg);
+        assert_eq!(preview.bytes.as_ref(), svg.as_bytes());
+    }
+
+    #[test]
     fn test_working_dir_file_diff() {
         let (_temp_dir, repo) = create_test_repo();
 
@@ -597,6 +696,20 @@ mod tests {
         assert_eq!(file_diff.path, "test.txt");
         assert!(matches!(file_diff.status, DiffStatus::Modified));
         assert!(!file_diff.lines.is_empty());
+    }
+
+    #[test]
+    fn test_untracked_png_exposes_image_preview() {
+        let (_temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "tracked.txt", "content", "Initial commit");
+        let png = b"\x89PNG\r\n\x1a\npreview";
+        std::fs::write(repo.workdir().unwrap().join("preview.png"), png).unwrap();
+
+        let file_diff = working_dir_file_diff(&repo, "preview.png").unwrap();
+        let preview = file_diff.image_preview.expect("prévisualisation PNG");
+
+        assert_eq!(preview.format, ImageFormat::Raster);
+        assert_eq!(preview.bytes.as_ref(), png);
     }
 
     #[test]

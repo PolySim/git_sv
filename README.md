@@ -28,6 +28,7 @@ En une phrase : `git_sv` cherche a apporter une experience proche d'un client Gi
 
 - graphe de commits avec couleurs stables par branche ;
 - staging interactif avec diff et message de commit ;
+- prévisualisation des images PNG, JPEG, GIF, WebP et SVG dans les diffs ;
 - gestion des branches locales et distantes ;
 - worktrees et stashes ;
 - recherche de commits et filtres sur le graphe ;

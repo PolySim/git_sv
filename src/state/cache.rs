@@ -257,6 +257,7 @@ mod tests {
             lines: Vec::new(),
             additions: 0,
             deletions: 0,
+            image_preview: None,
         };
 
         cache.put(key1.clone(), diff.clone());
@@ -289,6 +290,7 @@ mod tests {
             lines: Vec::new(),
             additions: 0,
             deletions: 0,
+            image_preview: None,
         };
 
         cache.put(wd_key.clone(), diff.clone());

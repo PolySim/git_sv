@@ -14,6 +14,7 @@ pub mod graph_view;
 pub mod help_bar;
 pub mod help_overlay;
 pub mod hit_test;
+pub mod image_preview;
 pub mod input;
 pub mod keybindings;
 pub mod layout;
@@ -275,6 +276,7 @@ fn render_graph_diff_panel(
                 is_focused: snap.focus == FocusPanel::BottomRight,
                 view_mode: snap.diff_view_mode,
                 is_fullscreen: true,
+                image_state: &mut state.image_preview,
             },
         );
         state.graph_view.diff_total_lines = total_lines;
@@ -292,6 +294,7 @@ fn render_graph_diff_panel(
                 is_focused: snap.focus == FocusPanel::BottomRight,
                 view_mode: snap.diff_view_mode,
                 is_fullscreen: false,
+                image_state: &mut state.image_preview,
             },
         );
         state.graph_view.diff_total_lines = total_lines;
@@ -344,14 +347,16 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             render_graph_view(frame, state);
         }
         ViewMode::Staging => {
+            let flash_message = state.current_flash_message().map(str::to_string);
             staging_view::render(
                 frame,
                 staging_view::StagingRenderContext {
                     staging_state: &state.staging_state,
                     current_branch: state.current_branch.as_deref(),
                     repo_path: &state.repo_path,
-                    flash_message: state.current_flash_message(),
+                    flash_message: flash_message.as_deref(),
                     is_merging: state.ui.is_merging,
+                    image_state: &mut state.image_preview,
                 },
             );
         }
@@ -359,14 +364,16 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             // Rendre la vue sous-jacente d'abord
             match state.previous_view_mode {
                 Some(ViewMode::Staging) => {
+                    let flash_message = state.current_flash_message().map(str::to_string);
                     staging_view::render(
                         frame,
                         staging_view::StagingRenderContext {
                             staging_state: &state.staging_state,
                             current_branch: state.current_branch.as_deref(),
                             repo_path: &state.repo_path,
-                            flash_message: state.current_flash_message(),
+                            flash_message: flash_message.as_deref(),
                             is_merging: state.ui.is_merging,
+                            image_state: &mut state.image_preview,
                         },
                     );
                 }

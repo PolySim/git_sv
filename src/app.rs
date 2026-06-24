@@ -27,8 +27,9 @@ impl App {
     }
 
     /// Lance l'application.
-    pub fn run(self) -> Result<()> {
+    pub fn run(mut self) -> Result<()> {
         let mut session = TerminalSession::setup()?;
+        self.state.image_preview.initialize();
 
         let mut handler = crate::handler::EventHandler::new(self.state)?;
         let result = handler.run(session.terminal_mut());

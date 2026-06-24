@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::git::diff::{DiffLineType, DiffViewMode, FileDiff};
 use crate::i18n::{text, text_owned};
+use crate::ui::image_preview::ImagePreviewState;
 use crate::ui::theme::{current_theme, Theme};
 
 /// Largeur minimale pour le mode side-by-side (en caractères par colonne).
@@ -24,6 +25,7 @@ pub struct DiffRenderContext<'a> {
     pub is_focused: bool,
     pub view_mode: DiffViewMode,
     pub is_fullscreen: bool,
+    pub image_state: &'a mut ImagePreviewState,
 }
 
 struct DiffPanelContext<'a> {
@@ -46,9 +48,22 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
         is_focused,
         view_mode,
         is_fullscreen,
+        image_state,
     } = ctx;
 
     let theme = current_theme();
+    if let Some(diff) = diff.filter(|diff| diff.image_preview.is_some()) {
+        return render_image(
+            frame,
+            diff,
+            area,
+            is_focused,
+            is_fullscreen,
+            image_state,
+            theme,
+        );
+    }
+
     // Déterminer si on peut utiliser le mode side-by-side.
     let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
     let effective_mode = if can_side_by_side {
@@ -71,6 +86,54 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
         DiffViewMode::Unified => render_unified(frame, panel_ctx),
         DiffViewMode::SideBySide => render_side_by_side(frame, panel_ctx),
     }
+}
+
+fn render_image(
+    frame: &mut Frame,
+    diff: &FileDiff,
+    area: Rect,
+    is_focused: bool,
+    is_fullscreen: bool,
+    image_state: &mut ImagePreviewState,
+    theme: &Theme,
+) -> usize {
+    let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
+    let title = format!(" Image - {}{} ", diff.path, fullscreen_indicator);
+    let title = if is_focused {
+        format!(">{}<", title)
+    } else {
+        title
+    };
+    let border_style = if is_focused {
+        Style::default().fg(theme.border_active)
+    } else {
+        Style::default().fg(theme.border_inactive)
+    };
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    if inner.width == 0 || inner.height == 0 {
+        return 1;
+    }
+
+    let preview = diff.image_preview.as_ref().expect("image vérifiée");
+    if let Err(error) = image_state.render(frame, inner, preview) {
+        let message = text_owned(
+            format!("Prévisualisation indisponible: {error}"),
+            format!("Preview unavailable: {error}"),
+        );
+        frame.render_widget(
+            Paragraph::new(message)
+                .style(Style::default().fg(theme.text_normal).bg(theme.background)),
+            inner,
+        );
+    }
+
+    1
 }
 
 /// Rend le diff en mode unifié.

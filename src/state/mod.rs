@@ -219,6 +219,9 @@ pub struct AppState {
     // ═══════════════════════════════════════════════════
     /// Cache des diffs.
     pub diff_cache: DiffCache,
+
+    /// Protocole terminal et cache de la prévisualisation courante.
+    pub image_preview: crate::ui::image_preview::ImagePreviewState,
 }
 
 impl AppState {
@@ -248,6 +251,7 @@ impl AppState {
             ui: UiTransientState::new(),
             filters: FilterState::new(),
             diff_cache: DiffCache::new(DIFF_CACHE_CAPACITY),
+            image_preview: crate::ui::image_preview::ImagePreviewState::default(),
         };
 
         Ok(state)
