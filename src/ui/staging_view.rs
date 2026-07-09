@@ -36,6 +36,7 @@ struct FileListRenderContext<'a> {
 struct CommitInputRenderContext<'a> {
     message: &'a str,
     cursor_pos: usize,
+    selection_anchor: Option<usize>,
     is_focused: bool,
     has_staged_files: bool,
     is_amending: bool,
@@ -124,6 +125,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         CommitInputRenderContext {
             message: &staging_state.commit_message,
             cursor_pos: staging_state.cursor_position,
+            selection_anchor: staging_state.selection_anchor,
             is_focused: staging_state.focus == StagingFocus::CommitMessage,
             has_staged_files: !staging_state.staged_files().is_empty(),
             is_amending: staging_state.is_amending,
@@ -221,6 +223,7 @@ fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
     let CommitInputRenderContext {
         message,
         cursor_pos,
+        selection_anchor,
         is_focused,
         has_staged_files,
         is_amending,
@@ -273,7 +276,21 @@ fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
         Style::default().fg(theme.text_normal)
     };
 
-    let paragraph = Paragraph::new(display_text).style(text_style).block(
+    let rendered_text = if is_focused {
+        crate::ui::text_edit::text_with_selection(
+            message,
+            cursor_pos,
+            selection_anchor,
+            text_style,
+            Style::default()
+                .fg(theme.selection_fg)
+                .bg(theme.selection_bg),
+        )
+    } else {
+        display_text.into()
+    };
+
+    let paragraph = Paragraph::new(rendered_text).style(text_style).block(
         Block::default()
             .title(title)
             .borders(Borders::ALL)

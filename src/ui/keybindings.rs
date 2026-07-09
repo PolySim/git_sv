@@ -40,6 +40,8 @@ pub mod global {
     pub const VIEW_STAGING: &str = "2";
     /// Vue Branches.
     pub const VIEW_BRANCHES: &str = "3";
+    /// Selecteur de worktrees.
+    pub const VIEW_WORKTREES: &str = "w";
     /// Vue Conflits (si actifs).
     pub const VIEW_CONFLICTS: &str = "4";
 }
@@ -109,6 +111,8 @@ pub mod branches {
 
     /// Créer un worktree.
     pub const WORKTREE_NEW: &str = "n";
+    /// Ouvrir le worktree selectionne.
+    pub const WORKTREE_OPEN: &str = "Enter";
     /// Supprimer un worktree.
     pub const WORKTREE_DELETE: &str = "d";
 

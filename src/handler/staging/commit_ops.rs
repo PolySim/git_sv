@@ -8,6 +8,7 @@ pub(super) fn handle_start_commit(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Staging {
         state.staging_state.is_committing = true;
         state.staging_state.focus = StagingFocus::CommitMessage;
+        state.staging_state.reset_commit_editing();
     }
     Ok(())
 }
@@ -27,6 +28,7 @@ pub(super) fn handle_confirm_commit(state: &mut AppState) -> Result<()> {
         state.staging_state.is_committing = false;
         state.staging_state.is_amending = false;
         state.staging_state.commit_message.clear();
+        state.staging_state.reset_commit_editing();
         state.staging_state.focus = StagingFocus::Unstaged;
 
         state.mark_dirty();
@@ -40,6 +42,7 @@ pub(super) fn handle_cancel_commit(state: &mut AppState) -> Result<()> {
         state.staging_state.is_committing = false;
         state.staging_state.is_amending = false;
         state.staging_state.commit_message.clear();
+        state.staging_state.reset_commit_editing();
         state.staging_state.focus = StagingFocus::Unstaged;
     }
     Ok(())

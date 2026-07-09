@@ -296,8 +296,8 @@ pub(super) fn handle_edit_insert_char(state: &mut AppState, c: char) -> Result<(
 
         if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
             // Insérer le caractère à la position du curseur
-            if col_idx <= line.len() {
-                line.insert(col_idx, c);
+            if col_idx <= line.chars().count() {
+                line.insert(char_to_byte_index(line, col_idx), c);
                 conflicts.edit_cursor_col += 1;
             }
         }
@@ -313,8 +313,8 @@ pub(super) fn handle_edit_backspace(state: &mut AppState) -> Result<()> {
         if col_idx > 0 {
             // Supprimer le caractère avant le curseur
             if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
-                if col_idx <= line.len() {
-                    line.remove(col_idx - 1);
+                if col_idx <= line.chars().count() {
+                    line.remove(char_to_byte_index(line, col_idx - 1));
                     conflicts.edit_cursor_col -= 1;
                 }
             }
@@ -323,7 +323,7 @@ pub(super) fn handle_edit_backspace(state: &mut AppState) -> Result<()> {
             let current_line = conflicts.edit_buffer.remove(line_idx);
             conflicts.edit_cursor_line -= 1;
             if let Some(prev_line) = conflicts.edit_buffer.get_mut(conflicts.edit_cursor_line) {
-                conflicts.edit_cursor_col = prev_line.len();
+                conflicts.edit_cursor_col = prev_line.chars().count();
                 prev_line.push_str(&current_line);
             }
         }
@@ -339,7 +339,7 @@ pub(super) fn handle_edit_delete(state: &mut AppState) -> Result<()> {
 
         // Vérifier d'abord si on doit supprimer un caractère ou fusionner
         let should_merge = if let Some(line) = conflicts.edit_buffer.get(line_idx) {
-            col_idx >= line.len() && line_idx + 1 < buffer_len
+            col_idx >= line.chars().count() && line_idx + 1 < buffer_len
         } else {
             false
         };
@@ -351,9 +351,9 @@ pub(super) fn handle_edit_delete(state: &mut AppState) -> Result<()> {
                 line.push_str(&next_line);
             }
         } else if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
-            if col_idx < line.len() {
+            if col_idx < line.chars().count() {
                 // Supprimer le caractère sous le curseur
-                line.remove(col_idx);
+                line.remove(char_to_byte_index(line, col_idx));
             }
         }
     }
@@ -366,8 +366,9 @@ pub(super) fn handle_edit_cursor_up(state: &mut AppState) -> Result<()> {
             conflicts.edit_cursor_line -= 1;
             // Ajuster la colonne si la ligne précédente est plus courte
             if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
-                if conflicts.edit_cursor_col > line.len() {
-                    conflicts.edit_cursor_col = line.len();
+                let line_len = line.chars().count();
+                if conflicts.edit_cursor_col > line_len {
+                    conflicts.edit_cursor_col = line_len;
                 }
             }
         }
@@ -381,8 +382,9 @@ pub(super) fn handle_edit_cursor_down(state: &mut AppState) -> Result<()> {
             conflicts.edit_cursor_line += 1;
             // Ajuster la colonne si la ligne suivante est plus courte
             if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
-                if conflicts.edit_cursor_col > line.len() {
-                    conflicts.edit_cursor_col = line.len();
+                let line_len = line.chars().count();
+                if conflicts.edit_cursor_col > line_len {
+                    conflicts.edit_cursor_col = line_len;
                 }
             }
         }
@@ -398,7 +400,7 @@ pub(super) fn handle_edit_cursor_left(state: &mut AppState) -> Result<()> {
             // Aller à la fin de la ligne précédente
             conflicts.edit_cursor_line -= 1;
             if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
-                conflicts.edit_cursor_col = line.len();
+                conflicts.edit_cursor_col = line.chars().count();
             }
         }
     }
@@ -408,7 +410,7 @@ pub(super) fn handle_edit_cursor_left(state: &mut AppState) -> Result<()> {
 pub(super) fn handle_edit_cursor_right(state: &mut AppState) -> Result<()> {
     if let Some(ref mut conflicts) = state.conflicts_state {
         if let Some(line) = conflicts.edit_buffer.get(conflicts.edit_cursor_line) {
-            if conflicts.edit_cursor_col < line.len() {
+            if conflicts.edit_cursor_col < line.chars().count() {
                 conflicts.edit_cursor_col += 1;
             } else if conflicts.edit_cursor_line + 1 < conflicts.edit_buffer.len() {
                 // Aller au début de la ligne suivante
@@ -427,13 +429,19 @@ pub(super) fn handle_edit_newline(state: &mut AppState) -> Result<()> {
 
         if let Some(line) = conflicts.edit_buffer.get_mut(line_idx) {
             // Splitter la ligne en deux
-            let new_line = line.split_off(col_idx);
+            let new_line = line.split_off(char_to_byte_index(line, col_idx));
             conflicts.edit_buffer.insert(line_idx + 1, new_line);
             conflicts.edit_cursor_line += 1;
             conflicts.edit_cursor_col = 0;
         }
     }
     Ok(())
+}
+
+fn char_to_byte_index(text: &str, char_index: usize) -> usize {
+    text.char_indices()
+        .nth(char_index)
+        .map_or(text.len(), |(index, _)| index)
 }
 
 pub(super) fn handle_leave_view(state: &mut AppState) -> Result<()> {

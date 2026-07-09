@@ -4,6 +4,7 @@ pub mod action;
 pub mod cache;
 pub mod filter;
 pub mod selection;
+pub mod text_edit;
 pub mod view;
 
 #[allow(unused_imports)]
@@ -11,6 +12,7 @@ pub use action::AppAction;
 #[allow(unused_imports)]
 pub use cache::{DiffCache, Lazy, LazyBlame, LazyDiff};
 pub use filter::{FilterField, FilterPopupState, GraphFilter};
+pub use text_edit::{selection_range, TextEditHistory};
 pub use view::*;
 
 use crate::git::repo::{GitRepo, StatusEntry};
@@ -399,6 +401,39 @@ impl AppState {
         self.refresh_with_commit_limit(INITIAL_COMMIT_COUNT)
     }
 
+    /// Ouvre un autre worktree et reinitialise les donnees dependantes du depot.
+    pub fn switch_repository(&mut self, path: &str) -> crate::error::Result<()> {
+        let repo = GitRepo::open(path)?;
+        let repo_path = repo
+            .repo
+            .workdir()
+            .unwrap_or_else(|| std::path::Path::new(path))
+            .canonicalize()
+            .unwrap_or_else(|_| std::path::PathBuf::from(path))
+            .display()
+            .to_string();
+        let branches_section = self.branches_view_state.section;
+
+        self.repo = repo;
+        self.repo_path = repo_path;
+        self.current_branch = self.repo.current_branch().ok();
+        self.graph_view = GraphViewState::new();
+        self.focus = FocusPanel::Graph;
+        self.status_entries.clear();
+        self.staging_state = StagingState::new();
+        self.branches_view_state = BranchesViewState::new();
+        self.branches_view_state.section = branches_section;
+        self.blame_state = None;
+        self.conflicts_state = None;
+        self.search_state = SearchState::default();
+        self.merge_picker = None;
+        self.reset_picker = None;
+        self.filters = FilterState::new();
+        self.diff_cache = DiffCache::new(DIFF_CACHE_CAPACITY);
+
+        self.initialize_from_repo()
+    }
+
     /// Rafraîchit l'état courant à partir du repository, en préservant
     /// le niveau de pagination déjà chargé quand c'est possible.
     pub fn refresh_from_repo(&mut self) -> crate::error::Result<()> {
@@ -526,6 +561,14 @@ impl AppState {
 
         if let Ok(worktrees) = crate::git::worktree::list_worktrees(&self.repo.repo) {
             self.branches_view_state.worktrees.set_items(worktrees);
+            if let Some(index) = self
+                .branches_view_state
+                .worktrees
+                .iter()
+                .position(|worktree| worktree.is_current)
+            {
+                self.branches_view_state.set_worktree_selected(index);
+            }
         }
 
         if let Ok(stashes) = crate::git::stash::list_stashes(&mut self.repo.repo) {

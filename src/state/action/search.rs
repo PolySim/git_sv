@@ -1,5 +1,7 @@
 //! Actions de recherche.
 
+use super::EditAction;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SearchAction {
     /// Ouvrir la recherche
@@ -10,6 +12,8 @@ pub enum SearchAction {
     InsertChar(char),
     /// Supprimer le caractère avant le curseur
     DeleteChar,
+    /// Editer le champ avec les raccourcis usuels.
+    Edit(EditAction),
     /// Résultat suivant
     NextResult,
     /// Résultat précédent

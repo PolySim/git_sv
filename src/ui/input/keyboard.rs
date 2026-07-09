@@ -136,6 +136,7 @@ fn map_view_switch_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('4') if state.conflicts_state.is_some() => {
             Some(AppAction::SwitchView(ViewMode::Conflicts))
         }
+        KeyCode::Char('w') => Some(AppAction::Branch(BranchAction::OpenWorktrees)),
         _ => None,
     }
 }
@@ -183,11 +184,15 @@ fn map_confirmation_key(key: KeyEvent) -> Option<AppAction> {
 }
 
 fn map_search_key(key: KeyEvent) -> Option<AppAction> {
-    match key.code {
+    let action = match key.code {
         KeyCode::Esc => Some(AppAction::Search(SearchAction::Close)),
         KeyCode::Enter => Some(AppAction::Search(SearchAction::Execute)),
-        KeyCode::Down => Some(AppAction::Search(SearchAction::NextResult)),
-        KeyCode::Up => Some(AppAction::Search(SearchAction::PreviousResult)),
+        KeyCode::Down if key.modifiers.is_empty() => {
+            Some(AppAction::Search(SearchAction::NextResult))
+        }
+        KeyCode::Up if key.modifiers.is_empty() => {
+            Some(AppAction::Search(SearchAction::PreviousResult))
+        }
         KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(AppAction::Search(SearchAction::NextResult))
         }
@@ -195,36 +200,102 @@ fn map_search_key(key: KeyEvent) -> Option<AppAction> {
             Some(AppAction::Search(SearchAction::PreviousResult))
         }
         KeyCode::Tab => Some(AppAction::Search(SearchAction::ChangeType)),
-        KeyCode::Char(c) => Some(AppAction::Search(SearchAction::InsertChar(c))),
-        KeyCode::Backspace => Some(AppAction::Search(SearchAction::DeleteChar)),
+        _ => None,
+    };
+
+    action.or_else(|| {
+        map_text_edit_key(key).map(|action| match action {
+            EditAction::InsertChar(c) => AppAction::Search(SearchAction::InsertChar(c)),
+            EditAction::DeleteCharBefore => AppAction::Search(SearchAction::DeleteChar),
+            action => AppAction::Search(SearchAction::Edit(action)),
+        })
+    })
+}
+
+fn map_text_edit_key(key: KeyEvent) -> Option<EditAction> {
+    let command = key
+        .modifiers
+        .intersects(KeyModifiers::SUPER | KeyModifiers::META);
+    let shortcut = command || key.modifiers.contains(KeyModifiers::CONTROL);
+    let option = key.modifiers.contains(KeyModifiers::ALT);
+    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+
+    match key.code {
+        KeyCode::Char('z' | 'Z') if shortcut && shift => Some(EditAction::Redo),
+        KeyCode::Char('z' | 'Z') if shortcut => Some(EditAction::Undo),
+        KeyCode::Char('y' | 'Y') if shortcut => Some(EditAction::Redo),
+        KeyCode::Char('a' | 'A') if shortcut => Some(EditAction::SelectAll),
+        KeyCode::Left if command && shift => Some(EditAction::SelectHome),
+        KeyCode::Right if command && shift => Some(EditAction::SelectEnd),
+        KeyCode::Up if command && shift => Some(EditAction::SelectHome),
+        KeyCode::Down if command && shift => Some(EditAction::SelectEnd),
+        KeyCode::Left if command => Some(EditAction::CursorHome),
+        KeyCode::Right if command => Some(EditAction::CursorEnd),
+        KeyCode::Up if command => Some(EditAction::CursorHome),
+        KeyCode::Down if command => Some(EditAction::CursorEnd),
+        KeyCode::Left if option && shift => Some(EditAction::SelectWordLeft),
+        KeyCode::Right if option && shift => Some(EditAction::SelectWordRight),
+        KeyCode::Up if option && shift => Some(EditAction::SelectHome),
+        KeyCode::Down if option && shift => Some(EditAction::SelectEnd),
+        KeyCode::Left if option => Some(EditAction::CursorWordLeft),
+        KeyCode::Right if option => Some(EditAction::CursorWordRight),
+        KeyCode::Up if option => Some(EditAction::CursorHome),
+        KeyCode::Down if option => Some(EditAction::CursorEnd),
+        KeyCode::Left if shift => Some(EditAction::SelectLeft),
+        KeyCode::Right if shift => Some(EditAction::SelectRight),
+        KeyCode::Home if shift => Some(EditAction::SelectHome),
+        KeyCode::End if shift => Some(EditAction::SelectEnd),
+        KeyCode::Left => Some(EditAction::CursorLeft),
+        KeyCode::Right => Some(EditAction::CursorRight),
+        KeyCode::Home => Some(EditAction::CursorHome),
+        KeyCode::End => Some(EditAction::CursorEnd),
+        KeyCode::Backspace if command => Some(EditAction::DeleteToStart),
+        KeyCode::Backspace if option => Some(EditAction::DeleteWordBefore),
+        KeyCode::Backspace => Some(EditAction::DeleteCharBefore),
+        KeyCode::Delete if command => Some(EditAction::DeleteToEnd),
+        KeyCode::Delete => Some(EditAction::DeleteCharAfter),
+        KeyCode::Char(c)
+            if !key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META) =>
+        {
+            Some(EditAction::InsertChar(c))
+        }
         _ => None,
     }
 }
 
 fn map_filter_popup_key(key: KeyEvent) -> Option<AppAction> {
-    match key.code {
+    let action = match key.code {
         KeyCode::Esc => Some(AppAction::Filter(FilterAction::Close)),
         KeyCode::Enter => Some(AppAction::Filter(FilterAction::Apply)),
-        KeyCode::Tab | KeyCode::Down => Some(AppAction::Filter(FilterAction::NextField)),
-        KeyCode::BackTab | KeyCode::Up => Some(AppAction::Filter(FilterAction::PreviousField)),
+        KeyCode::Tab | KeyCode::Down if key.modifiers.is_empty() => {
+            Some(AppAction::Filter(FilterAction::NextField))
+        }
+        KeyCode::BackTab => Some(AppAction::Filter(FilterAction::PreviousField)),
+        KeyCode::Up if key.modifiers.is_empty() => {
+            Some(AppAction::Filter(FilterAction::PreviousField))
+        }
         KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(AppAction::Filter(FilterAction::Clear))
         }
-        KeyCode::Char(c) => Some(AppAction::Filter(FilterAction::InsertChar(c))),
-        KeyCode::Backspace => Some(AppAction::Filter(FilterAction::DeleteChar)),
         _ => None,
-    }
+    };
+
+    action.or_else(|| {
+        map_text_edit_key(key).map(|action| match action {
+            EditAction::InsertChar(c) => AppAction::Filter(FilterAction::InsertChar(c)),
+            EditAction::DeleteCharBefore => AppAction::Filter(FilterAction::DeleteChar),
+            action => AppAction::Filter(FilterAction::Edit(action)),
+        })
+    })
 }
 
 fn map_staging_commit_input_key(key: KeyEvent) -> Option<AppAction> {
     match key.code {
         KeyCode::Enter => Some(AppAction::Staging(StagingAction::ConfirmCommit)),
         KeyCode::Esc => Some(AppAction::Staging(StagingAction::CancelCommit)),
-        KeyCode::Char(c) => Some(AppAction::Edit(EditAction::InsertChar(c))),
-        KeyCode::Backspace => Some(AppAction::Edit(EditAction::DeleteCharBefore)),
-        KeyCode::Left => Some(AppAction::Edit(EditAction::CursorLeft)),
-        KeyCode::Right => Some(AppAction::Edit(EditAction::CursorRight)),
-        _ => None,
+        _ => map_text_edit_key(key).map(AppAction::Edit),
     }
 }
 
@@ -232,11 +303,7 @@ fn map_branches_input_key(key: KeyEvent) -> Option<AppAction> {
     match key.code {
         KeyCode::Enter => Some(AppAction::Branch(BranchAction::ConfirmInput)),
         KeyCode::Esc => Some(AppAction::Branch(BranchAction::CancelInput)),
-        KeyCode::Char(c) => Some(AppAction::Edit(EditAction::InsertChar(c))),
-        KeyCode::Backspace => Some(AppAction::Edit(EditAction::DeleteCharBefore)),
-        KeyCode::Left => Some(AppAction::Edit(EditAction::CursorLeft)),
-        KeyCode::Right => Some(AppAction::Edit(EditAction::CursorRight)),
-        _ => None,
+        _ => map_text_edit_key(key).map(AppAction::Edit),
     }
 }
 
@@ -407,6 +474,7 @@ fn map_branches_section_key(key: KeyEvent, state: &AppState) -> Option<AppAction
             KeyCode::Char('k') | KeyCode::Up => {
                 Some(AppAction::Navigation(NavigationAction::MoveUp))
             }
+            KeyCode::Enter => Some(AppAction::Branch(BranchAction::WorktreeSwitch)),
             KeyCode::Char('n') => Some(AppAction::Branch(BranchAction::WorktreeCreate)),
             KeyCode::Char('d') => Some(AppAction::Branch(BranchAction::WorktreeRemove)),
             _ => None,
@@ -806,5 +874,65 @@ mod tests {
             action,
             Some(AppAction::Conflict(ConflictAction::EditInsertChar('?')))
         );
+    }
+
+    #[test]
+    fn test_search_command_left_moves_to_start() {
+        let mut state = create_test_state();
+        state.search_state.is_active = true;
+
+        let action = map_key(KeyEvent::new(KeyCode::Left, KeyModifiers::SUPER), &state);
+
+        assert_eq!(
+            action,
+            Some(AppAction::Search(SearchAction::Edit(
+                EditAction::CursorHome
+            )))
+        );
+    }
+
+    #[test]
+    fn test_filter_option_shift_left_selects_previous_word() {
+        let mut state = create_test_state();
+        state.filters.filter_popup.is_open = true;
+
+        let action = map_key(
+            KeyEvent::new(KeyCode::Left, KeyModifiers::ALT | KeyModifiers::SHIFT),
+            &state,
+        );
+
+        assert_eq!(
+            action,
+            Some(AppAction::Filter(FilterAction::Edit(
+                EditAction::SelectWordLeft
+            )))
+        );
+    }
+
+    #[test]
+    fn test_search_command_z_undoes_editing() {
+        let mut state = create_test_state();
+        state.search_state.is_active = true;
+
+        let action = map_key(
+            KeyEvent::new(KeyCode::Char('z'), KeyModifiers::SUPER),
+            &state,
+        );
+
+        assert_eq!(
+            action,
+            Some(AppAction::Search(SearchAction::Edit(EditAction::Undo)))
+        );
+    }
+
+    #[test]
+    fn test_w_opens_worktree_selector() {
+        let state = create_test_state();
+        let action = map_key(
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
+            &state,
+        );
+
+        assert_eq!(action, Some(AppAction::Branch(BranchAction::OpenWorktrees)));
     }
 }

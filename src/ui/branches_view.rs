@@ -249,6 +249,26 @@ fn build_worktree_detail_content(state: &BranchesViewState) -> Vec<Line<'static>
             ]),
             Line::from(vec![
                 Span::styled(
+                    text("Actif: ", "Active: "),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    if worktree.is_current {
+                        text("oui", "yes")
+                    } else {
+                        text("non", "no")
+                    },
+                    if worktree.is_current {
+                        Style::default()
+                            .fg(theme.success)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    },
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
                     text("Branche: ", "Branch: "),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
@@ -535,8 +555,8 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
         .worktrees
         .iter()
         .map(|worktree| {
-            let prefix = if worktree.is_main { "● " } else { "  " };
-            let style = if worktree.is_main {
+            let prefix = if worktree.is_current { "● " } else { "  " };
+            let style = if worktree.is_current {
                 Style::default()
                     .fg(theme.success)
                     .add_modifier(Modifier::BOLD)
@@ -631,8 +651,8 @@ fn render_branches_help(
             }
             BranchesSection::Worktrees => {
                 text(
-                    "Tab/Shift+Tab:section  n:nouveau  d:supprimer  1:graphe  2:staging",
-                    "Tab/Shift+Tab:section  n:new  d:delete  1:graph  2:staging",
+                    "↑↓:selectionner  Entree:ouvrir  Tab/Shift+Tab:section  n:nouveau  d:supprimer  1:graphe",
+                    "↑↓:select  Enter:open  Tab/Shift+Tab:section  n:new  d:delete  1:graph",
                 )
             }
             BranchesSection::Stashes => {
@@ -669,7 +689,16 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
         None => text(" Saisie ", " Input "),
     };
 
-    let paragraph = Paragraph::new(state.input_text.as_str())
+    let input = crate::ui::text_edit::text_with_selection(
+        &state.input_text,
+        state.input_cursor,
+        state.input_selection_anchor,
+        Style::default().fg(theme.text_normal).bg(theme.background),
+        Style::default()
+            .fg(theme.selection_fg)
+            .bg(theme.selection_bg),
+    );
+    let paragraph = Paragraph::new(input)
         .block(
             Block::default()
                 .title(title)
@@ -681,5 +710,7 @@ fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect
     frame.render_widget(paragraph, popup);
 
     // Curseur.
-    frame.set_cursor_position((popup.x + state.input_cursor as u16 + 1, popup.y + 1));
+    let before_cursor: String = state.input_text.chars().take(state.input_cursor).collect();
+    let cursor_width = Line::from(before_cursor).width() as u16;
+    frame.set_cursor_position((popup.x + cursor_width + 1, popup.y + 1));
 }

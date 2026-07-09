@@ -1,6 +1,7 @@
 //! État et logique de filtrage pour le graph de commits.
 
 use crate::git::commit::CommitInfo;
+use crate::state::TextEditHistory;
 
 /// Filtres applicables sur le graph de commits.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -134,6 +135,12 @@ pub struct FilterPopupState {
     pub path_input: String,
     /// Valeur temporaire pour le champ message.
     pub message_input: String,
+    /// Positions des curseurs, en indices de caracteres, pour chaque champ.
+    pub cursor_positions: [usize; 5],
+    /// Points d'ancrage des selections pour chaque champ.
+    pub selection_anchors: [Option<usize>; 5],
+    /// Historiques d'annulation propres a chaque champ.
+    pub edit_histories: [TextEditHistory; 5],
 }
 
 impl FilterPopupState {
@@ -157,6 +164,17 @@ impl FilterPopupState {
             .unwrap_or_default();
         self.path_input = current_filter.path.clone().unwrap_or_default();
         self.message_input = current_filter.message.clone().unwrap_or_default();
+        self.cursor_positions = [
+            self.author_input.chars().count(),
+            self.date_from_input.chars().count(),
+            self.date_to_input.chars().count(),
+            self.path_input.chars().count(),
+            self.message_input.chars().count(),
+        ];
+        self.selection_anchors = [None; 5];
+        self.edit_histories
+            .iter_mut()
+            .for_each(TextEditHistory::clear);
     }
 
     /// Ferme le popup sans sauvegarder.
@@ -186,15 +204,47 @@ impl FilterPopupState {
         };
     }
 
-    /// Retourne une référence mutable vers la valeur du champ actuellement sélectionné.
-    pub fn current_input_mut(&mut self) -> &mut String {
-        match self.selected_field {
+    /// Retourne les donnees d'edition du champ actuellement selectionne.
+    pub fn current_editor_mut(
+        &mut self,
+    ) -> (
+        &mut String,
+        &mut usize,
+        &mut Option<usize>,
+        &mut TextEditHistory,
+    ) {
+        let index = self.selected_field.index();
+        let cursor = &mut self.cursor_positions[index];
+        let selection_anchor = &mut self.selection_anchors[index];
+        let history = &mut self.edit_histories[index];
+        let input = match self.selected_field {
             FilterField::Author => &mut self.author_input,
             FilterField::DateFrom => &mut self.date_from_input,
             FilterField::DateTo => &mut self.date_to_input,
             FilterField::Path => &mut self.path_input,
             FilterField::Message => &mut self.message_input,
-        }
+        };
+
+        (input, cursor, selection_anchor, history)
+    }
+
+    /// Position du curseur du champ actuellement selectionne.
+    pub fn current_cursor(&self) -> usize {
+        self.cursor_positions[self.selected_field.index()]
+    }
+
+    /// Point d'ancrage de la selection du champ actuellement selectionne.
+    pub fn current_selection_anchor(&self) -> Option<usize> {
+        self.selection_anchors[self.selected_field.index()]
+    }
+
+    /// Reinitialise les metadonnees d'edition de tous les champs.
+    pub fn clear_editing_state(&mut self) {
+        self.cursor_positions = [0; 5];
+        self.selection_anchors = [None; 5];
+        self.edit_histories
+            .iter_mut()
+            .for_each(TextEditHistory::clear);
     }
 
     /// Applique les valeurs du popup à un GraphFilter.
@@ -231,6 +281,18 @@ pub enum FilterField {
     DateTo,
     Path,
     Message,
+}
+
+impl FilterField {
+    fn index(self) -> usize {
+        match self {
+            Self::Author => 0,
+            Self::DateFrom => 1,
+            Self::DateTo => 2,
+            Self::Path => 3,
+            Self::Message => 4,
+        }
+    }
 }
 
 /// Convertit un timestamp unix en chaîne de date (YYYY-MM-DD).

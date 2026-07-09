@@ -3,6 +3,7 @@
 use crate::git::diff::{DiffViewMode, FileDiff};
 use crate::git::repo::StatusEntry;
 use crate::state::selection::ListSelection;
+use crate::state::TextEditHistory;
 
 /// Focus dans la vue staging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -29,6 +30,10 @@ pub struct StagingState {
     pub commit_message: String,
     /// Position du curseur dans le message.
     pub cursor_position: usize,
+    /// Point d'ancrage de la selection dans le message.
+    pub selection_anchor: Option<usize>,
+    /// Historique d'annulation du message.
+    pub edit_history: TextEditHistory,
     /// Mode saisie de message activé.
     pub is_committing: bool,
     /// Mode amendement activé.
@@ -47,6 +52,13 @@ impl StagingState {
     /// Crée un nouvel état staging.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Replace le curseur a la fin et demarre un nouvel historique d'edition.
+    pub fn reset_commit_editing(&mut self) {
+        self.cursor_position = self.commit_message.chars().count();
+        self.selection_anchor = None;
+        self.edit_history.clear();
     }
 
     // ═══════════════════════════════════════════════════

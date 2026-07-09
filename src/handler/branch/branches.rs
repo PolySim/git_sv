@@ -78,7 +78,7 @@ pub(super) fn handle_rename(state: &mut AppState) -> Result<()> {
             state.branches_view_state.focus = crate::state::BranchesFocus::Input;
             state.branches_view_state.input_action = Some(crate::state::InputAction::RenameBranch);
             state.branches_view_state.input_text = current_name;
-            state.branches_view_state.input_cursor = state.branches_view_state.input_text.len();
+            state.branches_view_state.reset_input_editing();
         }
     }
     Ok(())

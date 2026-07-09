@@ -2,6 +2,8 @@
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BranchAction {
+    /// Ouvrir directement le selecteur de worktrees
+    OpenWorktrees,
     /// Checkout une branche
     Checkout,
     /// Créer une branche
@@ -30,6 +32,8 @@ pub enum BranchAction {
     WorktreeCreate,
     /// Supprimer un worktree
     WorktreeRemove,
+    /// Ouvrir le worktree selectionne
+    WorktreeSwitch,
     /// Basculer vers la section suivante
     NextSection,
     /// Basculer vers la section précédente

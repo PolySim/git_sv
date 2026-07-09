@@ -26,6 +26,7 @@ pub mod search_bar;
 pub mod staging_layout;
 pub mod staging_view;
 pub mod status_bar;
+pub(crate) mod text_edit;
 pub mod theme;
 
 #[cfg(test)]

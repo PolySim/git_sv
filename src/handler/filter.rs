@@ -1,5 +1,6 @@
 //! Handler pour les actions de filtrage du graph.
 
+use super::edit::edit_text;
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::FilterAction;
@@ -20,6 +21,7 @@ impl ActionHandler for FilterHandler {
             FilterAction::PreviousField => handle_previous_field(ctx.state),
             FilterAction::InsertChar(c) => handle_insert_char(ctx.state, c),
             FilterAction::DeleteChar => handle_delete_char(ctx.state),
+            FilterAction::Edit(action) => handle_edit(ctx.state, action),
             FilterAction::Apply => handle_apply(ctx.state),
             FilterAction::Clear => handle_clear(ctx.state),
         }
@@ -48,15 +50,17 @@ fn handle_previous_field(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_insert_char(state: &mut AppState, c: char) -> Result<()> {
-    state.filters.filter_popup.current_input_mut().push(c);
-    Ok(())
+    handle_edit(state, crate::state::action::EditAction::InsertChar(c))
 }
 
 fn handle_delete_char(state: &mut AppState) -> Result<()> {
-    let input = state.filters.filter_popup.current_input_mut();
-    if !input.is_empty() {
-        input.pop();
-    }
+    handle_edit(state, crate::state::action::EditAction::DeleteCharBefore)
+}
+
+fn handle_edit(state: &mut AppState, action: crate::state::action::EditAction) -> Result<()> {
+    let (input, cursor, selection_anchor, history) =
+        state.filters.filter_popup.current_editor_mut();
+    edit_text(input, cursor, selection_anchor, history, action);
     Ok(())
 }
 
@@ -115,6 +119,7 @@ fn handle_clear(state: &mut AppState) -> Result<()> {
     state.filters.filter_popup.date_to_input.clear();
     state.filters.filter_popup.path_input.clear();
     state.filters.filter_popup.message_input.clear();
+    state.filters.filter_popup.clear_editing_state();
 
     // Fermer le popup
     state.filters.filter_popup.close();

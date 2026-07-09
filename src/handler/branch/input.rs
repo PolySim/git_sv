@@ -9,7 +9,7 @@ pub(super) fn handle_create(state: &mut AppState) -> Result<()> {
         state.branches_view_state.focus = BranchesFocus::Input;
         state.branches_view_state.input_action = Some(InputAction::CreateBranch);
         state.branches_view_state.input_text = default_branch_name(state);
-        state.branches_view_state.input_cursor = state.branches_view_state.input_text.len();
+        state.branches_view_state.reset_input_editing();
     }
     Ok(())
 }
@@ -19,7 +19,7 @@ pub(super) fn handle_stash_save(state: &mut AppState) -> Result<()> {
         state.branches_view_state.focus = BranchesFocus::Input;
         state.branches_view_state.input_action = Some(InputAction::SaveStash);
         state.branches_view_state.input_text.clear();
-        state.branches_view_state.input_cursor = 0;
+        state.branches_view_state.reset_input_editing();
     }
     Ok(())
 }
@@ -29,7 +29,7 @@ pub(super) fn handle_worktree_create(state: &mut AppState) -> Result<()> {
         state.branches_view_state.focus = BranchesFocus::Input;
         state.branches_view_state.input_action = Some(InputAction::CreateWorktree);
         state.branches_view_state.input_text.clear();
-        state.branches_view_state.input_cursor = 0;
+        state.branches_view_state.reset_input_editing();
     }
     Ok(())
 }
@@ -206,7 +206,7 @@ pub(super) fn handle_cancel_input(state: &mut AppState) -> Result<()> {
     state.branches_view_state.focus = BranchesFocus::List;
     state.branches_view_state.input_action = None;
     state.branches_view_state.input_text.clear();
-    state.branches_view_state.input_cursor = 0;
+    state.branches_view_state.reset_input_editing();
     Ok(())
 }
 

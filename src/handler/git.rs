@@ -189,7 +189,7 @@ fn handle_amend_commit(state: &mut AppState) -> Result<()> {
     };
 
     state.staging_state.commit_message = commit_message;
-    state.staging_state.cursor_position = state.staging_state.commit_message.len();
+    state.staging_state.reset_commit_editing();
     state.staging_state.is_committing = true;
     state.staging_state.is_amending = true;
     state.staging_state.focus = StagingFocus::CommitMessage;
@@ -299,7 +299,7 @@ fn handle_commit_prompt(state: &mut AppState) -> Result<()> {
     state.staging_state.is_committing = true;
     state.staging_state.focus = StagingFocus::CommitMessage;
     state.staging_state.commit_message.clear();
-    state.staging_state.cursor_position = 0;
+    state.staging_state.reset_commit_editing();
     state.mark_dirty();
     // Charger le diff du premier fichier sélectionné
     crate::handler::staging::load_staging_diff(state);

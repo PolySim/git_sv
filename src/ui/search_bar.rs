@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::git::search::SearchType;
-use crate::state::SearchState;
+use crate::state::{selection_range, SearchState};
 use crate::ui::theme::current_theme;
 
 pub struct SearchBarRenderContext<'a> {
@@ -29,7 +29,9 @@ pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
 
     // Construire le texte de recherche avec curseur
     let query_text = &search_state.query;
-    let cursor_pos = search_state.cursor;
+    let chars: Vec<char> = query_text.chars().collect();
+    let cursor_pos = search_state.cursor.min(chars.len());
+    let selection = selection_range(cursor_pos, search_state.selection_anchor);
 
     // Construire la ligne affichée
     let mut spans = vec![];
@@ -42,24 +44,33 @@ pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
             .add_modifier(Modifier::BOLD),
     ));
 
-    // Texte de recherche avant le curseur
-    if cursor_pos > 0 && cursor_pos <= query_text.len() {
-        spans.push(Span::raw(&query_text[..cursor_pos]));
+    for (index, character) in chars.iter().enumerate() {
+        let style = if index == cursor_pos {
+            Style::default()
+                .bg(theme.primary)
+                .fg(theme.background)
+                .add_modifier(Modifier::BOLD)
+        } else if selection
+            .as_ref()
+            .is_some_and(|range| range.contains(&index))
+        {
+            Style::default()
+                .bg(theme.selection_bg)
+                .fg(theme.selection_fg)
+        } else {
+            Style::default()
+        };
+        spans.push(Span::styled(character.to_string(), style));
     }
 
-    // Caractère sous le curseur (ou espace si fin)
-    let cursor_char = query_text.chars().nth(cursor_pos).unwrap_or(' ');
-    spans.push(Span::styled(
-        cursor_char.to_string(),
-        Style::default()
-            .bg(theme.primary)
-            .fg(theme.background)
-            .add_modifier(Modifier::BOLD),
-    ));
-
-    // Texte après le curseur
-    if cursor_pos < query_text.len() {
-        spans.push(Span::raw(&query_text[cursor_pos + 1..]));
+    if cursor_pos == chars.len() {
+        spans.push(Span::styled(
+            " ",
+            Style::default()
+                .bg(theme.primary)
+                .fg(theme.background)
+                .add_modifier(Modifier::BOLD),
+        ));
     }
 
     // Ajouter le type de recherche
@@ -101,4 +112,30 @@ pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
         .style(Style::default().bg(theme.background));
 
     frame.render_widget(paragraph, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::tests::render_to_string;
+
+    #[test]
+    fn test_search_bar_renders_accented_query_without_invalid_utf8_slice() {
+        let mut search_state = SearchState::default();
+        search_state.is_active = true;
+        search_state.query = "té".to_string();
+        search_state.cursor = 2;
+
+        let output = render_to_string(40, 3, |frame| {
+            render(
+                frame,
+                SearchBarRenderContext {
+                    search_state: &search_state,
+                    area: Rect::new(0, 0, 40, 3),
+                },
+            );
+        });
+
+        assert!(output.contains("té"));
+    }
 }

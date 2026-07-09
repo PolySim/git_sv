@@ -82,6 +82,10 @@ fn append_global_help(lines: &mut Vec<Line<'static>>) {
         text("Vue Branches", "Branches view"),
     ));
     lines.push(key_line(
+        keybindings::global::VIEW_WORKTREES,
+        text("Selecteur de worktrees", "Worktree selector"),
+    ));
+    lines.push(key_line(
         keybindings::global::VIEW_CONFLICTS,
         text("Vue Conflits (si actifs)", "Conflicts view (if active)"),
     ));
@@ -314,6 +318,10 @@ fn append_branches_help(lines: &mut Vec<Line<'static>>) {
     lines.push(key_line(
         keybindings::branches::WORKTREE_NEW,
         text("Nouveau worktree", "New worktree"),
+    ));
+    lines.push(key_line(
+        keybindings::branches::WORKTREE_OPEN,
+        text("Ouvrir le worktree", "Open worktree"),
     ));
     lines.push(key_line(
         keybindings::branches::WORKTREE_DELETE,

@@ -4,6 +4,7 @@ use crate::git::branch::BranchInfo;
 use crate::git::stash::StashEntry;
 use crate::git::worktree::WorktreeInfo;
 use crate::state::selection::ListSelection;
+use crate::state::TextEditHistory;
 
 /// Section active dans la vue branches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -66,6 +67,8 @@ pub struct BranchesViewState {
     pub stash_diff_scroll: usize,
     pub input_text: String,
     pub input_cursor: usize,
+    pub input_selection_anchor: Option<usize>,
+    pub input_edit_history: TextEditHistory,
     pub input_action: Option<InputAction>,
 }
 
@@ -76,6 +79,13 @@ impl BranchesViewState {
             selected_branch: Some(SelectedBranch::Local(0)),
             ..Self::default()
         }
+    }
+
+    /// Replace le curseur a la fin et demarre un nouvel historique d'edition.
+    pub fn reset_input_editing(&mut self) {
+        self.input_cursor = self.input_text.chars().count();
+        self.input_selection_anchor = None;
+        self.input_edit_history.clear();
     }
 
     /// Branche actuellement sélectionnée (retourne la référence et le type).

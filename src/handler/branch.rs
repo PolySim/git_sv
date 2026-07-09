@@ -26,7 +26,7 @@ use self::stashes::{
     handle_stash_apply, handle_stash_drop, handle_stash_file_next, handle_stash_file_prev,
     handle_stash_pop,
 };
-use self::worktrees::handle_worktree_remove;
+use self::worktrees::{handle_open_worktrees, handle_worktree_remove, handle_worktree_switch};
 
 /// Handler pour les opérations sur les branches.
 pub struct BranchHandler;
@@ -36,6 +36,7 @@ impl ActionHandler for BranchHandler {
 
     fn handle(&mut self, ctx: &mut HandlerContext, action: BranchAction) -> Result<()> {
         match action {
+            BranchAction::OpenWorktrees => handle_open_worktrees(ctx.state),
             BranchAction::Checkout => handle_checkout(ctx.state),
             BranchAction::Create => handle_create(ctx.state),
             BranchAction::Delete => handle_delete(ctx.state),
@@ -50,6 +51,7 @@ impl ActionHandler for BranchHandler {
             BranchAction::StashFilePrev => handle_stash_file_prev(ctx.state),
             BranchAction::WorktreeCreate => handle_worktree_create(ctx.state),
             BranchAction::WorktreeRemove => handle_worktree_remove(ctx.state),
+            BranchAction::WorktreeSwitch => handle_worktree_switch(ctx.state),
             BranchAction::NextSection => handle_next_section(ctx.state),
             BranchAction::PrevSection => handle_prev_section(ctx.state),
             BranchAction::ConfirmInput => handle_confirm_input(ctx.state),

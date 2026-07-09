@@ -1,6 +1,7 @@
 //! État de la vue de recherche.
 
 use crate::git::search::SearchType;
+use crate::state::TextEditHistory;
 
 /// État de la recherche de commits.
 #[derive(Debug, Clone, Default)]
@@ -11,6 +12,10 @@ pub struct SearchState {
     pub query: String,
     /// Position du curseur dans le texte de recherche.
     pub cursor: usize,
+    /// Point d'ancrage de la selection, en indices de caracteres.
+    pub selection_anchor: Option<usize>,
+    /// Historique d'annulation de la recherche.
+    pub edit_history: TextEditHistory,
     /// Type de recherche en cours.
     pub search_type: SearchType,
     /// Indices des commits correspondant à la recherche.
@@ -25,6 +30,8 @@ impl SearchState {
         self.is_active = true;
         self.query.clear();
         self.cursor = 0;
+        self.selection_anchor = None;
+        self.edit_history.clear();
         self.results.clear();
         self.current_result = 0;
     }

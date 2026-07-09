@@ -1,5 +1,7 @@
 //! Actions de filtrage pour le graph de commits.
 
+use super::EditAction;
+
 /// Actions de filtrage du graph.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FilterAction {
@@ -15,6 +17,8 @@ pub enum FilterAction {
     InsertChar(char),
     /// Supprimer un caractère dans le champ actuel.
     DeleteChar,
+    /// Editer le champ courant avec les raccourcis usuels.
+    Edit(EditAction),
     /// Appliquer les filtres.
     Apply,
     /// Effacer tous les filtres.

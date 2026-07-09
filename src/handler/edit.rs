@@ -3,74 +3,326 @@
 use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::EditAction;
-use crate::state::{AppState, BranchesFocus, ViewMode};
+use crate::state::text_edit::TextSnapshot;
+use crate::state::{selection_range, AppState, BranchesFocus, TextEditHistory, ViewMode};
 
 /// Buffer de texte éditable avec curseur.
 struct TextBuffer<'a> {
     text: &'a mut String,
     cursor: &'a mut usize,
+    selection_anchor: &'a mut Option<usize>,
+    history: &'a mut TextEditHistory,
 }
 
 impl<'a> TextBuffer<'a> {
     /// Crée un nouveau buffer.
-    fn new(text: &'a mut String, cursor: &'a mut usize) -> Self {
-        Self { text, cursor }
+    fn new(
+        text: &'a mut String,
+        cursor: &'a mut usize,
+        selection_anchor: &'a mut Option<usize>,
+        history: &'a mut TextEditHistory,
+    ) -> Self {
+        *cursor = (*cursor).min(text.chars().count());
+        Self {
+            text,
+            cursor,
+            selection_anchor,
+            history,
+        }
     }
 
     /// Insère un caractère à la position du curseur.
     fn insert_char(&mut self, c: char) {
-        if *self.cursor <= self.text.len() {
-            self.text.insert(*self.cursor, c);
-            *self.cursor += 1;
-        }
+        self.record_snapshot();
+        self.delete_selection();
+        let byte_index = char_to_byte_index(self.text, *self.cursor);
+        self.text.insert(byte_index, c);
+        *self.cursor += 1;
     }
 
     /// Supprime le caractère avant le curseur.
     fn delete_char_before(&mut self) {
-        if *self.cursor > 0 && *self.cursor <= self.text.len() {
-            self.text.remove(*self.cursor - 1);
-            *self.cursor -= 1;
+        if self.has_selection() {
+            self.record_snapshot();
+            self.delete_selection();
+        } else if *self.cursor > 0 {
+            self.record_snapshot();
+            let start = *self.cursor - 1;
+            self.remove_char_range(start, *self.cursor);
+            *self.cursor = start;
         }
     }
 
     /// Supprime le caractère après le curseur.
     fn delete_char_after(&mut self) {
-        if *self.cursor < self.text.len() {
-            self.text.remove(*self.cursor);
+        if self.has_selection() {
+            self.record_snapshot();
+            self.delete_selection();
+        } else if *self.cursor < self.char_count() {
+            self.record_snapshot();
+            self.remove_char_range(*self.cursor, *self.cursor + 1);
         }
     }
 
     /// Déplace le curseur à gauche.
     fn cursor_left(&mut self) {
-        if *self.cursor > 0 {
-            *self.cursor -= 1;
+        if let Some(range) = self.selection() {
+            *self.cursor = range.start;
+        } else {
+            *self.cursor = self.cursor.saturating_sub(1);
         }
+        *self.selection_anchor = None;
     }
 
     /// Déplace le curseur à droite.
     fn cursor_right(&mut self) {
-        if *self.cursor < self.text.len() {
-            *self.cursor += 1;
+        if let Some(range) = self.selection() {
+            *self.cursor = range.end;
+        } else {
+            *self.cursor = (*self.cursor + 1).min(self.char_count());
         }
+        *self.selection_anchor = None;
+    }
+
+    fn cursor_word_left(&mut self) {
+        if let Some(range) = self.selection() {
+            *self.cursor = range.start;
+        } else {
+            *self.cursor = previous_word_boundary(self.text, *self.cursor);
+        }
+        *self.selection_anchor = None;
+    }
+
+    fn cursor_word_right(&mut self) {
+        if let Some(range) = self.selection() {
+            *self.cursor = range.end;
+        } else {
+            *self.cursor = next_word_boundary(self.text, *self.cursor);
+        }
+        *self.selection_anchor = None;
     }
 
     /// Déplace le curseur au début.
     fn cursor_home(&mut self) {
-        *self.cursor = 0;
+        *self.cursor = line_start(self.text, *self.cursor);
+        *self.selection_anchor = None;
     }
 
     /// Déplace le curseur à la fin.
     fn cursor_end(&mut self) {
-        *self.cursor = self.text.len();
+        *self.cursor = line_end(self.text, *self.cursor);
+        *self.selection_anchor = None;
     }
 
     /// Insère une nouvelle ligne.
     fn insert_newline(&mut self) {
-        if *self.cursor <= self.text.len() {
-            self.text.insert(*self.cursor, '\n');
-            *self.cursor += 1;
+        self.insert_char('\n');
+    }
+
+    fn select_left(&mut self) {
+        self.select_to(self.cursor.saturating_sub(1));
+    }
+
+    fn select_right(&mut self) {
+        self.select_to((*self.cursor + 1).min(self.char_count()));
+    }
+
+    fn select_word_left(&mut self) {
+        self.select_to(previous_word_boundary(self.text, *self.cursor));
+    }
+
+    fn select_word_right(&mut self) {
+        self.select_to(next_word_boundary(self.text, *self.cursor));
+    }
+
+    fn select_to(&mut self, target: usize) {
+        if self.selection_anchor.is_none() {
+            *self.selection_anchor = Some(*self.cursor);
+        }
+        *self.cursor = target;
+    }
+
+    fn select_all(&mut self) {
+        *self.selection_anchor = Some(0);
+        *self.cursor = self.char_count();
+    }
+
+    fn select_home(&mut self) {
+        self.select_to(line_start(self.text, *self.cursor));
+    }
+
+    fn select_end(&mut self) {
+        self.select_to(line_end(self.text, *self.cursor));
+    }
+
+    fn delete_word_before(&mut self) {
+        if self.has_selection() {
+            self.record_snapshot();
+            self.delete_selection();
+            return;
+        }
+
+        let start = previous_word_boundary(self.text, *self.cursor);
+        if start < *self.cursor {
+            self.record_snapshot();
+            self.remove_char_range(start, *self.cursor);
+            *self.cursor = start;
         }
     }
+
+    fn delete_to_start(&mut self) {
+        if self.has_selection() {
+            self.record_snapshot();
+            self.delete_selection();
+        } else {
+            let start = line_start(self.text, *self.cursor);
+            if start == *self.cursor {
+                return;
+            }
+            self.record_snapshot();
+            self.remove_char_range(start, *self.cursor);
+            *self.cursor = start;
+        }
+    }
+
+    fn delete_to_end(&mut self) {
+        if self.has_selection() {
+            self.record_snapshot();
+            self.delete_selection();
+        } else {
+            let end = line_end(self.text, *self.cursor);
+            if end == *self.cursor {
+                return;
+            }
+            self.record_snapshot();
+            self.remove_char_range(*self.cursor, end);
+        }
+    }
+
+    fn undo(&mut self) {
+        let Some(snapshot) = self.history.undo.pop() else {
+            return;
+        };
+        let current = self.snapshot();
+        self.history.redo.push(current);
+        self.restore(snapshot);
+    }
+
+    fn redo(&mut self) {
+        let Some(snapshot) = self.history.redo.pop() else {
+            return;
+        };
+        let current = self.snapshot();
+        self.history.undo.push(current);
+        self.restore(snapshot);
+    }
+
+    fn char_count(&self) -> usize {
+        self.text.chars().count()
+    }
+
+    fn selection(&self) -> Option<std::ops::Range<usize>> {
+        selection_range(*self.cursor, *self.selection_anchor)
+    }
+
+    fn has_selection(&self) -> bool {
+        self.selection().is_some()
+    }
+
+    fn delete_selection(&mut self) {
+        let Some(range) = self.selection() else {
+            return;
+        };
+        self.remove_char_range(range.start, range.end);
+        *self.cursor = range.start;
+        *self.selection_anchor = None;
+    }
+
+    fn remove_char_range(&mut self, start: usize, end: usize) {
+        let start_byte = char_to_byte_index(self.text, start);
+        let end_byte = char_to_byte_index(self.text, end);
+        self.text.replace_range(start_byte..end_byte, "");
+    }
+
+    fn snapshot(&self) -> TextSnapshot {
+        TextSnapshot {
+            text: self.text.clone(),
+            cursor: *self.cursor,
+            selection_anchor: *self.selection_anchor,
+        }
+    }
+
+    fn record_snapshot(&mut self) {
+        self.history.record(self.snapshot());
+    }
+
+    fn restore(&mut self, snapshot: TextSnapshot) {
+        *self.text = snapshot.text;
+        *self.cursor = snapshot.cursor.min(self.char_count());
+        *self.selection_anchor = snapshot.selection_anchor;
+    }
+}
+
+fn char_to_byte_index(text: &str, char_index: usize) -> usize {
+    text.char_indices()
+        .nth(char_index)
+        .map_or(text.len(), |(index, _)| index)
+}
+
+fn previous_word_boundary(text: &str, cursor: usize) -> usize {
+    let chars: Vec<char> = text.chars().collect();
+    let mut index = cursor.min(chars.len());
+    while index > 0 && chars[index - 1].is_whitespace() {
+        index -= 1;
+    }
+    if index == 0 {
+        return 0;
+    }
+
+    let word = is_word_char(chars[index - 1]);
+    while index > 0 && !chars[index - 1].is_whitespace() && is_word_char(chars[index - 1]) == word {
+        index -= 1;
+    }
+    index
+}
+
+fn next_word_boundary(text: &str, cursor: usize) -> usize {
+    let chars: Vec<char> = text.chars().collect();
+    let mut index = cursor.min(chars.len());
+    if index == chars.len() {
+        return index;
+    }
+
+    let word = is_word_char(chars[index]);
+    while index < chars.len() && !chars[index].is_whitespace() && is_word_char(chars[index]) == word
+    {
+        index += 1;
+    }
+    while index < chars.len() && chars[index].is_whitespace() {
+        index += 1;
+    }
+    index
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+fn line_start(text: &str, cursor: usize) -> usize {
+    text.chars()
+        .take(cursor)
+        .enumerate()
+        .filter_map(|(index, character)| (character == '\n').then_some(index + 1))
+        .last()
+        .unwrap_or(0)
+}
+
+fn line_end(text: &str, cursor: usize) -> usize {
+    text.chars()
+        .enumerate()
+        .skip(cursor)
+        .find_map(|(index, character)| (character == '\n').then_some(index))
+        .unwrap_or_else(|| text.chars().count())
 }
 
 /// Handler pour les opérations d'édition de texte.
@@ -89,8 +341,22 @@ impl ActionHandler for EditHandler {
             EditAction::DeleteCharAfter => buffer.delete_char_after(),
             EditAction::CursorLeft => buffer.cursor_left(),
             EditAction::CursorRight => buffer.cursor_right(),
+            EditAction::CursorWordLeft => buffer.cursor_word_left(),
+            EditAction::CursorWordRight => buffer.cursor_word_right(),
+            EditAction::SelectLeft => buffer.select_left(),
+            EditAction::SelectRight => buffer.select_right(),
+            EditAction::SelectWordLeft => buffer.select_word_left(),
+            EditAction::SelectWordRight => buffer.select_word_right(),
             EditAction::CursorHome => buffer.cursor_home(),
             EditAction::CursorEnd => buffer.cursor_end(),
+            EditAction::SelectHome => buffer.select_home(),
+            EditAction::SelectEnd => buffer.select_end(),
+            EditAction::DeleteWordBefore => buffer.delete_word_before(),
+            EditAction::DeleteToStart => buffer.delete_to_start(),
+            EditAction::DeleteToEnd => buffer.delete_to_end(),
+            EditAction::SelectAll => buffer.select_all(),
+            EditAction::Undo => buffer.undo(),
+            EditAction::Redo => buffer.redo(),
             EditAction::NewLine => buffer.insert_newline(),
         }
 
@@ -107,6 +373,8 @@ fn get_active_buffer(state: &mut AppState) -> TextBuffer<'_> {
         return TextBuffer::new(
             &mut state.branches_view_state.input_text,
             &mut state.branches_view_state.input_cursor,
+            &mut state.branches_view_state.input_selection_anchor,
+            &mut state.branches_view_state.input_edit_history,
         );
     }
 
@@ -115,6 +383,8 @@ fn get_active_buffer(state: &mut AppState) -> TextBuffer<'_> {
         return TextBuffer::new(
             &mut state.staging_state.commit_message,
             &mut state.staging_state.cursor_position,
+            &mut state.staging_state.selection_anchor,
+            &mut state.staging_state.edit_history,
         );
     }
 
@@ -122,6 +392,41 @@ fn get_active_buffer(state: &mut AppState) -> TextBuffer<'_> {
     // Ceci ne devrait pas arriver en conditions normales car les handlers
     // d'édition ne sont activés que dans les modes appropriés
     panic!("Aucun buffer actif trouvé pour l'édition");
+}
+
+/// Applique une action d'edition a un champ texte arbitraire.
+pub(super) fn edit_text(
+    text: &mut String,
+    cursor: &mut usize,
+    selection_anchor: &mut Option<usize>,
+    history: &mut TextEditHistory,
+    action: EditAction,
+) {
+    let mut buffer = TextBuffer::new(text, cursor, selection_anchor, history);
+    match action {
+        EditAction::InsertChar(c) => buffer.insert_char(c),
+        EditAction::DeleteCharBefore => buffer.delete_char_before(),
+        EditAction::DeleteCharAfter => buffer.delete_char_after(),
+        EditAction::CursorLeft => buffer.cursor_left(),
+        EditAction::CursorRight => buffer.cursor_right(),
+        EditAction::CursorWordLeft => buffer.cursor_word_left(),
+        EditAction::CursorWordRight => buffer.cursor_word_right(),
+        EditAction::SelectLeft => buffer.select_left(),
+        EditAction::SelectRight => buffer.select_right(),
+        EditAction::SelectWordLeft => buffer.select_word_left(),
+        EditAction::SelectWordRight => buffer.select_word_right(),
+        EditAction::CursorHome => buffer.cursor_home(),
+        EditAction::CursorEnd => buffer.cursor_end(),
+        EditAction::SelectHome => buffer.select_home(),
+        EditAction::SelectEnd => buffer.select_end(),
+        EditAction::DeleteWordBefore => buffer.delete_word_before(),
+        EditAction::DeleteToStart => buffer.delete_to_start(),
+        EditAction::DeleteToEnd => buffer.delete_to_end(),
+        EditAction::SelectAll => buffer.select_all(),
+        EditAction::Undo => buffer.undo(),
+        EditAction::Redo => buffer.redo(),
+        EditAction::NewLine => buffer.insert_newline(),
+    }
 }
 
 #[cfg(test)]
@@ -156,15 +461,19 @@ mod tests {
     fn test_text_buffer_insert_char() {
         let mut text = String::new();
         let mut cursor = 0;
+        let mut selection_anchor = None;
+        let mut history = TextEditHistory::default();
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.insert_char('a');
         }
         assert_eq!(text, "a");
         assert_eq!(cursor, 1);
 
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.insert_char('b');
         }
         assert_eq!(text, "ab");
@@ -175,8 +484,11 @@ mod tests {
     fn test_text_buffer_delete_char_before() {
         let mut text = "abc".to_string();
         let mut cursor = 2;
+        let mut selection_anchor = None;
+        let mut history = TextEditHistory::default();
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.delete_char_before();
         }
         assert_eq!(text, "ac");
@@ -187,27 +499,33 @@ mod tests {
     fn test_text_buffer_cursor_movement() {
         let mut text = "hello".to_string();
         let mut cursor = 2;
+        let mut selection_anchor = None;
+        let mut history = TextEditHistory::default();
 
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.cursor_home();
         }
         assert_eq!(cursor, 0);
 
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.cursor_end();
         }
         assert_eq!(cursor, 5);
 
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.cursor_left();
         }
         assert_eq!(cursor, 4);
 
         {
-            let mut buffer = TextBuffer::new(&mut text, &mut cursor);
+            let mut buffer =
+                TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
             buffer.cursor_right();
         }
         assert_eq!(cursor, 5);
@@ -345,5 +663,89 @@ mod tests {
         assert_eq!(state.branches_view_state.input_text, "Xbranch-text");
         // Le buffer Staging ne doit PAS être modifié
         assert_eq!(state.staging_state.commit_message, "commit-text");
+    }
+
+    #[test]
+    fn test_unicode_editing_keeps_cursor_on_character_boundaries() {
+        let mut text = String::new();
+        let mut cursor = 0;
+        let mut selection_anchor = None;
+        let mut history = TextEditHistory::default();
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::InsertChar('é'),
+        );
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::InsertChar('t'),
+        );
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::CursorLeft,
+        );
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::DeleteCharBefore,
+        );
+
+        assert_eq!(text, "t");
+        assert_eq!(cursor, 0);
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::Undo,
+        );
+        assert_eq!(text, "ét");
+        assert_eq!(cursor, 1);
+    }
+
+    #[test]
+    fn test_word_selection_replacement_and_undo() {
+        let mut text = "bonjour monde".to_string();
+        let mut cursor = text.chars().count();
+        let mut selection_anchor = None;
+        let mut history = TextEditHistory::default();
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::SelectWordLeft,
+        );
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::InsertChar('é'),
+        );
+        assert_eq!(text, "bonjour é");
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut selection_anchor,
+            &mut history,
+            EditAction::Undo,
+        );
+        assert_eq!(text, "bonjour monde");
+        assert_eq!(selection_range(cursor, selection_anchor), Some(8..13));
     }
 }

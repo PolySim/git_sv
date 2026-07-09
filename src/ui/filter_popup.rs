@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::state::{FilterField, FilterPopupState, GraphFilter};
+use crate::state::{selection_range, FilterField, FilterPopupState, GraphFilter};
 use crate::ui::theme::current_theme;
 
 pub struct FilterPopupRenderContext<'a> {
@@ -23,6 +23,8 @@ struct FilterFieldRenderContext<'a> {
     label: &'a str,
     value: &'a str,
     is_selected: bool,
+    cursor: usize,
+    selection_anchor: Option<usize>,
     area: Rect,
     theme: &'a crate::ui::theme::Theme,
 }
@@ -102,6 +104,8 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
             label: text("Auteur", "Author"),
             value: &popup_state.author_input,
             is_selected: popup_state.selected_field == FilterField::Author,
+            cursor: popup_state.current_cursor(),
+            selection_anchor: popup_state.current_selection_anchor(),
             area: chunks[2],
             theme,
         },
@@ -113,6 +117,8 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
             label: text("Date debut (YYYY-MM-DD)", "Start date (YYYY-MM-DD)"),
             value: &popup_state.date_from_input,
             is_selected: popup_state.selected_field == FilterField::DateFrom,
+            cursor: popup_state.current_cursor(),
+            selection_anchor: popup_state.current_selection_anchor(),
             area: chunks[3],
             theme,
         },
@@ -124,6 +130,8 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
             label: text("Date fin (YYYY-MM-DD)", "End date (YYYY-MM-DD)"),
             value: &popup_state.date_to_input,
             is_selected: popup_state.selected_field == FilterField::DateTo,
+            cursor: popup_state.current_cursor(),
+            selection_anchor: popup_state.current_selection_anchor(),
             area: chunks[4],
             theme,
         },
@@ -135,6 +143,8 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
             label: text("Chemin", "Path"),
             value: &popup_state.path_input,
             is_selected: popup_state.selected_field == FilterField::Path,
+            cursor: popup_state.current_cursor(),
+            selection_anchor: popup_state.current_selection_anchor(),
             area: chunks[5],
             theme,
         },
@@ -146,6 +156,8 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
             label: text("Message contient", "Message contains"),
             value: &popup_state.message_input,
             is_selected: popup_state.selected_field == FilterField::Message,
+            cursor: popup_state.current_cursor(),
+            selection_anchor: popup_state.current_selection_anchor(),
             area: chunks[6],
             theme,
         },
@@ -153,8 +165,8 @@ pub fn render(frame: &mut Frame, ctx: FilterPopupRenderContext<'_>) {
 
     // Aide en bas
     let help_text = text(
-        "Tab/↑↓: changer champ | Entree: appliquer | Echap: fermer | Ctrl+R: reinitialiser tous les filtres",
-        "Tab/↑↓: change field | Enter: apply | Esc: close | Ctrl+R: reset all filters",
+        "⌘/⌥/⇧+←→: editer | ⌘Z:annuler | Ctrl+R:effacer | Entree:appliquer",
+        "Cmd/Alt/Shift+←→: edit | Cmd+Z:undo | Ctrl+R:clear | Enter:apply",
     );
     let help = Paragraph::new(help_text)
         .alignment(Alignment::Center)
@@ -168,6 +180,8 @@ fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
         label,
         value,
         is_selected,
+        cursor,
+        selection_anchor,
         area,
         theme,
     } = ctx;
@@ -199,12 +213,6 @@ fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
         (theme.background, theme.text_normal)
     };
 
-    let display_value = if value.is_empty() {
-        text(" (vide) ", " (empty) ")
-    } else {
-        value
-    };
-
     let value_style = if value.is_empty() && is_selected {
         Style::default().fg(theme.text_secondary).bg(bg_color)
     } else {
@@ -212,9 +220,42 @@ fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
     };
 
     let prefix = if is_selected { "> " } else { "  " };
-    let value_para = Paragraph::new(format!("{}{}", prefix, display_value))
-        .style(value_style)
-        .wrap(Wrap { trim: false });
+    let value_para = if is_selected {
+        let chars: Vec<char> = value.chars().collect();
+        let cursor = cursor.min(chars.len());
+        let selection = selection_range(cursor, selection_anchor);
+        let mut spans = vec![Span::styled(prefix, value_style)];
+
+        for (index, character) in chars.iter().enumerate() {
+            let style = if index == cursor {
+                Style::default().fg(theme.background).bg(theme.warning)
+            } else if selection
+                .as_ref()
+                .is_some_and(|range| range.contains(&index))
+            {
+                Style::default().fg(theme.background).bg(theme.primary)
+            } else {
+                value_style
+            };
+            spans.push(Span::styled(character.to_string(), style));
+        }
+        if cursor == chars.len() {
+            spans.push(Span::styled(
+                " ",
+                Style::default().fg(theme.background).bg(theme.warning),
+            ));
+        }
+        Paragraph::new(Line::from(spans)).wrap(Wrap { trim: false })
+    } else {
+        let display_value = if value.is_empty() {
+            text(" (vide) ", " (empty) ")
+        } else {
+            value
+        };
+        Paragraph::new(format!("{}{}", prefix, display_value))
+            .style(value_style)
+            .wrap(Wrap { trim: false })
+    };
 
     frame.render_widget(value_para, chunks[1]);
 }
