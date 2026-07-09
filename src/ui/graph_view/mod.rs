@@ -76,6 +76,8 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
     let branch_name = current_branch.unwrap_or("???");
     let title = build_title(
         branch_name,
+        selected_index,
+        graph.len(),
         loaded_count,
         total_commits,
         can_load_more,
@@ -83,7 +85,7 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
     );
 
     let title = if is_focused {
-        format!(">{}<", title)
+        format!("▶{}", title)
     } else {
         title
     };
@@ -150,7 +152,9 @@ fn build_graph_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::graph::{CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow};
+    use crate::git::graph::{
+        CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow, RefInfo, RefType,
+    };
     use crate::i18n::{with_language, Language};
     use crate::ui::graph_view::lines::{find_horizontal_color_bounded, get_branch_color};
     use git2::Oid;
@@ -229,6 +233,81 @@ mod tests {
         let row = &create_test_graph()[0];
         let line = build_commit_line(row, true, 80, 2);
         assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn test_head_commit_has_distinct_landmarks() {
+        let mut row = create_test_graph()[0].clone();
+        row.node.refs = vec![
+            RefInfo::new("main", RefType::LocalBranch),
+            RefInfo::new("main", RefType::Head),
+        ];
+
+        let line = build_commit_line(&row, true, 120, 2);
+        let line_text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        let head_badge = line
+            .spans
+            .iter()
+            .find(|span| span.content.contains("HEAD:main"))
+            .expect("Le badge HEAD doit etre visible");
+
+        assert!(line_text.contains('◆'));
+        assert!(line_text.contains("▶"));
+        assert_eq!(head_badge.style.bg, Some(current_theme().success));
+    }
+
+    #[test]
+    fn test_selected_commit_fills_available_width() {
+        let row = &create_test_graph()[0];
+        let line = build_commit_line(row, true, 80, 2);
+
+        assert_eq!(line.width(), 80);
+        assert!(line.spans.iter().all(|span| span.style.bg.is_some()));
+    }
+
+    #[test]
+    fn test_many_refs_are_collapsed_into_summary() {
+        let mut row = create_test_graph()[0].clone();
+        row.node.refs = (0..8)
+            .map(|index| RefInfo::new(format!("feature/long-name-{index}"), RefType::LocalBranch))
+            .collect();
+
+        let line = build_commit_line(&row, false, 100, 2);
+        let line_text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+
+        assert!(line_text.contains(" +"));
+    }
+
+    #[test]
+    fn test_unicode_message_truncation_stays_on_character_boundaries() {
+        let mut row = create_test_graph()[0].clone();
+        row.node.message = "évolution ".repeat(30);
+
+        let line = build_commit_line(&row, false, 70, 2);
+        let line_text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+
+        assert!(line_text.contains('…'));
+        assert!(line_text.contains("évolution"));
+    }
+
+    #[test]
+    fn test_graph_title_shows_selection_position() {
+        let title = build_title("main", 41, 177, 177, Some(177), false, false);
+
+        assert!(title.contains("42/177"));
+        assert!(title.contains("main"));
     }
 
     #[test]

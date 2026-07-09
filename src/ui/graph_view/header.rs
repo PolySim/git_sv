@@ -27,50 +27,46 @@ pub(super) fn build_empty_state_line(filter_active: bool) -> Line<'static> {
 
 pub(super) fn build_title(
     branch_name: &str,
+    selected_index: usize,
+    visible_count: usize,
     loaded_count: usize,
     total_commits: Option<usize>,
     can_load_more: bool,
     is_loading_more: bool,
 ) -> String {
-    if is_loading_more {
-        return text_owned(
-            format!(" Graphe - {} (chargement...) ", branch_name),
-            format!(" Graph - {} (loading...) ", branch_name),
-        );
-    }
+    let position = if visible_count == 0 {
+        0
+    } else {
+        selected_index.min(visible_count - 1) + 1
+    };
 
-    match total_commits {
-        Some(total) if total > 0 => {
-            if loaded_count >= total {
-                text_owned(
-                    format!(" Graphe - {} ({} commits) ", branch_name, loaded_count),
-                    format!(" Graph - {} ({} commits) ", branch_name, loaded_count),
-                )
-            } else {
-                text_owned(
-                    format!(
-                        " Graphe - {} ({} / {} commits) ",
-                        branch_name, loaded_count, total
-                    ),
-                    format!(
-                        " Graph - {} ({} / {} commits) ",
-                        branch_name, loaded_count, total
-                    ),
-                )
-            }
-        }
-        _ => {
-            if can_load_more {
-                text_owned(
-                    format!(" Graphe - {} ({}+) ", branch_name, loaded_count),
-                    format!(" Graph - {} ({}+) ", branch_name, loaded_count),
-                )
-            } else {
-                text_owned(
-                    format!(" Graphe - {} ({} commits) ", branch_name, loaded_count),
-                    format!(" Graph - {} ({} commits) ", branch_name, loaded_count),
-                )
-            }
-        }
-    }
+    let loading_fr = if is_loading_more {
+        " · chargement…".to_string()
+    } else if let Some(total) = total_commits.filter(|total| loaded_count < *total) {
+        format!(" · {}/{} charges", loaded_count, total)
+    } else if can_load_more {
+        format!(" · {}+ charges", loaded_count)
+    } else {
+        String::new()
+    };
+    let loading_en = if is_loading_more {
+        " · loading…".to_string()
+    } else if let Some(total) = total_commits.filter(|total| loaded_count < *total) {
+        format!(" · {}/{} loaded", loaded_count, total)
+    } else if can_load_more {
+        format!(" · {}+ loaded", loaded_count)
+    } else {
+        String::new()
+    };
+
+    text_owned(
+        format!(
+            " Graphe · {} · commit {}/{}{} ",
+            branch_name, position, visible_count, loading_fr
+        ),
+        format!(
+            " Graph · {} · commit {}/{}{} ",
+            branch_name, position, visible_count, loading_en
+        ),
+    )
 }

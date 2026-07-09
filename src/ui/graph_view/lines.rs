@@ -18,17 +18,27 @@ pub(super) fn build_commit_line(
     let theme = current_theme();
     let node = &row.node;
     let commit_color = get_branch_color(node.color_index);
+    let is_head = node
+        .refs
+        .iter()
+        .any(|reference| reference.ref_type == RefType::Head);
 
     let mut spans: Vec<Span<'static>> = Vec::new();
     let num_cols = row.cells.len().max(node.column + 1);
 
     for col in 0..num_cols {
         if col == node.column {
-            let symbol = if node.parents.len() > 1 { "○" } else { "●" };
+            let symbol = if is_head {
+                "◆"
+            } else if node.parents.len() > 1 {
+                "○"
+            } else {
+                "●"
+            };
             spans.push(Span::styled(
                 symbol.to_string(),
                 Style::default()
-                    .fg(commit_color)
+                    .fg(if is_head { theme.success } else { commit_color })
                     .add_modifier(Modifier::BOLD),
             ));
 
@@ -74,16 +84,19 @@ pub(super) fn build_commit_line(
         spans.push(Span::raw(" ".repeat(COL_SPACING)));
     }
 
-    spans.push(Span::raw("  "));
+    spans.push(Span::styled(
+        if is_selected { " ▶ " } else { "   " },
+        Style::default()
+            .fg(theme.primary)
+            .add_modifier(Modifier::BOLD),
+    ));
 
-    let sel_style = |base_fg: Color| -> Style {
+    let content_style = |base_fg: Color| -> Style {
+        let style = Style::default().fg(base_fg);
         if is_selected {
-            Style::default()
-                .bg(theme.selection_bg)
-                .fg(base_fg)
-                .add_modifier(Modifier::BOLD)
+            style.add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(base_fg)
+            style
         }
     };
 
@@ -91,7 +104,7 @@ pub(super) fn build_commit_line(
     let short_hash = if hash.len() >= 7 { &hash[..7] } else { &hash };
     spans.push(Span::styled(
         format!("{} ", short_hash),
-        sel_style(theme.commit_hash),
+        content_style(theme.commit_hash),
     ));
 
     let head_branch_name = node
@@ -114,80 +127,167 @@ pub(super) fn build_commit_line(
         RefType::RemoteBranch => 3,
     });
 
-    let refs_width: usize = sorted_refs
-        .iter()
-        .map(|r| {
-            let bracket_len = match r.ref_type {
-                RefType::Head => 8,
-                RefType::Tag => 3,
-                RefType::RemoteBranch => 4,
-                RefType::LocalBranch => 3,
-            };
-            r.name.len() + bracket_len
-        })
-        .sum();
+    let metadata = build_metadata(node.author.as_str(), node.timestamp, available_width);
+    let metadata_width = metadata.as_ref().map_or(0, |(author, date)| {
+        display_width(author) + display_width(date)
+    });
+    let occupied_width = spans_width(&spans) + metadata_width;
+    let refs_budget = (available_width as usize)
+        .saturating_sub(occupied_width + MIN_MESSAGE_WIDTH)
+        .min(MAX_REFS_WIDTH);
+    push_ref_badges(&mut spans, &sorted_refs, refs_budget, node.color_index);
 
-    for ref_info in sorted_refs {
-        let (bracket, style) = match ref_info.ref_type {
-            RefType::Head => {
-                let bracket = format!("HEAD->{} ", ref_info.name);
-                let style = sel_style(theme.success).add_modifier(Modifier::BOLD);
-                (bracket, style)
-            }
-            RefType::LocalBranch => {
-                let ref_color = get_branch_color(node.color_index);
-                let bracket = format!("[{}] ", ref_info.name);
-                let style = sel_style(ref_color).add_modifier(Modifier::BOLD | Modifier::REVERSED);
-                (bracket, style)
-            }
-            RefType::RemoteBranch => {
-                let bracket = format!("⟨{}⟩ ", ref_info.name);
-                let style = sel_style(theme.text_secondary).add_modifier(Modifier::DIM);
-                (bracket, style)
-            }
-            RefType::Tag => {
-                let bracket = format!("({}) ", ref_info.name);
-                let style = sel_style(theme.warning).add_modifier(Modifier::BOLD);
-                (bracket, style)
-            }
-        };
-
-        spans.push(Span::styled(bracket, style));
-    }
-
-    let graph_width = max_graph_cols * COL_SPACING + 2;
-    let hash_width = 8;
-    let author_date_prefix = format!(" — {}", node.author);
-    let relative_date = format_relative_time(node.timestamp);
-    let author_date_suffix = format!(" {}", relative_date);
-    let overhead =
-        graph_width + hash_width + refs_width + author_date_prefix.len() + author_date_suffix.len();
-    let max_message_width = (available_width as usize).saturating_sub(overhead);
-
-    let display_message = if node.message.len() > max_message_width && max_message_width > 3 {
-        format!("{}…", &node.message[..max_message_width.saturating_sub(1)])
-    } else {
-        node.message.clone()
-    };
+    let max_message_width =
+        (available_width as usize).saturating_sub(spans_width(&spans) + metadata_width);
+    let display_message = truncate_text(
+        node.message.lines().next().unwrap_or_default(),
+        max_message_width,
+    );
 
     spans.push(Span::styled(
         display_message,
-        sel_style(if is_selected {
+        content_style(if is_selected {
             theme.selection_fg
         } else {
             theme.text_normal
         }),
     ));
-    spans.push(Span::styled(
-        author_date_prefix,
-        sel_style(theme.text_secondary),
-    ));
-    spans.push(Span::styled(
-        author_date_suffix,
-        sel_style(theme.text_secondary).add_modifier(Modifier::DIM),
-    ));
+
+    if let Some((author, date)) = metadata {
+        spans.push(Span::styled(author, content_style(theme.text_secondary)));
+        spans.push(Span::styled(
+            date,
+            content_style(theme.text_secondary).add_modifier(Modifier::DIM),
+        ));
+    }
+
+    let line_width = spans_width(&spans);
+    if line_width < available_width as usize {
+        spans.push(Span::raw(" ".repeat(available_width as usize - line_width)));
+    }
+
+    if is_selected {
+        for span in &mut spans {
+            if span.style.bg.is_none() {
+                span.style = span.style.bg(theme.selection_bg);
+            }
+        }
+    }
 
     Line::from(spans)
+}
+
+const MIN_MESSAGE_WIDTH: usize = 16;
+const MAX_REFS_WIDTH: usize = 40;
+
+fn push_ref_badges(
+    spans: &mut Vec<Span<'static>>,
+    refs: &[&crate::git::graph::RefInfo],
+    width_budget: usize,
+    color_index: usize,
+) {
+    let theme = current_theme();
+    let mut used = 0;
+    let mut hidden = 0;
+
+    for reference in refs {
+        let (label, style) = match reference.ref_type {
+            RefType::Head => (
+                format!(" HEAD:{} ", reference.name),
+                Style::default()
+                    .fg(theme.background)
+                    .bg(theme.success)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            RefType::LocalBranch => (
+                format!(" {} ", reference.name),
+                Style::default()
+                    .fg(theme.background)
+                    .bg(get_branch_color(color_index))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            RefType::Tag => (
+                format!(" tag:{} ", reference.name),
+                Style::default()
+                    .fg(theme.background)
+                    .bg(theme.warning)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            RefType::RemoteBranch => (
+                format!(" remote:{} ", reference.name),
+                Style::default()
+                    .fg(theme.text_secondary)
+                    .add_modifier(Modifier::DIM),
+            ),
+        };
+        let label_width = display_width(&label);
+        if used + label_width < width_budget {
+            spans.push(Span::styled(label, style));
+            spans.push(Span::raw(" "));
+            used += label_width + 1;
+        } else {
+            hidden += 1;
+        }
+    }
+
+    if hidden > 0 {
+        let summary = format!(" +{} ", hidden);
+        if used + display_width(&summary) <= width_budget {
+            spans.push(Span::styled(
+                summary,
+                Style::default()
+                    .fg(theme.text_secondary)
+                    .add_modifier(Modifier::DIM),
+            ));
+        }
+    }
+}
+
+fn build_metadata(author: &str, timestamp: i64, available_width: u16) -> Option<(String, String)> {
+    if available_width < 58 {
+        return None;
+    }
+
+    if available_width < 96 {
+        let author = truncate_text(author, 10);
+        let relative_date = truncate_text(&format_relative_time(timestamp), 12);
+        return Some((
+            format!(" │ {:<10}", author),
+            format!(" · {:>12}", relative_date),
+        ));
+    }
+
+    let author = truncate_text(author, 14);
+    let relative_date = truncate_text(&format_relative_time(timestamp), 16);
+    Some((
+        format!(" │ {:<14}", author),
+        format!(" · {:>16}", relative_date),
+    ))
+}
+
+fn truncate_text(value: &str, max_width: usize) -> String {
+    let width = display_width(value);
+    if width <= max_width {
+        return value.to_string();
+    }
+    if max_width == 0 {
+        return String::new();
+    }
+    if max_width == 1 {
+        return "…".to_string();
+    }
+
+    let mut truncated: String = value.chars().take(max_width - 1).collect();
+    truncated.push('…');
+    truncated
+}
+
+fn display_width(value: &str) -> usize {
+    value.chars().count()
+}
+
+fn spans_width(spans: &[Span<'_>]) -> usize {
+    spans.iter().map(Span::width).sum()
 }
 
 pub(super) fn build_connection_line(connection: &ConnectionRow) -> Line<'static> {
