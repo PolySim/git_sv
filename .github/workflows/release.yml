@@ -239,7 +239,7 @@ jobs:
             "autoupdate": {
               "architecture": {
                 "64bit": {
-                  "url": "https://github.com/PolySim/git_sv/releases/download/v$version/git_sv-v$version-x86_64-pc-windows-msvc.zip"
+                  "url": "https://github.com/PolySim/git_sv/releases/download/v\$version/git_sv-v\$version-x86_64-pc-windows-msvc.zip"
                 }
               }
             }
