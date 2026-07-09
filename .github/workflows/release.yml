@@ -22,13 +22,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ runner.os }}
+          add-job-id-key: false
+          cache-on-failure: true
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -41,7 +47,6 @@ jobs:
 
   build:
     name: Build ${{ matrix.target }}
-    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -66,7 +71,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -76,7 +81,9 @@ jobs:
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: release-${{ matrix.target }}
+          shared-key: release-${{ matrix.target }}
+          add-job-id-key: false
+          cache-on-failure: true
 
       - name: Build release binary
         run: cargo build --locked --release --target ${{ matrix.target }} --features vendored-ssl
@@ -93,21 +100,20 @@ jobs:
           cd ../../..
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BINARY_NAME }}-${{ matrix.target }}
           path: ${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+          compression-level: 0
+          retention-days: 3
 
   release:
     name: Create Release
-    needs: build
+    needs: [verify, build]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
@@ -119,7 +125,7 @@ jobs:
           cat checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |
@@ -132,11 +138,8 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
@@ -150,7 +153,7 @@ jobs:
           SHA_LINUX=$(sha256sum ${{ env.BINARY_NAME }}-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz | awk '{print $1}')
 
           # Cloner le repo homebrew-tap
-          git clone https://x-access-token:${GH_TOKEN}@github.com/PolySim/homebrew-tap.git
+          git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/PolySim/homebrew-tap.git
           cd homebrew-tap
 
           cat > Formula/git_sv.rb << FORMULA
@@ -199,11 +202,8 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ env.BINARY_NAME }}-x86_64-pc-windows-msvc
           path: .
@@ -215,7 +215,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           SHA_WIN=$(sha256sum ${{ env.BINARY_NAME }}-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip | awk '{print $1}')
 
-          git clone https://x-access-token:${GH_TOKEN}@github.com/PolySim/scoop-git_sv.git
+          git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/PolySim/scoop-git_sv.git
           cd scoop-git_sv
 
           mkdir -p bucket
