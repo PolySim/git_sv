@@ -13,6 +13,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
+use git2::{Repository, StatusOptions};
+
 use crate::error::Result;
 
 /// Intervalle de vérification des changements (2 secondes).
@@ -38,6 +40,20 @@ pub struct GitWatcher {
     index_mtime: Option<SystemTime>,
     /// Timestamp du répertoire refs/heads.
     refs_mtime: Option<SystemTime>,
+    /// Timestamp du fichier packed-refs.
+    packed_refs_mtime: Option<SystemTime>,
+    /// Chemin du working tree surveillé.
+    worktree_dir: PathBuf,
+    /// État observable des fichiers modifiés dans le working tree.
+    worktree_snapshot: Vec<WorktreeEntrySnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorktreeEntrySnapshot {
+    path: PathBuf,
+    status: u32,
+    modified: Option<SystemTime>,
+    size: Option<u64>,
 }
 
 impl GitWatcher {
@@ -55,6 +71,7 @@ impl GitWatcher {
 
         // Trouver le répertoire .git/ (peut être directement ou dans un parent)
         let git_dir = find_git_dir(repo_path)?;
+        let worktree_dir = find_worktree_dir(repo_path).unwrap_or_else(|| repo_path.to_path_buf());
 
         let mut watcher = Self {
             git_dir,
@@ -63,6 +80,9 @@ impl GitWatcher {
             head_mtime: None,
             index_mtime: None,
             refs_mtime: None,
+            packed_refs_mtime: None,
+            worktree_dir,
+            worktree_snapshot: Vec::new(),
         };
 
         // Initialiser les timestamps
@@ -79,6 +99,12 @@ impl GitWatcher {
         // Le répertoire refs/heads contient les références des branches
         let refs_heads = self.git_dir.join("refs").join("heads");
         self.refs_mtime = get_mtime(&refs_heads);
+        self.packed_refs_mtime = get_mtime(&self.git_dir.join("packed-refs"));
+
+        // Une erreur Git transitoire ne doit jamais arrêter la boucle TUI.
+        if let Ok(snapshot) = collect_worktree_snapshot(&self.worktree_dir) {
+            self.worktree_snapshot = snapshot;
+        }
 
         Ok(())
     }
@@ -95,6 +121,15 @@ impl GitWatcher {
     ///
     /// `true` si un rafraîchissement est nécessaire, `false` sinon.
     pub fn check_changed(&mut self) -> Result<bool> {
+        // Le debounce est réévalué à chaque frame, sans attendre le prochain polling.
+        if self
+            .last_change_detected
+            .is_some_and(|change_time| change_time.elapsed() >= DEBOUNCE_DELAY)
+        {
+            self.last_change_detected = None;
+            return Ok(true);
+        }
+
         // Vérifier l'intervalle de polling
         if self.last_check.elapsed() < CHECK_INTERVAL {
             return Ok(false);
@@ -106,6 +141,8 @@ impl GitWatcher {
         let old_head = self.head_mtime;
         let old_index = self.index_mtime;
         let old_refs = self.refs_mtime;
+        let old_packed_refs = self.packed_refs_mtime;
+        let old_worktree = self.worktree_snapshot.clone();
 
         // Mettre à jour les timestamps
         self.update_timestamps()?;
@@ -114,19 +151,13 @@ impl GitWatcher {
         let head_changed = self.head_mtime != old_head;
         let index_changed = self.index_mtime != old_index;
         let refs_changed = self.refs_mtime != old_refs;
+        let packed_refs_changed = self.packed_refs_mtime != old_packed_refs;
+        let worktree_changed = self.worktree_snapshot != old_worktree;
 
-        if head_changed || index_changed || refs_changed {
-            // Enregistrer le moment de la détection
-            self.last_change_detected = Some(Instant::now());
-        }
-
-        // Vérifier si le debounce est écoulé et qu'un changement a été détecté
-        if let Some(change_time) = self.last_change_detected {
-            if change_time.elapsed() >= DEBOUNCE_DELAY {
-                // Reset pour le prochain changement
-                self.last_change_detected = None;
-                return Ok(true);
-            }
+        if head_changed || index_changed || refs_changed || packed_refs_changed || worktree_changed
+        {
+            // Conserver la première détection pour éviter qu'une rafale repousse le refresh.
+            self.last_change_detected.get_or_insert_with(Instant::now);
         }
 
         Ok(false)
@@ -188,12 +219,66 @@ fn get_mtime(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
 }
 
+fn find_worktree_dir(start_path: &Path) -> Option<PathBuf> {
+    Repository::discover(start_path)
+        .ok()?
+        .workdir()
+        .map(Path::to_path_buf)
+}
+
+fn collect_worktree_snapshot(worktree_dir: &Path) -> Result<Vec<WorktreeEntrySnapshot>> {
+    let repo = Repository::discover(worktree_dir)?;
+    let root = repo.workdir().unwrap_or(worktree_dir);
+    let mut options = StatusOptions::new();
+    options.include_untracked(true).recurse_untracked_dirs(true);
+    let statuses = repo.statuses(Some(&mut options))?;
+
+    let mut snapshot = statuses
+        .iter()
+        .map(|entry| {
+            let path = PathBuf::from(String::from_utf8_lossy(entry.path_bytes()).into_owned());
+            let metadata = fs::metadata(root.join(&path)).ok();
+            WorktreeEntrySnapshot {
+                path,
+                status: entry.status().bits(),
+                modified: metadata.as_ref().and_then(|value| value.modified().ok()),
+                size: metadata.as_ref().map(fs::Metadata::len),
+            }
+        })
+        .collect::<Vec<_>>();
+    snapshot.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(snapshot)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
     use tempfile::TempDir;
+
+    fn create_repository() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+        let tracked = temp_dir.path().join("tracked.txt");
+        fs::write(&tracked, "initial\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("tracked.txt")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Test", "test@example.com").unwrap();
+        repo.commit(Some("HEAD"), &signature, &signature, "Initial", &tree, &[])
+            .unwrap();
+        temp_dir
+    }
+
+    fn force_poll(watcher: &mut GitWatcher) {
+        watcher.last_check = Instant::now() - CHECK_INTERVAL - Duration::from_millis(1);
+    }
 
     #[test]
     fn test_watcher_creation() {
@@ -245,5 +330,43 @@ mod tests {
     fn test_get_mtime_nonexistent_file() {
         let mtime = get_mtime(Path::new("/nonexistent/path"));
         assert!(mtime.is_none());
+    }
+
+    #[test]
+    fn test_watcher_detects_worktree_modification_without_index_change() {
+        let temp_dir = create_repository();
+        let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
+        fs::write(temp_dir.path().join("tracked.txt"), "modified content\n").unwrap();
+
+        force_poll(&mut watcher);
+        assert!(!watcher.check_changed().unwrap());
+        watcher.last_change_detected = Some(Instant::now() - DEBOUNCE_DELAY);
+
+        assert!(watcher.check_changed().unwrap());
+    }
+
+    #[test]
+    fn test_watcher_detects_untracked_file() {
+        let temp_dir = create_repository();
+        let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
+        fs::write(temp_dir.path().join("new.txt"), "new\n").unwrap();
+
+        force_poll(&mut watcher);
+        assert!(!watcher.check_changed().unwrap());
+        watcher.last_change_detected = Some(Instant::now() - DEBOUNCE_DELAY);
+
+        assert!(watcher.check_changed().unwrap());
+    }
+
+    #[test]
+    fn test_debounce_is_not_postponed_by_subsequent_changes() {
+        let temp_dir = create_repository();
+        let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
+        watcher.last_change_detected = Some(Instant::now() - DEBOUNCE_DELAY);
+        fs::write(temp_dir.path().join("tracked.txt"), "another change\n").unwrap();
+
+        force_poll(&mut watcher);
+
+        assert!(watcher.check_changed().unwrap());
     }
 }

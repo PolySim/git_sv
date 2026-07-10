@@ -2,7 +2,8 @@
 
 use crate::i18n::{text, text_owned};
 use crate::state::ResetPickerState;
-use crate::ui::common::centered_rect;
+use crate::ui::common::centered_rect_fixed;
+use crate::ui::common::text::truncate;
 use crate::ui::theme::current_theme;
 use ratatui::{
     layout::{Alignment, Rect},
@@ -23,7 +24,7 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
 
     let theme = current_theme();
     // Calculer la zone centrale pour le popup
-    let popup_area = centered_rect(60, 40, area);
+    let popup_area = centered_rect_fixed(64, 12, area);
 
     // Effacer la zone sous le popup
     frame.render_widget(Clear, popup_area);
@@ -35,11 +36,7 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
     );
 
     // Message du commit (tronqué si trop long)
-    let commit_msg = if state.commit_message.len() > 50 {
-        format!("{}...", &state.commit_message[..50])
-    } else {
-        state.commit_message.clone()
-    };
+    let commit_msg = truncate(&state.commit_message, 50, true);
 
     // Styles pour les options
     let soft_style = if state.is_soft_selected() {
@@ -156,4 +153,29 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
         .alignment(Alignment::Left);
 
     frame.render_widget(paragraph, popup_area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::tests::render_to_string;
+    use git2::Oid;
+
+    #[test]
+    fn test_reset_picker_truncates_unicode_commit_message_safely() {
+        let message = format!("{}é fin du commit", "a".repeat(49));
+        let state = ResetPickerState::new(Oid::zero(), "abc1234".to_string(), message);
+
+        let output = render_to_string(100, 30, |frame| {
+            render(
+                frame,
+                ResetPickerRenderContext {
+                    state: &state,
+                    area: Rect::new(0, 0, 100, 30),
+                },
+            );
+        });
+
+        assert!(output.contains('…'));
+    }
 }

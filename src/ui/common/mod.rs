@@ -18,7 +18,8 @@ pub mod rect;
 pub mod style;
 pub mod text;
 
-pub use rect::centered_rect;
+pub use rect::{centered_rect, centered_rect_fixed};
+use text::truncate_start;
 
 /// Configuration pour une status bar.
 #[derive(Default)]
@@ -44,25 +45,43 @@ pub fn render_status_bar(frame: &mut Frame, config: StatusBarConfig<'_>, area: R
     let branch_name = config.branch.unwrap_or("???");
     let bg = config.bg_color.unwrap_or(theme.status_bar_bg);
 
-    let content = if let Some(msg) = config.flash_message {
-        format!(
-            " git_sv · {} · {} · {} · {} ",
-            config.view_title, config.repo_path, branch_name, msg
-        )
-    } else {
-        format!(
-            " git_sv · {} · {} · {} ",
-            config.view_title, config.repo_path, branch_name
-        )
-    };
+    let path_width = (usize::from(area.width) / 3).clamp(12, 40);
+    let repo_path = truncate_start(config.repo_path, path_width, true);
+    let mut spans = vec![
+        Span::styled(
+            " git_sv ",
+            Style::default()
+                .fg(theme.primary)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("· ", Style::default().fg(theme.text_secondary).bg(bg)),
+        Span::styled(
+            format!("{} ", config.view_title),
+            Style::default()
+                .fg(theme.status_bar_fg)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("· ", Style::default().fg(theme.text_secondary).bg(bg)),
+        Span::styled(repo_path, Style::default().fg(theme.text_secondary).bg(bg)),
+        Span::styled(" · ", Style::default().fg(theme.text_secondary).bg(bg)),
+        Span::styled(
+            branch_name.to_string(),
+            Style::default().fg(theme.commit_hash).bg(bg),
+        ),
+    ];
+    if let Some(message) = config.flash_message {
+        spans.push(Span::styled(
+            format!("  {message}"),
+            Style::default()
+                .fg(theme.secondary)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
-    let line = Line::from(vec![Span::styled(
-        content,
-        Style::default()
-            .fg(theme.status_bar_fg)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    )]);
+    let line = Line::from(spans);
 
     frame.render_widget(Paragraph::new(line).style(Style::default().bg(bg)), area);
 }

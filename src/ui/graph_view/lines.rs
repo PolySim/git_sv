@@ -277,13 +277,23 @@ fn truncate_text(value: &str, max_width: usize) -> String {
         return "…".to_string();
     }
 
-    let mut truncated: String = value.chars().take(max_width - 1).collect();
+    let ellipsis_width = display_width("…");
+    let mut truncated = String::new();
+    let mut used = 0;
+    for character in value.chars() {
+        let character_width = display_width(&character.to_string());
+        if used + character_width + ellipsis_width > max_width {
+            break;
+        }
+        truncated.push(character);
+        used += character_width;
+    }
     truncated.push('…');
     truncated
 }
 
 fn display_width(value: &str) -> usize {
-    value.chars().count()
+    Line::from(value).width()
 }
 
 fn spans_width(spans: &[Span<'_>]) -> usize {

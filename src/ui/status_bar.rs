@@ -38,12 +38,12 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     let branch = current_branch.unwrap_or(text("???", "???"));
 
     // Compter les fichiers modifiés/staged/untracked.
-    let (modified, staged, untracked) = count_status(status_entries);
+    let (modified, staged, untracked, conflicted) = count_status(status_entries);
 
     // Construire le statut.
-    let status_text = if modified == 0 && staged == 0 && untracked == 0 {
+    let status_text = if modified == 0 && staged == 0 && untracked == 0 && conflicted == 0 {
         Span::styled(
-            text("✓ propre", "✓ clean"),
+            text("● propre", "● clean"),
             Style::default().fg(theme.success),
         )
     } else {
@@ -66,15 +66,30 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
                 format!("{} untracked", untracked),
             ));
         }
+        if conflicted > 0 {
+            parts.push(text_owned(
+                format!("{} en conflit", conflicted),
+                format!("{} conflicted", conflicted),
+            ));
+        }
         Span::styled(
-            format!("✗ {}", parts.join(", ")),
-            Style::default().fg(theme.error),
+            format!("● {}", parts.join(", ")),
+            Style::default().fg(if conflicted > 0 {
+                theme.error
+            } else {
+                theme.warning
+            }),
         )
     };
 
     // Construire la ligne.
     let mut spans = vec![
-        Span::styled("git_sv  ", Style::default().fg(theme.primary)),
+        Span::styled(
+            " git_sv  ",
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(
             format!("{}  ", branch),
             Style::default().fg(theme.commit_hash),
@@ -117,33 +132,44 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
 
     let line = Line::from(spans);
 
-    let paragraph = Paragraph::new(line);
+    let paragraph = Paragraph::new(line).style(
+        Style::default()
+            .fg(theme.status_bar_fg)
+            .bg(theme.status_bar_bg),
+    );
     frame.render_widget(paragraph, area);
 }
 
 /// Compte les fichiers par catégorie.
-fn count_status(entries: &[StatusEntry]) -> (usize, usize, usize) {
+fn count_status(entries: &[StatusEntry]) -> (usize, usize, usize, usize) {
     let mut modified = 0;
     let mut staged = 0;
     let mut untracked = 0;
+    let mut conflicted = 0;
 
     for entry in entries {
         let s = entry.status;
-        if s.contains(git2::Status::WT_MODIFIED) || s.contains(git2::Status::WT_DELETED) {
+        if s.intersects(
+            git2::Status::WT_MODIFIED | git2::Status::WT_DELETED | git2::Status::WT_RENAMED,
+        ) {
             modified += 1;
         }
         if s.contains(git2::Status::INDEX_NEW)
             || s.contains(git2::Status::INDEX_MODIFIED)
             || s.contains(git2::Status::INDEX_DELETED)
+            || s.contains(git2::Status::INDEX_RENAMED)
         {
             staged += 1;
         }
         if s.contains(git2::Status::WT_NEW) {
             untracked += 1;
         }
+        if s.is_conflicted() {
+            conflicted += 1;
+        }
     }
 
-    (modified, staged, untracked)
+    (modified, staged, untracked, conflicted)
 }
 
 #[cfg(test)]
@@ -157,14 +183,30 @@ mod tests {
             let theme = current_theme();
             let label = if true {
                 Span::styled(
-                    text("✓ propre", "✓ clean"),
+                    text("● propre", "● clean"),
                     Style::default().fg(theme.success),
                 )
             } else {
                 unreachable!()
             };
 
-            assert_eq!(label.content, "✓ clean");
+            assert_eq!(label.content, "● clean");
         });
+    }
+
+    #[test]
+    fn test_count_status_includes_renamed_and_conflicted_entries() {
+        let entries = vec![
+            StatusEntry {
+                path: "renamed.txt".to_string(),
+                status: git2::Status::WT_RENAMED | git2::Status::INDEX_RENAMED,
+            },
+            StatusEntry {
+                path: "conflict.txt".to_string(),
+                status: git2::Status::CONFLICTED,
+            },
+        ];
+
+        assert_eq!(count_status(&entries), (1, 1, 0, 1));
     }
 }

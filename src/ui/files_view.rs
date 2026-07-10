@@ -9,8 +9,8 @@ use ratatui::{
 };
 
 use crate::git::diff::{DiffFile, DiffStatus};
-use crate::git::repo::StatusEntry;
-use crate::i18n::text_owned;
+use crate::git::repo::{FileStatusKind, StatusEntry};
+use crate::i18n::{text, text_owned};
 use crate::state::BottomLeftMode;
 use crate::ui::theme::{current_theme, Theme};
 
@@ -41,7 +41,7 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
     } = ctx;
 
     let theme = current_theme();
-    let (items, title) = match mode {
+    let (mut items, title, empty_message) = match mode {
         BottomLeftMode::Files => {
             let items = build_commit_file_items(commit_files, theme);
             let hash = selected_commit_hash.unwrap_or("???");
@@ -49,7 +49,14 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
                 format!(" Fichiers - {} ", hash),
                 format!(" Files - {} ", hash),
             );
-            (items, title)
+            (
+                items,
+                title,
+                text(
+                    "Aucun fichier modifie par ce commit",
+                    "No files changed by this commit",
+                ),
+            )
         }
         BottomLeftMode::Parents => {
             let items = build_status_items(status_entries, theme);
@@ -57,9 +64,22 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
                 format!(" Statut ({} fichiers) ", status_entries.len()),
                 format!(" Status ({} files) ", status_entries.len()),
             );
-            (items, title)
+            (
+                items,
+                title,
+                text("Working tree propre", "Working tree clean"),
+            )
         }
     };
+
+    if items.is_empty() {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {empty_message}"),
+            Style::default()
+                .fg(theme.text_secondary)
+                .add_modifier(Modifier::ITALIC),
+        ))));
+    }
 
     let border_style = if is_focused {
         Style::default().fg(theme.border_active)
@@ -68,7 +88,7 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
     };
 
     let title = if is_focused {
-        format!(">{}<", title)
+        format!("▶ {}", title.trim_start())
     } else {
         title
     };
@@ -127,11 +147,12 @@ fn build_status_items<'a>(entries: &'a [StatusEntry], theme: &Theme) -> Vec<List
     entries
         .iter()
         .map(|entry| {
-            let status_color = match entry.display_status() {
-                "Nouveau (staged)" | "Modifié (staged)" | "Supprimé (staged)" => theme.success,
-                "Modifié" | "Supprimé" => theme.error,
-                "Non suivi" => theme.text_secondary,
-                _ => theme.text_normal,
+            let status_color = match entry.status_kind() {
+                FileStatusKind::Staged | FileStatusKind::NewStaged => theme.success,
+                FileStatusKind::Modified => theme.warning,
+                FileStatusKind::Deleted | FileStatusKind::Conflicted => theme.error,
+                FileStatusKind::Untracked => theme.text_secondary,
+                FileStatusKind::Renamed => theme.info,
             };
 
             let line = Line::from(vec![

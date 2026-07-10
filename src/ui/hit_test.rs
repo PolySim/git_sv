@@ -169,6 +169,7 @@ fn hit_test_staging(_state: &AppState, x: u16, y: u16, screen_rect: Rect) -> Opt
 
     for (zone, rect) in [
         (ClickableZone::StatusBar, layout.status_bar),
+        (ClickableZone::NavBar, layout.nav_bar),
         (ClickableZone::BottomLeft, layout.unstaged_panel),
         (ClickableZone::BottomLeft, layout.staged_panel),
         (ClickableZone::BottomRight, layout.diff_panel),
@@ -203,6 +204,7 @@ fn hit_test_branches(
 
     for (zone, rect) in [
         (ClickableZone::StatusBar, layout.status_bar),
+        (ClickableZone::NavBar, layout.nav_bar),
         (ClickableZone::NavBar, layout.tabs),
         (ClickableZone::BottomLeft, layout.list_panel),
         (ClickableZone::BottomRight, layout.detail_panel),
@@ -316,20 +318,29 @@ pub fn calculate_file_index(file_count: usize, relative_y: u16) -> Option<usize>
 }
 
 /// Détermine quel tab de navigation est cliqué.
-pub fn calculate_nav_tab(relative_x: u16) -> Option<ViewMode> {
-    // Tabs: "1 Graph", "2 Staging", "3 Branches", "4 Conflicts"
-    // Approximation simple basée sur la position X
-    // Chaque tab fait environ 12-15 caractères
-    const TAB_WIDTH: u16 = 15;
+pub fn calculate_nav_tab(relative_x: u16, unresolved_conflicts: usize) -> Option<ViewMode> {
+    use crate::i18n::text;
 
-    let tab_index = relative_x / TAB_WIDTH;
+    let tabs = [
+        (text("Graphe", "Graph"), ViewMode::Graph),
+        (text("Staging", "Staging"), ViewMode::Staging),
+        (text("Branches", "Branches"), ViewMode::Branches),
+    ];
+    let mut offset = 1usize;
+    let x = usize::from(relative_x);
 
-    match tab_index {
-        0 => Some(ViewMode::Graph),
-        1 => Some(ViewMode::Staging),
-        2 => Some(ViewMode::Branches),
-        3 => Some(ViewMode::Conflicts),
-        _ => None,
+    for (label, view) in tabs {
+        let width = 3 + label.chars().count() + 2;
+        if x >= offset && x < offset + width {
+            return Some(view);
+        }
+        offset += width;
+    }
+
+    if unresolved_conflicts > 0 && x >= offset {
+        Some(ViewMode::Conflicts)
+    } else {
+        None
     }
 }
 
@@ -373,12 +384,12 @@ mod tests {
 
     #[test]
     fn test_calculate_nav_tab() {
-        assert_eq!(calculate_nav_tab(0), Some(ViewMode::Graph));
-        assert_eq!(calculate_nav_tab(10), Some(ViewMode::Graph));
-        assert_eq!(calculate_nav_tab(15), Some(ViewMode::Staging));
-        assert_eq!(calculate_nav_tab(30), Some(ViewMode::Branches));
-        assert_eq!(calculate_nav_tab(45), Some(ViewMode::Conflicts));
-        assert_eq!(calculate_nav_tab(100), None); // Hors limites
+        assert_eq!(calculate_nav_tab(1, 0), Some(ViewMode::Graph));
+        assert_eq!(calculate_nav_tab(10, 0), Some(ViewMode::Graph));
+        assert_eq!(calculate_nav_tab(15, 0), Some(ViewMode::Staging));
+        assert_eq!(calculate_nav_tab(30, 0), Some(ViewMode::Branches));
+        assert_eq!(calculate_nav_tab(40, 2), Some(ViewMode::Conflicts));
+        assert_eq!(calculate_nav_tab(100, 0), None); // Hors limites
     }
 
     #[test]

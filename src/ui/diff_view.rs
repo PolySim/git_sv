@@ -100,7 +100,7 @@ fn render_image(
     let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
     let title = format!(" Image - {}{} ", diff.path, fullscreen_indicator);
     let title = if is_focused {
-        format!(">{}<", title)
+        format!("▶ {}", title.trim_start())
     } else {
         title
     };
@@ -195,7 +195,7 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     };
 
     let title = if is_focused {
-        format!(">{}<", title)
+        format!("▶ {}", title.trim_start())
     } else {
         title
     };
@@ -256,7 +256,7 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     };
 
     let title = if is_focused {
-        format!(">{}<", title)
+        format!("▶ {}", title.trim_start())
     } else {
         title
     };

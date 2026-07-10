@@ -34,7 +34,12 @@ mod tests;
 
 use crate::git::diff::DiffViewMode;
 use crate::state::{AppState, BottomLeftMode, FocusPanel, ViewMode};
-use ratatui::{layout::Rect, Frame};
+use ratatui::{
+    layout::Rect,
+    style::Style,
+    widgets::{Block, Widget},
+    Frame,
+};
 
 /// Snapshot immuable de l'état pour le rendu de la vue graphe.
 struct GraphViewSnapshot {
@@ -61,10 +66,8 @@ struct GraphViewSnapshot {
 }
 
 impl AppState {
-    /// Crée un snapshot immuable pour le rendu de la vue graphe.
-    fn graph_view_snapshot(&self) -> GraphViewSnapshot {
-        let unresolved_conflicts = self
-            .conflicts_state
+    fn unresolved_conflict_count(&self) -> usize {
+        self.conflicts_state
             .as_ref()
             .map(|conflicts| {
                 conflicts
@@ -73,7 +76,12 @@ impl AppState {
                     .filter(|file| !file.is_resolved && file.has_conflicts)
                     .count()
             })
-            .unwrap_or(0);
+            .unwrap_or(0)
+    }
+
+    /// Crée un snapshot immuable pour le rendu de la vue graphe.
+    fn graph_view_snapshot(&self) -> GraphViewSnapshot {
+        let unresolved_conflicts = self.unresolved_conflict_count();
 
         let selected_hash = self.graph_view.selected_commit().map(|node| {
             let hash = node.oid.to_string();
@@ -341,6 +349,9 @@ fn render_graph_search_bar(frame: &mut Frame, state: &AppState, area: Rect) {
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, state: &mut AppState) {
     state.update_screen_area(frame.area());
+    Block::default()
+        .style(Style::default().bg(theme::current_theme().background))
+        .render(frame.area(), frame.buffer_mut());
 
     // Dispatcher le rendu selon le mode de vue
     match state.view_mode {
@@ -357,6 +368,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     repo_path: &state.repo_path,
                     flash_message: flash_message.as_deref(),
                     is_merging: state.ui.is_merging,
+                    unresolved_conflicts: state.unresolved_conflict_count(),
                     image_state: &mut state.image_preview,
                 },
             );
@@ -374,6 +386,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                             repo_path: &state.repo_path,
                             flash_message: flash_message.as_deref(),
                             is_merging: state.ui.is_merging,
+                            unresolved_conflicts: state.unresolved_conflict_count(),
                             image_state: &mut state.image_preview,
                         },
                     );
@@ -386,6 +399,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                             current_branch: state.current_branch.as_deref(),
                             repo_path: &state.repo_path,
                             flash_message: state.current_flash_message(),
+                            unresolved_conflicts: state.unresolved_conflict_count(),
                         },
                     );
                 }
@@ -420,6 +434,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     current_branch: state.current_branch.as_deref(),
                     repo_path: &state.repo_path,
                     flash_message: state.current_flash_message(),
+                    unresolved_conflicts: state.unresolved_conflict_count(),
                 },
             );
         }

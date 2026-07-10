@@ -4,4 +4,4 @@ assertion_line: 44
 expression: output
 ---
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-j/k:navigate  Enter:details  b:branches  c:commit  s:stash  m:merge  R:reset  P:push  1/42
+j/k:navigate  Enter:details  b:branches  c:commit  s:stash  m:merge  R:reset  P:push            1/42

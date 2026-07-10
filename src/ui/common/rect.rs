@@ -27,3 +27,32 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
         ])
         .split(vertical_layout[1])[1]
 }
+
+/// Crée un rectangle centré de taille fixe, borné par la zone disponible.
+pub fn centered_rect_fixed(width: u16, height: u16, area: Rect) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_centered_rect_fixed_is_centered_and_bounded() {
+        assert_eq!(
+            centered_rect_fixed(60, 12, Rect::new(0, 0, 80, 24)),
+            Rect::new(10, 6, 60, 12)
+        );
+        assert_eq!(
+            centered_rect_fixed(60, 12, Rect::new(0, 0, 40, 8)),
+            Rect::new(0, 0, 40, 8)
+        );
+    }
+}

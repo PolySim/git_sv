@@ -333,7 +333,9 @@ impl ActionHandler for EditHandler {
 
     fn handle(&mut self, ctx: &mut HandlerContext, action: EditAction) -> Result<()> {
         // Déterminer quel buffer est actif selon le contexte
-        let mut buffer = get_active_buffer(ctx.state);
+        let Some(mut buffer) = get_active_buffer(ctx.state) else {
+            return Ok(());
+        };
 
         match action {
             EditAction::InsertChar(c) => buffer.insert_char(c),
@@ -365,33 +367,30 @@ impl ActionHandler for EditHandler {
 }
 
 /// Détermine le buffer actif selon le contexte de l'application.
-fn get_active_buffer(state: &mut AppState) -> TextBuffer<'_> {
+fn get_active_buffer(state: &mut AppState) -> Option<TextBuffer<'_>> {
     // Priorité 1 : Vue Branches en mode Input
     if state.view_mode == ViewMode::Branches
         && state.branches_view_state.focus == BranchesFocus::Input
     {
-        return TextBuffer::new(
+        return Some(TextBuffer::new(
             &mut state.branches_view_state.input_text,
             &mut state.branches_view_state.input_cursor,
             &mut state.branches_view_state.input_selection_anchor,
             &mut state.branches_view_state.input_edit_history,
-        );
+        ));
     }
 
     // Priorité 2 : Vue Staging en mode commit
     if state.staging_state.is_committing {
-        return TextBuffer::new(
+        return Some(TextBuffer::new(
             &mut state.staging_state.commit_message,
             &mut state.staging_state.cursor_position,
             &mut state.staging_state.selection_anchor,
             &mut state.staging_state.edit_history,
-        );
+        ));
     }
 
-    // Fallback : ne rien modifier (buffer vide)
-    // Ceci ne devrait pas arriver en conditions normales car les handlers
-    // d'édition ne sont activés que dans les modes appropriés
-    panic!("Aucun buffer actif trouvé pour l'édition");
+    None
 }
 
 /// Applique une action d'edition a un champ texte arbitraire.
@@ -630,6 +629,21 @@ mod tests {
 
         assert_eq!(state.staging_state.commit_message, "fix\nbug");
         assert_eq!(state.staging_state.cursor_position, 7);
+    }
+
+    #[test]
+    fn test_edit_handler_ignores_action_without_active_buffer() {
+        let (dir, repo) = setup_test_repo();
+        let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+        let mut handler = EditHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler
+            .handle(&mut ctx, EditAction::InsertChar('x'))
+            .unwrap();
+
+        assert!(ctx.state.staging_state.commit_message.is_empty());
+        assert!(ctx.state.branches_view_state.input_text.is_empty());
     }
 
     #[test]

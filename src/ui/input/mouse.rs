@@ -50,7 +50,18 @@ fn handle_mouse_click(
         ClickableZone::Modal => handle_modal_click(state, &hit),
         ClickableZone::NavBar => {
             // Clic sur un tab de navigation
-            calculate_nav_tab(hit.relative_x).map(AppAction::SwitchView)
+            let conflicts = state
+                .conflicts_state
+                .as_ref()
+                .map(|value| {
+                    value
+                        .all_files
+                        .iter()
+                        .filter(|file| !file.is_resolved)
+                        .count()
+                })
+                .unwrap_or(0);
+            calculate_nav_tab(hit.relative_x, conflicts).map(AppAction::SwitchView)
         }
         ClickableZone::Graph => {
             // Clic dans le graphe: sélectionner un commit et mettre le focus sur Graph
@@ -160,6 +171,10 @@ fn handle_staging_mouse_click(
 
     let layout = build_staging_layout(state.screen_area);
 
+    if hit.rect == layout.nav_bar {
+        return calculate_global_nav_action(state, hit.relative_x);
+    }
+
     if hit.rect == layout.unstaged_panel {
         let item_y = hit.relative_y.saturating_sub(1) as usize;
         if item_y < state.staging_state.unstaged_files().len() {
@@ -202,6 +217,10 @@ fn handle_branches_mouse_click(
     use crate::ui::branches_layout::build_branches_layout;
 
     let layout = build_branches_layout(state.screen_area);
+
+    if hit.rect == layout.nav_bar {
+        return calculate_global_nav_action(state, hit.relative_x);
+    }
 
     if hit.rect == layout.tabs {
         let third = (layout.tabs.width / 3).max(1);
@@ -272,6 +291,21 @@ fn handle_branches_mouse_click(
     }
 
     None
+}
+
+fn calculate_global_nav_action(state: &AppState, relative_x: u16) -> Option<AppAction> {
+    let conflicts = state
+        .conflicts_state
+        .as_ref()
+        .map(|value| {
+            value
+                .all_files
+                .iter()
+                .filter(|file| !file.is_resolved)
+                .count()
+        })
+        .unwrap_or(0);
+    crate::ui::hit_test::calculate_nav_tab(relative_x, conflicts).map(AppAction::SwitchView)
 }
 
 /// Gère le scroll souris en fonction de la zone.

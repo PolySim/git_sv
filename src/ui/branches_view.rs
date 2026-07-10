@@ -12,6 +12,7 @@ use crate::i18n::text;
 use crate::state::{
     BranchesFocus, BranchesSection, BranchesViewState, InputAction, SelectedBranch,
 };
+use crate::ui::common::help_bar::KeyHint;
 use crate::ui::common::{centered_rect, StatusBarConfig};
 use crate::ui::theme::current_theme;
 use crate::utils::time::format_relative_time;
@@ -21,6 +22,7 @@ pub struct BranchesRenderContext<'a> {
     pub current_branch: Option<&'a str>,
     pub repo_path: &'a str,
     pub flash_message: Option<&'a str>,
+    pub unresolved_conflicts: usize,
 }
 
 fn detail_scroll_offset(state: &BranchesViewState) -> u16 {
@@ -37,13 +39,24 @@ fn render_detail_panel(
     content: Vec<Line<'static>>,
     scroll_offset: u16,
     area: Rect,
+    is_focused: bool,
 ) {
     let theme = current_theme();
+    let title = if is_focused {
+        text("▶ Detail ", "▶ Detail ")
+    } else {
+        text(" Detail ", " Detail ")
+    };
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(text(" Detail ", " Detail "))
-                .borders(Borders::ALL),
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(if is_focused {
+                    theme.border_active
+                } else {
+                    theme.border_inactive
+                })),
         )
         .scroll((scroll_offset, 0))
         .style(Style::default().fg(theme.text_normal).bg(theme.background));
@@ -56,18 +69,40 @@ fn render_selection_list<'a>(
     items: Vec<ListItem<'a>>,
     selected: usize,
     area: Rect,
+    is_focused: bool,
+    empty_message: &str,
 ) {
     let theme = current_theme();
+    let items = if items.is_empty() {
+        vec![ListItem::new(Line::from(Span::styled(
+            format!("  {empty_message}"),
+            Style::default()
+                .fg(theme.text_secondary)
+                .add_modifier(Modifier::ITALIC),
+        )))]
+    } else {
+        items
+    };
+    let title = if is_focused {
+        format!("▶ {}", title.trim_start())
+    } else {
+        title.to_string()
+    };
     let list = List::new(items)
         .block(
             Block::default()
                 .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_active)),
+                .border_style(Style::default().fg(if is_focused {
+                    theme.border_active
+                } else {
+                    theme.border_inactive
+                })),
         )
         .highlight_style(
             Style::default()
                 .bg(theme.selection_bg)
+                .fg(theme.selection_fg)
                 .add_modifier(Modifier::BOLD),
         )
         .style(Style::default().fg(theme.text_normal).bg(theme.background));
@@ -384,6 +419,7 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
         current_branch,
         repo_path,
         flash_message,
+        unresolved_conflicts,
     } = ctx;
 
     let layout = super::branches_layout::build_branches_layout(frame.area());
@@ -399,6 +435,15 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
             bg_color: None,
         },
         layout.status_bar,
+    );
+
+    super::nav_bar::render(
+        frame,
+        super::nav_bar::NavBarRenderContext {
+            current_view: crate::state::ViewMode::Branches,
+            area: layout.nav_bar,
+            unresolved_conflicts,
+        },
     );
 
     // Onglets.
@@ -432,29 +477,36 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
 /// Rend les onglets de la vue branches.
 fn render_tabs(frame: &mut Frame, active: &BranchesSection, area: Rect) {
     let theme = current_theme();
-    let tabs = vec![
+    let tabs = [
         (text("Branches", "Branches"), BranchesSection::Branches),
         (text("Worktrees", "Worktrees"), BranchesSection::Worktrees),
         (text("Stashes", "Stashes"), BranchesSection::Stashes),
     ];
 
     let mut spans = Vec::new();
-    for (label, section) in &tabs {
+    let base_width = usize::from(area.width) / tabs.len();
+    for (index, (label, section)) in tabs.iter().enumerate() {
         let style = if section == active {
             Style::default()
-                .fg(theme.border_active)
+                .fg(theme.selection_fg)
+                .bg(theme.selection_bg)
                 .add_modifier(Modifier::BOLD)
-                .add_modifier(Modifier::UNDERLINED)
         } else {
-            Style::default().fg(theme.text_secondary)
+            Style::default()
+                .fg(theme.text_secondary)
+                .bg(theme.surface_alt)
         };
-        spans.push(Span::styled(format!(" {} ", label), style));
-        spans.push(Span::styled("  ", Style::default().fg(theme.text_normal)));
+        let width = if index + 1 == tabs.len() {
+            usize::from(area.width).saturating_sub(base_width * index)
+        } else {
+            base_width
+        };
+        spans.push(Span::styled(format!("{label:^width$}"), style));
     }
 
     let line = Line::from(spans);
     let paragraph =
-        Paragraph::new(line).style(Style::default().fg(theme.text_normal).bg(theme.background));
+        Paragraph::new(line).style(Style::default().fg(theme.text_normal).bg(theme.surface_alt));
     frame.render_widget(paragraph, area);
 }
 
@@ -535,6 +587,8 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         items,
         visual_index,
         area,
+        state.focus == BranchesFocus::List,
+        text("Aucune branche", "No branches"),
     );
 }
 
@@ -545,6 +599,7 @@ fn render_branch_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect
         build_branch_detail_content(state),
         detail_scroll_offset(state),
         area,
+        state.focus == BranchesFocus::Detail,
     );
 }
 
@@ -578,6 +633,8 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
         items,
         state.worktree_selected(),
         area,
+        state.focus == BranchesFocus::List,
+        text("Aucun worktree", "No worktrees"),
     );
 }
 
@@ -588,6 +645,7 @@ fn render_worktree_detail(frame: &mut Frame, state: &BranchesViewState, area: Re
         build_worktree_detail_content(state),
         detail_scroll_offset(state),
         area,
+        state.focus == BranchesFocus::Detail,
     );
 }
 
@@ -615,6 +673,8 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
         items,
         state.stash_selected(),
         area,
+        state.focus == BranchesFocus::List,
+        text("Aucun stash", "No stashes"),
     );
 }
 
@@ -625,6 +685,7 @@ fn render_stash_detail(frame: &mut Frame, state: &BranchesViewState, area: Rect)
         build_stash_detail_content(state),
         detail_scroll_offset(state),
         area,
+        state.focus == BranchesFocus::Detail,
     );
 }
 
@@ -635,41 +696,46 @@ fn render_branches_help(
     focus: &BranchesFocus,
     area: Rect,
 ) {
-    let theme = current_theme();
-    let help_text = if *focus == BranchesFocus::Input {
-        text(
-            "Entree:confirmer  Echap:annuler  ←→:curseur",
-            "Enter:confirm  Esc:cancel  ←→:cursor",
-        )
+    let hints = if *focus == BranchesFocus::Input {
+        vec![
+            KeyHint::new("Entree", text("confirmer", "confirm")),
+            KeyHint::new("Echap", text("annuler", "cancel")),
+            KeyHint::new("←→", text("curseur", "cursor")),
+        ]
     } else {
         match section {
-            BranchesSection::Branches => {
-                text(
-                    "Tab/Shift+Tab:section  Entree:checkout  n:nouvelle  d:supprimer  r:renommer  m:fusion  e:rebase  R:distantes  P:push  Ctrl+P:force push  1:graphe  2:staging",
-                    "Tab/Shift+Tab:section  Enter:checkout  n:new  d:delete  r:rename  m:merge  e:rebase  R:remote  P:push  Ctrl+P:force push  1:graph  2:staging",
-                )
-            }
-            BranchesSection::Worktrees => {
-                text(
-                    "↑↓:selectionner  Entree:ouvrir  Tab/Shift+Tab:section  n:nouveau  d:supprimer  1:graphe",
-                    "↑↓:select  Enter:open  Tab/Shift+Tab:section  n:new  d:delete  1:graph",
-                )
-            }
-            BranchesSection::Stashes => {
-                text(
-                    "Tab/Shift+Tab:section  h/l:fichiers  J/K:defiler diff  a:appliquer  p:pop  d:supprimer  s:sauver  1:graphe  2:staging",
-                    "Tab/Shift+Tab:section  h/l:files  J/K:scroll diff  a:apply  p:pop  d:drop  s:save  1:graph  2:staging",
-                )
-            }
+            BranchesSection::Branches => vec![
+                KeyHint::new("j/k", text("naviguer", "navigate")),
+                KeyHint::new("Entree", text("checkout", "checkout")),
+                KeyHint::new("n", text("nouvelle", "new")),
+                KeyHint::new("d", text("supprimer", "delete")),
+                KeyHint::new("r", text("renommer", "rename")),
+                KeyHint::new("m", text("fusion", "merge")),
+                KeyHint::new("e", text("rebase", "rebase")),
+                KeyHint::new("R", text("distantes", "remote")),
+                KeyHint::new("Tab", text("section", "section")),
+            ],
+            BranchesSection::Worktrees => vec![
+                KeyHint::new("j/k", text("naviguer", "navigate")),
+                KeyHint::new("Entree", text("ouvrir", "open")),
+                KeyHint::new("n", text("nouveau", "new")),
+                KeyHint::new("d", text("supprimer", "delete")),
+                KeyHint::new("Tab", text("section", "section")),
+            ],
+            BranchesSection::Stashes => vec![
+                KeyHint::new("j/k", text("naviguer", "navigate")),
+                KeyHint::new("h/l", text("fichiers", "files")),
+                KeyHint::new("J/K", text("defiler diff", "scroll diff")),
+                KeyHint::new("a", text("appliquer", "apply")),
+                KeyHint::new("p", text("pop", "pop")),
+                KeyHint::new("d", text("supprimer", "drop")),
+                KeyHint::new("s", text("sauver", "save")),
+                KeyHint::new("Tab", text("section", "section")),
+            ],
         }
     };
 
-    let line = Line::from(vec![Span::styled(
-        format!(" {} ", help_text),
-        Style::default().fg(theme.text_secondary),
-    )]);
-
-    frame.render_widget(Paragraph::new(line), area);
+    crate::ui::common::help_bar::render(frame, area, &hints, None);
 }
 
 /// Rend l'overlay d'input.

@@ -95,11 +95,14 @@ pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
 
     let line = Line::from(spans);
 
-    let paragraph = Paragraph::new(line).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(theme.border_inactive)),
-    );
+    let paragraph = Paragraph::new(line)
+        .style(Style::default().bg(theme.surface))
+        .block(
+            Block::default()
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(theme.border_inactive))
+                .style(Style::default().bg(theme.surface)),
+        );
 
     frame.render_widget(paragraph, area);
 }

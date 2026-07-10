@@ -1,16 +1,10 @@
 //! Barre d'aide contextuelle en bas de l'écran (raccourcis clavier).
 
-use ratatui::{
-    layout::Rect,
-    style::{Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-    Frame,
-};
+use ratatui::{layout::Rect, Frame};
 
 use crate::i18n::text;
 use crate::state::BottomLeftMode;
-use crate::ui::theme::current_theme;
+use crate::ui::common::help_bar::KeyHint;
 
 pub struct HelpBarRenderContext {
     pub selected_index: usize,
@@ -32,135 +26,53 @@ pub fn render(frame: &mut Frame, ctx: HelpBarRenderContext) {
         area,
     } = ctx;
 
-    let theme = current_theme();
-
     // Déterminer les touches à afficher.
     let mut keys = vec![
-        ("j/k", text("naviguer", "navigate")),
-        ("Enter", text("detail", "details")),
-        ("b", text("branches", "branches")),
-        ("c", text("commit", "commit")),
-        ("s", text("stash", "stash")),
-        ("m", text("merge", "merge")),
-        ("R", text("reset", "reset")),
-        ("P", text("push", "push")),
-        ("Ctrl+P", text("force push", "force push")),
+        KeyHint::new("j/k", text("naviguer", "navigate")),
+        KeyHint::new("Enter", text("detail", "details")),
+        KeyHint::new("b", text("branches", "branches")),
+        KeyHint::new("c", text("commit", "commit")),
+        KeyHint::new("s", text("stash", "stash")),
+        KeyHint::new("m", text("fusion", "merge")),
+        KeyHint::new("R", text("reset", "reset")),
+        KeyHint::new("P", text("push", "push")),
+        KeyHint::new("Ctrl+P", text("push force", "force push")),
     ];
 
     // Ajouter abort merge si un merge est en cours.
     if is_merging {
-        keys.push(("A", text("annuler merge", "abort merge")));
+        keys.push(KeyHint::new("A", text("annuler fusion", "abort merge")));
     }
 
     // Ajouter le contexte du panneau bas.
     match bottom_left_mode {
         BottomLeftMode::Files => {
-            keys.push(("Tab", text("fichiers", "files")));
-            keys.push(("Espace", text("diff", "diff")));
-            keys.push(("Enter", text("plein ecran", "fullscreen")));
+            keys.push(KeyHint::new("Tab", text("fichiers", "files")));
+            keys.push(KeyHint::new("Espace", text("diff", "diff")));
+            keys.push(KeyHint::new("Enter", text("plein ecran", "fullscreen")));
         }
-        BottomLeftMode::Parents => keys.push(("Tab", text("commit", "commit"))),
+        BottomLeftMode::Parents => keys.push(KeyHint::new("Tab", text("commit", "commit"))),
     }
 
     // Ajouter le raccourci pour effacer les filtres s'ils sont actifs
     if filter_active {
-        keys.push(("Ctrl+R", text("effacer filtres", "clear filters")));
+        keys.push(KeyHint::new(
+            "Ctrl+R",
+            text("effacer filtres", "clear filters"),
+        ));
     }
 
-    keys.extend(vec![
-        ("r", text("rafraichir", "refresh")),
-        ("?", text("aide", "help")),
-        ("q", text("quitter", "quit")),
+    keys.extend([
+        KeyHint::new("r", text("rafraichir", "refresh")),
+        KeyHint::new("?", text("aide", "help")),
+        KeyHint::new("q", text("quitter", "quit")),
     ]);
 
-    keys.push((text("clic", "click"), text("focus/select", "focus/select")));
-    keys.push((text("molette", "wheel"), text("scroll", "scroll")));
-
-    // Construire la ligne avec les touches formatées.
-    let keys = fit_help_keys(keys, area.width);
-    let mut spans = build_help_spans(&keys, theme);
-
-    // Ajouter le compteur de commits à droite.
-    spans.push(Span::raw("  "));
-    spans.push(Span::styled(
-        format!("{}/{}", selected_index + 1, total_commits),
-        Style::default().fg(theme.text_secondary),
-    ));
-
-    let line = Line::from(spans);
-
-    let paragraph = Paragraph::new(line).block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(theme.border_inactive)),
-    );
-
-    frame.render_widget(paragraph, area);
-}
-
-/// Construit les spans pour la barre d'aide.
-fn build_help_spans<'a>(
-    keys: &'a [(&'a str, &'a str)],
-    theme: &crate::ui::theme::Theme,
-) -> Vec<Span<'a>> {
-    let mut spans: Vec<Span<'a>> = Vec::with_capacity(keys.len() * 3);
-
-    for (i, (key, desc)) in keys.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::raw("  "));
-        }
-
-        // Touche en cyan + bold.
-        spans.push(Span::styled(
-            *key,
-            Style::default()
-                .fg(theme.primary)
-                .add_modifier(Modifier::BOLD),
-        ));
-
-        // Description en couleur normale.
-        spans.push(Span::raw(":"));
-        spans.push(Span::styled(*desc, Style::default().fg(theme.text_normal)));
-    }
-
-    spans
-}
-
-fn fit_help_keys<'a>(keys: Vec<(&'a str, &'a str)>, width: u16) -> Vec<(&'a str, &'a str)> {
-    let reserved_counter_width = 12usize;
-    let available = usize::from(width).saturating_sub(reserved_counter_width);
-    let mut selected = Vec::new();
-    let mut used = 0usize;
-
-    for key in keys {
-        let item_width = help_item_width(key);
-        let separator_width = if selected.is_empty() { 0 } else { 2 };
-
-        if used + separator_width + item_width > available {
-            break;
-        }
-
-        used += separator_width + item_width;
-        selected.push(key);
-    }
-
-    selected
-}
-
-fn help_item_width((key, desc): (&str, &str)) -> usize {
-    key.chars().count() + 1 + desc.chars().count()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_fit_help_keys_limits_to_available_width() {
-        let keys = vec![("j/k", "navigate"), ("Enter", "details"), ("P", "push")];
-
-        let fitted = fit_help_keys(keys, 24);
-
-        assert_eq!(fitted, vec![("j/k", "navigate")]);
-    }
+    let position = if total_commits == 0 {
+        0
+    } else {
+        selected_index.min(total_commits - 1) + 1
+    };
+    let counter = format!("{position}/{total_commits}");
+    crate::ui::common::help_bar::render(frame, area, &keys, Some(&counter));
 }

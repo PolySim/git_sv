@@ -25,10 +25,12 @@ where
 fn buffer_to_string(buffer: &Buffer) -> String {
     let mut output = String::new();
     for y in 0..buffer.area.height {
+        let mut line = String::new();
         for x in 0..buffer.area.width {
             let cell = &buffer[(x, y)];
-            output.push_str(cell.symbol());
+            line.push_str(cell.symbol());
         }
+        output.push_str(line.trim_end());
         output.push('\n');
     }
     output

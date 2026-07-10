@@ -9,8 +9,9 @@ use ratatui::{
 };
 
 use crate::git::repo::{FileStatusKind, StatusEntry};
-use crate::i18n::{text, text_owned};
+use crate::i18n::text;
 use crate::state::{StagingFocus, StagingState};
+use crate::ui::common::help_bar::KeyHint;
 use crate::ui::common::StatusBarConfig;
 use crate::ui::image_preview::ImagePreviewState;
 use crate::ui::theme::{current_theme, Theme};
@@ -21,11 +22,13 @@ pub struct StagingRenderContext<'a> {
     pub repo_path: &'a str,
     pub flash_message: Option<&'a str>,
     pub is_merging: bool,
+    pub unresolved_conflicts: usize,
     pub image_state: &'a mut ImagePreviewState,
 }
 
 struct FileListRenderContext<'a> {
     title: &'a str,
+    empty_message: &'a str,
     files: &'a [StatusEntry],
     selected: usize,
     is_focused: bool,
@@ -48,7 +51,6 @@ struct StagingHelpRenderContext<'a> {
     focus: &'a StagingFocus,
     is_merging: bool,
     area: Rect,
-    theme: &'a Theme,
 }
 
 /// Rend la vue complète de staging.
@@ -59,6 +61,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         repo_path,
         flash_message,
         is_merging,
+        unresolved_conflicts,
         image_state,
     } = ctx;
 
@@ -78,11 +81,21 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         layout.status_bar,
     );
 
+    super::nav_bar::render(
+        frame,
+        super::nav_bar::NavBarRenderContext {
+            current_view: crate::state::ViewMode::Staging,
+            area: layout.nav_bar,
+            unresolved_conflicts,
+        },
+    );
+
     // Panneau unstaged.
     render_file_list(
         frame,
         FileListRenderContext {
             title: text("Non indexes", "Unstaged"),
+            empty_message: text("Aucun fichier non indexe", "No unstaged files"),
             files: staging_state.unstaged_files(),
             selected: staging_state.unstaged_selected(),
             is_focused: staging_state.focus == StagingFocus::Unstaged,
@@ -96,6 +109,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         frame,
         FileListRenderContext {
             title: text("Indexes", "Staged"),
+            empty_message: text("Aucun fichier indexe", "No staged files"),
             files: staging_state.staged_files(),
             selected: staging_state.staged_selected(),
             is_focused: staging_state.focus == StagingFocus::Staged,
@@ -141,7 +155,6 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
             focus: &staging_state.focus,
             is_merging,
             area: layout.help_bar,
-            theme,
         },
     );
 }
@@ -150,6 +163,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
 fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
     let FileListRenderContext {
         title,
+        empty_message,
         files,
         selected,
         is_focused,
@@ -157,7 +171,7 @@ fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
         theme,
     } = ctx;
 
-    let items: Vec<ListItem> = files
+    let mut items: Vec<ListItem> = files
         .iter()
         .map(|entry| {
             let kind = entry.status_kind();
@@ -192,6 +206,15 @@ fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
         })
         .collect();
 
+    if items.is_empty() {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {empty_message}"),
+            Style::default()
+                .fg(theme.text_secondary)
+                .add_modifier(Modifier::ITALIC),
+        ))));
+    }
+
     let border_style = if is_focused {
         Style::default().fg(theme.primary)
     } else {
@@ -199,10 +222,15 @@ fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
     };
 
     let count = files.len();
+    let panel_title = if is_focused {
+        format!("▶ {title} ({count}) ")
+    } else {
+        format!(" {title} ({count}) ")
+    };
     let list = List::new(items)
         .block(
             Block::default()
-                .title(format!(" {} ({}) ", title, count))
+                .title(panel_title)
                 .borders(Borders::ALL)
                 .border_style(border_style),
         )
@@ -232,7 +260,7 @@ fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
     } = ctx;
 
     let border_style = if is_focused {
-        Style::default().fg(theme.warning)
+        Style::default().fg(theme.border_active)
     } else {
         Style::default().fg(theme.border_inactive)
     };
@@ -326,62 +354,50 @@ fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
         focus,
         is_merging,
         area,
-        theme,
     } = ctx;
-
-    let abort_merge_text = if is_merging {
-        text("  A:annuler fusion", "  A:abort merge")
-    } else {
-        ""
+    let mut hints = match focus {
+        StagingFocus::Unstaged => vec![
+            KeyHint::new("j/k", text("naviguer", "navigate")),
+            KeyHint::new("Espace", text("diff", "diff")),
+            KeyHint::new("s/Entree", text("indexer", "stage")),
+            KeyHint::new("a", text("tout indexer", "stage all")),
+            KeyHint::new("d", text("abandonner", "discard")),
+            KeyHint::new("Tab", text("indexes", "staged")),
+            KeyHint::new("c", text("commit", "commit")),
+        ],
+        StagingFocus::Staged => vec![
+            KeyHint::new("j/k", text("naviguer", "navigate")),
+            KeyHint::new("Espace", text("diff", "diff")),
+            KeyHint::new("u/Entree", text("desindexer", "unstage")),
+            KeyHint::new("U", text("tout desindexer", "unstage all")),
+            KeyHint::new("Tab", text("non indexes", "unstaged")),
+            KeyHint::new("c", text("commit", "commit")),
+        ],
+        StagingFocus::Diff => vec![
+            KeyHint::new("j/k", text("defiler", "scroll")),
+            KeyHint::new("h/l", text("horizontal", "horizontal")),
+            KeyHint::new("v", text("changer vue", "change view")),
+            KeyHint::new("Tab/Echap", text("retour liste", "back to list")),
+            KeyHint::new("c", text("commit", "commit")),
+        ],
+        StagingFocus::CommitMessage => vec![
+            KeyHint::new("Entree", text("confirmer", "confirm")),
+            KeyHint::new("Echap", text("annuler", "cancel")),
+            KeyHint::new("←→", text("curseur", "cursor")),
+        ],
     };
+    if *focus != StagingFocus::CommitMessage {
+        hints.push(if is_merging {
+            KeyHint::new("A", text("annuler fusion", "abort merge"))
+        } else {
+            KeyHint::new("A", text("amender", "amend"))
+        });
+        hints.extend([
+            KeyHint::new("P", text("push", "push")),
+            KeyHint::new("?", text("aide", "help")),
+            KeyHint::new("q", text("quitter", "quit")),
+        ]);
+    }
 
-    let help_text = match focus {
-        StagingFocus::Unstaged => {
-            let amend_text = if is_merging {
-                ""
-            } else {
-                text("  A:amender", "  A:amend")
-            };
-            text_owned(
-                format!("j/k:naviguer  Espace:diff  s/Entree:indexer  S:stocker fichier  Ctrl+S:stocker non indexes  a:indexer tout  d:abandonner  Tab:→Indexes  c:commit{}  P:push  Ctrl+P:force push{}  1:graphe  q:quitter", amend_text, abort_merge_text),
-                format!("j/k:nav  Space:diff  s/Enter:stage  S:stash file  Ctrl+S:stash unstaged  a:stage all  d:discard  Tab:→Staged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text),
-            )
-        }
-        StagingFocus::Staged => {
-            let amend_text = if is_merging {
-                ""
-            } else {
-                text("  A:amender", "  A:amend")
-            };
-            text_owned(
-                format!("j/k:naviguer  Espace:diff  u/Entree:desindexer  U:desindexer tout  Tab:→Non indexes  c:commit{}  P:push  Ctrl+P:force push{}  1:graphe  q:quitter", amend_text, abort_merge_text),
-                format!("j/k:nav  Space:diff  u/Enter:unstage  U:unstage all  Tab:→Unstaged  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text),
-            )
-        }
-        StagingFocus::Diff => {
-            let amend_text = if is_merging {
-                ""
-            } else {
-                text("  A:amender", "  A:amend")
-            };
-            text_owned(
-                format!("j/k:defiler  h/l:horizontal  v:vue  Tab/Echap:retour liste  c:commit{}  P:push  Ctrl+P:force push{}  1:graphe  q:quitter", amend_text, abort_merge_text),
-                format!("j/k:scroll  h/l:horizontal  v:view  Tab/Esc:back to list  c:commit{}  P:push  Ctrl+P:force push{}  1:graph  q:quit", amend_text, abort_merge_text),
-            )
-        }
-        StagingFocus::CommitMessage => text_owned(
-            "Entree:confirmer  Echap:annuler  ←→:curseur",
-            "Enter:confirm  Esc:cancel  ←→:cursor",
-        ),
-    };
-
-    let line = Line::from(vec![Span::styled(
-        format!(" {} ", help_text),
-        Style::default().fg(theme.text_secondary),
-    )]);
-
-    frame.render_widget(
-        Paragraph::new(line).style(Style::default().bg(theme.background)),
-        area,
-    );
+    crate::ui::common::help_bar::render(frame, area, &hints, None);
 }

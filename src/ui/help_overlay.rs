@@ -423,7 +423,7 @@ fn separator() -> Line<'static> {
 
 fn key_line(key: &str, desc: &str) -> Line<'static> {
     let theme = current_theme();
-    let padding = 16usize.saturating_sub(key.len());
+    let padding = 16usize.saturating_sub(Line::from(key).width());
     Line::from(vec![
         Span::styled(key.to_string(), Style::default().fg(theme.primary)),
         Span::raw(format!("{}{}", " ".repeat(padding), desc)),
@@ -433,7 +433,7 @@ fn key_line(key: &str, desc: &str) -> Line<'static> {
 fn key_line_multi(keys: &[&str], desc: &str) -> Line<'static> {
     let theme = current_theme();
     let keys_str = keys.join(" / ");
-    let padding = 16usize.saturating_sub(keys_str.len());
+    let padding = 16usize.saturating_sub(Line::from(keys_str.as_str()).width());
     Line::from(vec![
         Span::styled(keys_str, Style::default().fg(theme.primary)),
         Span::raw(format!("{}{}", " ".repeat(padding), desc)),

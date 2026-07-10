@@ -75,7 +75,7 @@ impl EventHandler {
 
             // Vérifier les changements dans le repository git (auto-refresh)
             if self.watcher.check_changed()? {
-                self.state.schedule_refresh();
+                self.state.mark_dirty();
             }
 
             // Input avec timeout adaptatif

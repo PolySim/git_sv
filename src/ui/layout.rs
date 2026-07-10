@@ -6,7 +6,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 pub struct LayoutChunks {
     /// Zone de la status bar (1 ligne en haut).
     pub status_bar: Rect,
-    /// Zone de la navigation bar (1 ligne sous la status bar).
+    /// Zone de la navigation bar (contenu + bordure basse).
     pub nav_bar: Rect,
     /// Zone du graphe (partie supérieure).
     pub graph: Rect,
@@ -16,7 +16,7 @@ pub struct LayoutChunks {
     pub bottom_right: Rect,
     /// Zone de la barre de recherche (3 lignes en bas, optionnelle).
     pub search_bar: Option<Rect>,
-    /// Zone de la barre d'aide (1 ligne en bas).
+    /// Zone de la barre d'aide (bordure haute + contenu).
     pub help_bar: Rect,
     /// Zone plein écran pour le diff (optionnelle, quand diff_fullscreen est actif).
     pub diff_fullscreen: Option<Rect>,
@@ -66,10 +66,10 @@ pub fn build_layout_with_diff_mode(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),             // Status bar
-            Constraint::Length(1),             // Navigation bar
+            Constraint::Length(2),             // Navigation bar + bordure
             Constraint::Min(0),                // Contenu principal
             Constraint::Length(search_height), // Search bar (optionnel)
-            Constraint::Length(1),             // Help bar
+            Constraint::Length(2),             // Bordure + help bar
         ])
         .split(area);
 
@@ -108,5 +108,19 @@ pub fn build_layout_with_diff_mode(
         search_bar: if show_search { Some(outer[3]) } else { None },
         help_bar: outer[4],
         diff_fullscreen: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_graph_chrome_keeps_navigation_and_help_content_visible() {
+        let layout = build_layout_with_diff_mode(Rect::new(0, 0, 80, 24), false, false);
+
+        assert_eq!(layout.nav_bar.height, 2);
+        assert_eq!(layout.help_bar.height, 2);
+        assert!(layout.graph.height >= 3);
     }
 }
