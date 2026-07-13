@@ -6,7 +6,7 @@ use super::super::traits::HandlerContext;
 
 /// Gère la copie dans le presse-papier.
 pub(super) fn handle_copy_to_clipboard(ctx: &mut HandlerContext) -> Result<()> {
-    use crate::state::{BranchesSection, FocusPanel, StagingFocus};
+    use crate::state::{BranchesSection, FocusPanel, ProjectTreeFocus, StagingFocus};
 
     let mut text_to_copy = String::new();
 
@@ -123,6 +123,80 @@ pub(super) fn handle_copy_to_clipboard(ctx: &mut HandlerContext) -> Result<()> {
                             s.oid.to_string().get(0..7).unwrap_or(""),
                             s.message
                         )
+                    })
+                    .unwrap_or_default();
+            }
+        },
+        ViewMode::ProjectTree => match ctx.state.project_tree_state.focus {
+            ProjectTreeFocus::Tree => {
+                text_to_copy = ctx
+                    .state
+                    .project_tree_state
+                    .selected_entry()
+                    .map(|entry| entry.path.clone())
+                    .unwrap_or_default();
+            }
+            ProjectTreeFocus::History => {
+                text_to_copy = ctx
+                    .state
+                    .project_tree_state
+                    .history
+                    .selected_item()
+                    .map(|commit| format!("{} {}", commit.oid, commit.message))
+                    .unwrap_or_default();
+            }
+            ProjectTreeFocus::ChangedFiles => {
+                let oid = ctx
+                    .state
+                    .project_tree_state
+                    .selected_history_commit()
+                    .map(|commit| commit.oid);
+                let path = ctx
+                    .state
+                    .project_tree_state
+                    .selected_changed_file()
+                    .map(|file| file.path.clone());
+                let (Some(oid), Some(path)) = (oid, path) else {
+                    return Ok(());
+                };
+                match ctx.state.repo.file_content_at_commit(oid, &path) {
+                    Ok(Some(content)) => text_to_copy = content,
+                    Ok(None) => {
+                        ctx.state.set_flash_message(format!(
+                            "Le fichier '{}' n'existe pas dans ce commit",
+                            path
+                        ));
+                        return Ok(());
+                    }
+                    Err(error) => {
+                        ctx.state.set_flash_message(crate::utils::flash_error(
+                            "copie du fichier au commit",
+                            error,
+                        ));
+                        return Ok(());
+                    }
+                }
+            }
+            ProjectTreeFocus::Diff => {
+                text_to_copy = ctx
+                    .state
+                    .project_tree_state
+                    .selected_diff
+                    .as_ref()
+                    .map(|diff| {
+                        diff.lines
+                            .iter()
+                            .map(|line| {
+                                let prefix = match line.line_type {
+                                    crate::git::diff::DiffLineType::Addition => "+",
+                                    crate::git::diff::DiffLineType::Deletion => "-",
+                                    crate::git::diff::DiffLineType::Context => " ",
+                                    crate::git::diff::DiffLineType::HunkHeader => "",
+                                };
+                                format!("{}{}", prefix, line.content)
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
                     })
                     .unwrap_or_default();
             }

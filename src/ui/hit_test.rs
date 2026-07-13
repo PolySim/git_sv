@@ -9,12 +9,13 @@ use ratatui::layout::Rect;
 use crate::state::{AppState, ViewMode};
 use crate::ui::branches_layout::build_branches_layout;
 use crate::ui::layout::build_layout_with_diff_mode;
+use crate::ui::project_tree_layout::build_project_tree_layout;
 use crate::ui::staging_layout::build_staging_layout;
 
 /// Zone cliquable détectée par le hit-testing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ClickableZone {
-    /// Zone de navigation (tabs 1, 2, 3, 4)
+    /// Zone de navigation (onglets 1 à 5)
     NavBar,
     /// Zone du graphe de commits
     Graph,
@@ -69,6 +70,10 @@ pub fn hit_test(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
 
     if state.view_mode == ViewMode::Branches {
         return hit_test_branches(state, x, y, screen_rect);
+    }
+
+    if state.view_mode == ViewMode::ProjectTree {
+        return hit_test_project_tree(state, x, y, screen_rect);
     }
 
     let layout = build_layout_with_diff_mode(
@@ -154,6 +159,45 @@ pub fn hit_test(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
             relative_y: y - layout.help_bar.y,
             rect: layout.help_bar,
         });
+    }
+
+    Some(HitTestResult {
+        zone: ClickableZone::Outside,
+        relative_x: x,
+        relative_y: y,
+        rect: screen_rect,
+    })
+}
+
+fn hit_test_project_tree(
+    state: &AppState,
+    x: u16,
+    y: u16,
+    screen_rect: Rect,
+) -> Option<HitTestResult> {
+    let layout = build_project_tree_layout(screen_rect, state.project_tree_state.search.is_active);
+
+    for (zone, rect) in [
+        (ClickableZone::StatusBar, layout.status_bar),
+        (ClickableZone::NavBar, layout.nav_bar),
+        (
+            ClickableZone::SearchBar,
+            layout.search_bar.unwrap_or_default(),
+        ),
+        (ClickableZone::BottomLeft, layout.tree_panel),
+        (ClickableZone::BottomRight, layout.history_panel),
+        (ClickableZone::BottomLeft, layout.changed_files_panel),
+        (ClickableZone::BottomRight, layout.diff_panel),
+        (ClickableZone::HelpBar, layout.help_bar),
+    ] {
+        if point_in_rect(x, y, rect) {
+            return Some(HitTestResult {
+                zone,
+                relative_x: x - rect.x,
+                relative_y: y - rect.y,
+                rect,
+            });
+        }
     }
 
     Some(HitTestResult {
@@ -325,6 +369,7 @@ pub fn calculate_nav_tab(relative_x: u16, unresolved_conflicts: usize) -> Option
         (text("Graphe", "Graph"), ViewMode::Graph),
         (text("Staging", "Staging"), ViewMode::Staging),
         (text("Branches", "Branches"), ViewMode::Branches),
+        (text("Arbre", "Tree"), ViewMode::ProjectTree),
     ];
     let mut offset = 1usize;
     let x = usize::from(relative_x);
@@ -388,7 +433,8 @@ mod tests {
         assert_eq!(calculate_nav_tab(10, 0), Some(ViewMode::Graph));
         assert_eq!(calculate_nav_tab(15, 0), Some(ViewMode::Staging));
         assert_eq!(calculate_nav_tab(30, 0), Some(ViewMode::Branches));
-        assert_eq!(calculate_nav_tab(40, 2), Some(ViewMode::Conflicts));
+        assert_eq!(calculate_nav_tab(40, 0), Some(ViewMode::ProjectTree));
+        assert_eq!(calculate_nav_tab(50, 2), Some(ViewMode::Conflicts));
         assert_eq!(calculate_nav_tab(100, 0), None); // Hors limites
     }
 

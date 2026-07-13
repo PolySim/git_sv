@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-07-13
+
+### Added
+
+- vue Arborescence pour parcourir les fichiers et dossiers du projet
+- recherche rapide tolerante aux fautes sur les chemins
+- historique par fichier ou dossier avec fichiers touches et diff detaille
+- copie du contenu exact d'un fichier tel qu'il existe dans un commit
+
+### Changed
+
+- dossiers fermes par defaut avec navigation clavier et souris
+- fichiers du chemin consulte regroupes en tete des fichiers touches
+
 ## 0.3.39 - 2026-07-13
 
 ### Added

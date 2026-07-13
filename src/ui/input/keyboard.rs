@@ -6,7 +6,7 @@ use crate::state::action::{
 };
 use crate::state::{
     AppAction, AppState, BranchesFocus, BranchesSection, ConflictPanelFocus, FocusPanel,
-    StagingFocus, ViewMode,
+    ProjectTreeAction, ProjectTreeFocus, StagingFocus, ViewMode,
 };
 
 pub(crate) fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
@@ -53,6 +53,7 @@ fn has_blocking_modal(state: &AppState) -> bool {
 
 fn has_blocking_text_input(state: &AppState) -> bool {
     state.search_state.is_active
+        || (state.view_mode == ViewMode::ProjectTree && state.project_tree_state.search.is_active)
         || state.filters.filter_popup.is_open
         || (state.view_mode == ViewMode::Staging
             && state.staging_state.focus == StagingFocus::CommitMessage)
@@ -90,6 +91,10 @@ fn map_modal_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 }
 
 fn map_text_input_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    if state.view_mode == ViewMode::ProjectTree && state.project_tree_state.search.is_active {
+        return map_project_tree_search_key(key);
+    }
+
     if state.search_state.is_active {
         return map_search_key(key);
     }
@@ -133,7 +138,8 @@ fn map_view_switch_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('1') => Some(AppAction::SwitchView(ViewMode::Graph)),
         KeyCode::Char('2') => Some(AppAction::SwitchView(ViewMode::Staging)),
         KeyCode::Char('3') => Some(AppAction::SwitchView(ViewMode::Branches)),
-        KeyCode::Char('4') if state.conflicts_state.is_some() => {
+        KeyCode::Char('4') => Some(AppAction::SwitchView(ViewMode::ProjectTree)),
+        KeyCode::Char('5') if state.conflicts_state.is_some() => {
             Some(AppAction::SwitchView(ViewMode::Conflicts))
         }
         KeyCode::Char('w') => Some(AppAction::Branch(BranchAction::OpenWorktrees)),
@@ -146,10 +152,92 @@ fn map_view_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         ViewMode::Graph => map_graph_key(key, state),
         ViewMode::Staging => map_staging_key(key, state),
         ViewMode::Branches => map_branches_key(key, state),
+        ViewMode::ProjectTree => map_project_tree_key(key, state),
         ViewMode::Conflicts => map_conflicts_key(key, state),
         ViewMode::Blame => map_blame_key(key),
         ViewMode::Help => None,
     }
+}
+
+fn map_project_tree_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    if state.project_tree_state.focus == ProjectTreeFocus::Diff {
+        let diff_action = match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Some(NavigationAction::ScrollDiffDown),
+            KeyCode::Char('k') | KeyCode::Up => Some(NavigationAction::ScrollDiffUp),
+            KeyCode::Char('h') | KeyCode::Left => Some(NavigationAction::ScrollDiffLeft),
+            KeyCode::Char('l') | KeyCode::Right => Some(NavigationAction::ScrollDiffRight),
+            KeyCode::Char('g') | KeyCode::Home => Some(NavigationAction::ScrollDiffTop),
+            KeyCode::Char('G') | KeyCode::End => Some(NavigationAction::ScrollDiffBottom),
+            KeyCode::PageUp => Some(NavigationAction::ScrollDiffPageUp),
+            KeyCode::PageDown => Some(NavigationAction::ScrollDiffPageDown),
+            _ => None,
+        };
+        if let Some(action) = diff_action {
+            return Some(AppAction::Navigation(action));
+        }
+    }
+
+    match key.code {
+        KeyCode::Char('q') => Some(AppAction::Quit),
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(AppAction::Navigation(NavigationAction::MoveDown))
+        }
+        KeyCode::Char('k') | KeyCode::Up => Some(AppAction::Navigation(NavigationAction::MoveUp)),
+        KeyCode::Char('g') | KeyCode::Home => Some(AppAction::Navigation(NavigationAction::GoTop)),
+        KeyCode::Char('G') | KeyCode::End => {
+            Some(AppAction::Navigation(NavigationAction::GoBottom))
+        }
+        KeyCode::PageUp => Some(AppAction::Navigation(NavigationAction::PageUp)),
+        KeyCode::PageDown => Some(AppAction::Navigation(NavigationAction::PageDown)),
+        KeyCode::Enter | KeyCode::Char(' ')
+            if state.project_tree_state.focus == ProjectTreeFocus::Tree =>
+        {
+            Some(AppAction::ProjectTree(ProjectTreeAction::ToggleSelected))
+        }
+        KeyCode::Left | KeyCode::Char('h')
+            if state.project_tree_state.focus == ProjectTreeFocus::Tree =>
+        {
+            Some(AppAction::ProjectTree(ProjectTreeAction::CollapseSelected))
+        }
+        KeyCode::Right | KeyCode::Char('l')
+            if state.project_tree_state.focus == ProjectTreeFocus::Tree =>
+        {
+            Some(AppAction::ProjectTree(ProjectTreeAction::ExpandSelected))
+        }
+        KeyCode::Char('/') => Some(AppAction::ProjectTree(ProjectTreeAction::OpenSearch)),
+        KeyCode::Char('v') if state.project_tree_state.focus == ProjectTreeFocus::Diff => {
+            Some(AppAction::ToggleDiffViewMode)
+        }
+        KeyCode::Tab | KeyCode::BackTab => {
+            Some(AppAction::Navigation(NavigationAction::SwitchPanel))
+        }
+        KeyCode::Char('r') => Some(AppAction::Refresh),
+        KeyCode::Char('y') => Some(AppAction::CopyPanelContent),
+        KeyCode::Char('?') => Some(AppAction::ToggleHelp),
+        _ => None,
+    }
+}
+
+fn map_project_tree_search_key(key: KeyEvent) -> Option<AppAction> {
+    let action = match key.code {
+        KeyCode::Esc => Some(ProjectTreeAction::CloseSearch),
+        KeyCode::Enter => Some(ProjectTreeAction::ConfirmSearch),
+        KeyCode::Down if key.modifiers.is_empty() => Some(ProjectTreeAction::SearchNext),
+        KeyCode::Up if key.modifiers.is_empty() => Some(ProjectTreeAction::SearchPrevious),
+        KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(ProjectTreeAction::SearchNext)
+        }
+        KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(ProjectTreeAction::SearchPrevious)
+        }
+        _ => None,
+    };
+
+    action.map(AppAction::ProjectTree).or_else(|| {
+        map_text_edit_key(key)
+            .map(ProjectTreeAction::EditSearch)
+            .map(AppAction::ProjectTree)
+    })
 }
 
 fn map_merge_picker_key(key: KeyEvent) -> Option<AppAction> {
@@ -934,5 +1022,41 @@ mod tests {
         );
 
         assert_eq!(action, Some(AppAction::Branch(BranchAction::OpenWorktrees)));
+    }
+
+    #[test]
+    fn project_tree_arrows_expand_and_collapse_directories() {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::ProjectTree;
+
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &state),
+            Some(AppAction::ProjectTree(ProjectTreeAction::ExpandSelected))
+        );
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &state),
+            Some(AppAction::ProjectTree(ProjectTreeAction::CollapseSelected))
+        );
+    }
+
+    #[test]
+    fn project_tree_search_captures_text_and_confirmation() {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::ProjectTree;
+        state.project_tree_state.open_search();
+
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE),
+                &state,
+            ),
+            Some(AppAction::ProjectTree(ProjectTreeAction::EditSearch(
+                EditAction::InsertChar('4')
+            )))
+        );
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &state),
+            Some(AppAction::ProjectTree(ProjectTreeAction::ConfirmSearch))
+        );
     }
 }

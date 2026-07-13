@@ -1,4 +1,4 @@
-use crate::state::{AppState, FocusPanel, StagingFocus, ViewMode};
+use crate::state::{AppState, FocusPanel, ProjectTreeFocus, StagingFocus, ViewMode};
 
 use super::{handle_blame_navigation, handle_branches_navigation, load_commit_file_diff};
 
@@ -10,6 +10,7 @@ pub(super) fn handle_move_up(state: &mut AppState) {
         }
         ViewMode::Staging => handle_staging_navigation(state, -1),
         ViewMode::Branches => handle_branches_navigation(state, -1),
+        ViewMode::ProjectTree => handle_project_tree_navigation(state, NavigationMove::Previous),
         ViewMode::Blame => handle_blame_navigation(state, -1),
         _ => {}
     }
@@ -24,6 +25,7 @@ pub(super) fn handle_move_down(state: &mut AppState) {
         }
         ViewMode::Staging => handle_staging_navigation(state, 1),
         ViewMode::Branches => handle_branches_navigation(state, 1),
+        ViewMode::ProjectTree => handle_project_tree_navigation(state, NavigationMove::Next),
         ViewMode::Blame => handle_blame_navigation(state, 1),
         _ => {}
     }
@@ -34,6 +36,9 @@ pub(super) fn handle_page_up(state: &mut AppState) {
         ViewMode::Blame => {
             handle_blame_navigation(state, -10);
             state.schedule_refresh();
+        }
+        ViewMode::ProjectTree => {
+            handle_project_tree_navigation(state, NavigationMove::PageUp);
         }
         _ => {
             if !state.graph_view.is_empty() {
@@ -49,6 +54,9 @@ pub(super) fn handle_page_down(state: &mut AppState) {
         ViewMode::Blame => {
             handle_blame_navigation(state, 10);
             state.schedule_refresh();
+        }
+        ViewMode::ProjectTree => {
+            handle_project_tree_navigation(state, NavigationMove::PageDown);
         }
         _ => {
             if !state.graph_view.is_empty() {
@@ -66,6 +74,9 @@ pub(super) fn handle_go_top(state: &mut AppState) {
             handle_blame_navigation(state, -10000);
             state.schedule_refresh();
         }
+        ViewMode::ProjectTree => {
+            handle_project_tree_navigation(state, NavigationMove::First);
+        }
         _ => {
             state.graph_view.go_top();
             refresh_commit_file_data(state);
@@ -78,6 +89,9 @@ pub(super) fn handle_go_bottom(state: &mut AppState) {
         ViewMode::Blame => {
             handle_blame_navigation(state, 10000);
             state.schedule_refresh();
+        }
+        ViewMode::ProjectTree => {
+            handle_project_tree_navigation(state, NavigationMove::Last);
         }
         _ => {
             if !state.graph_view.is_empty() {
@@ -109,7 +123,73 @@ pub(super) fn handle_switch_panel(state: &mut AppState) {
                 StagingFocus::CommitMessage => StagingFocus::Unstaged,
             };
         }
+        ViewMode::ProjectTree => {
+            state.project_tree_state.focus = match state.project_tree_state.focus {
+                ProjectTreeFocus::Tree => ProjectTreeFocus::History,
+                ProjectTreeFocus::History => ProjectTreeFocus::ChangedFiles,
+                ProjectTreeFocus::ChangedFiles => ProjectTreeFocus::Diff,
+                ProjectTreeFocus::Diff => ProjectTreeFocus::Tree,
+            };
+        }
         _ => {}
+    }
+}
+
+enum NavigationMove {
+    Previous,
+    Next,
+    PageUp,
+    PageDown,
+    First,
+    Last,
+}
+
+fn handle_project_tree_navigation(state: &mut AppState, movement: NavigationMove) {
+    let focus = state.project_tree_state.focus;
+    match focus {
+        ProjectTreeFocus::Tree => {
+            apply_project_tree_movement(&mut state.project_tree_state.entries, movement)
+        }
+        ProjectTreeFocus::History => {
+            apply_project_tree_movement(&mut state.project_tree_state.history, movement)
+        }
+        ProjectTreeFocus::ChangedFiles => {
+            apply_project_tree_movement(&mut state.project_tree_state.changed_files, movement)
+        }
+        ProjectTreeFocus::Diff => {
+            let offset = &mut state.project_tree_state.diff_scroll_offset;
+            match movement {
+                NavigationMove::Previous => *offset = offset.saturating_sub(1),
+                NavigationMove::Next => *offset = offset.saturating_add(1),
+                NavigationMove::PageUp => *offset = offset.saturating_sub(10),
+                NavigationMove::PageDown => *offset = offset.saturating_add(10),
+                NavigationMove::First => *offset = 0,
+                NavigationMove::Last => {
+                    *offset = state.project_tree_state.diff_total_lines.saturating_sub(1)
+                }
+            }
+        }
+    }
+
+    match focus {
+        ProjectTreeFocus::Tree => state.refresh_selected_path_history(),
+        ProjectTreeFocus::History => state.refresh_selected_history_commit_details(),
+        ProjectTreeFocus::ChangedFiles => state.refresh_selected_history_file_diff(),
+        ProjectTreeFocus::Diff => {}
+    }
+}
+
+fn apply_project_tree_movement<T>(
+    selection: &mut crate::state::selection::ListSelection<T>,
+    movement: NavigationMove,
+) {
+    match movement {
+        NavigationMove::Previous => selection.select_previous(),
+        NavigationMove::Next => selection.select_next(),
+        NavigationMove::PageUp => selection.page_up(),
+        NavigationMove::PageDown => selection.page_down(),
+        NavigationMove::First => selection.select_first(),
+        NavigationMove::Last => selection.select_last(),
     }
 }
 

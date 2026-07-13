@@ -11,6 +11,7 @@ pub mod edit;
 pub mod filter;
 pub mod git;
 pub mod navigation;
+pub mod project_tree;
 pub mod search;
 pub mod staging;
 pub mod traits;

@@ -50,6 +50,7 @@ pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
         ("1", text("Graphe", "Graph"), ViewMode::Graph),
         ("2", text("Staging", "Staging"), ViewMode::Staging),
         ("3", text("Branches", "Branches"), ViewMode::Branches),
+        ("4", text("Arbre", "Tree"), ViewMode::ProjectTree),
     ];
 
     // Rendre les onglets fixes
@@ -86,7 +87,7 @@ pub fn render(frame: &mut Frame, ctx: NavBarRenderContext) {
             Style::default().fg(theme.error)
         };
 
-        spans.push(Span::styled(" 4 ", style));
+        spans.push(Span::styled(" 5 ", style));
         spans.push(Span::styled(format!("{} ", label), style));
     } else {
         // Retirer le dernier séparateur si pas d'onglet Conflits

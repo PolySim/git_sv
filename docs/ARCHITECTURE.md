@@ -141,6 +141,7 @@ src/git/
 | `StatusEntry` | `src/git/repo.rs` | Entree de statut pour staging et CLI |
 | `StashEntry` | `src/git/stash.rs` | Entree de stash |
 | `WorktreeInfo` | `src/git/worktree.rs` | Entree de worktree |
+| `ProjectTreeEntry` | `src/state/view/project_tree.rs` | Fichier ou dossier visible dans l'arborescence |
 
 ---
 
@@ -159,6 +160,7 @@ src/state/
 │   ├── filter.rs
 │   ├── git.rs
 │   ├── navigation.rs
+│   ├── project_tree.rs
 │   ├── search.rs
 │   └── staging.rs
 ├── cache.rs
@@ -171,6 +173,7 @@ src/state/
     ├── conflicts.rs
     ├── graph.rs
     ├── merge_picker.rs
+    ├── project_tree.rs
     ├── reset_picker.rs
     ├── search.rs
     └── staging.rs
@@ -184,6 +187,8 @@ src/state/
 - le mode de vue courant ;
 - `graph_view`, qui contient le graphe, les selections et l'etat du diff ;
 - les etats de vues secondaires : staging, branches, conflits, blame, recherche ;
+- `project_tree_state`, qui contient l'arborescence repliable, la recherche floue locale,
+  l'historique du chemin selectionne, les fichiers du commit et leur diff ;
 - les messages flash, boites de confirmation et pickers temporaires ;
 - le cache des diffs et les filtres appliques ;
 - la vue branches repose sur `BranchesViewState`, sans overlay dedie en vue graph.
@@ -195,6 +200,7 @@ src/state/
 - `Graph`
 - `Staging`
 - `Branches`
+- `ProjectTree`
 - `Conflicts`
 - `Blame`
 - `Help`

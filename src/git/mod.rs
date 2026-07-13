@@ -12,6 +12,7 @@ pub mod discard;
 pub mod graph;
 pub mod helpers;
 pub mod merge;
+pub mod project_tree;
 pub mod rebase;
 pub mod remote;
 pub mod repo;

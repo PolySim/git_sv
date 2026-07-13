@@ -5,6 +5,7 @@ mod branches;
 mod conflicts;
 mod graph;
 mod merge_picker;
+mod project_tree;
 mod reset_picker;
 mod search;
 mod staging;
@@ -16,6 +17,7 @@ pub use branches::{
 pub use conflicts::{ConflictPanelFocus, ConflictsState};
 pub use graph::GraphViewState;
 pub use merge_picker::{BranchPickerMode, MergePickerState};
+pub use project_tree::{ProjectEntryKind, ProjectTreeFocus, ProjectTreeState};
 pub use reset_picker::ResetPickerState;
 pub use search::SearchState;
 pub use staging::{StagingFocus, StagingState};
@@ -27,6 +29,7 @@ pub enum ViewMode {
     Graph,
     Staging,
     Branches,
+    ProjectTree,
     Conflicts,
     Blame,
     Help,

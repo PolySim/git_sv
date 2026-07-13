@@ -82,6 +82,10 @@ fn append_global_help(lines: &mut Vec<Line<'static>>) {
         text("Vue Branches", "Branches view"),
     ));
     lines.push(key_line(
+        keybindings::global::VIEW_PROJECT_TREE,
+        text("Vue Arborescence", "Project tree view"),
+    ));
+    lines.push(key_line(
         keybindings::global::VIEW_WORKTREES,
         text("Selecteur de worktrees", "Worktree selector"),
     ));
@@ -109,9 +113,60 @@ fn append_view_help(lines: &mut Vec<Line<'static>>, active_view: ViewMode) {
         ViewMode::Graph | ViewMode::Help => append_graph_help(lines),
         ViewMode::Staging => append_staging_help(lines),
         ViewMode::Branches => append_branches_help(lines),
+        ViewMode::ProjectTree => append_project_tree_help(lines),
         ViewMode::Blame => append_blame_help(lines),
         ViewMode::Conflicts => append_conflicts_help(lines),
     }
+}
+
+fn append_project_tree_help(lines: &mut Vec<Line<'static>>) {
+    lines.push(section_header(text(
+        "Vue Arborescence",
+        "Project Tree View",
+    )));
+    lines.push(separator());
+    lines.push(key_line_multi(
+        keybindings::navigation::DOWN,
+        text("Selection suivante", "Next selection"),
+    ));
+    lines.push(key_line_multi(
+        keybindings::navigation::UP,
+        text("Selection precedente", "Previous selection"),
+    ));
+    lines.push(key_line(
+        keybindings::project_tree::TOGGLE,
+        text("Ouvrir/fermer un dossier", "Expand/collapse directory"),
+    ));
+    lines.push(key_line(
+        keybindings::project_tree::COLLAPSE,
+        text("Fermer ou remonter au parent", "Collapse or select parent"),
+    ));
+    lines.push(key_line(
+        keybindings::project_tree::EXPAND,
+        text("Ouvrir un dossier", "Expand directory"),
+    ));
+    lines.push(key_line(
+        keybindings::project_tree::SEARCH,
+        text("Recherche rapide de chemin", "Quick path search"),
+    ));
+    lines.push(key_line(
+        keybindings::project_tree::SWITCH_PANEL,
+        text(
+            "Arbre → historique → fichiers → diff",
+            "Tree → history → files → diff",
+        ),
+    ));
+    lines.push(key_line(
+        keybindings::global::COPY,
+        text(
+            "Copier le chemin, commit, contenu ou diff actif",
+            "Copy active path, commit, file contents or diff",
+        ),
+    ));
+    lines.push(key_line(
+        keybindings::global::REFRESH,
+        text("Rafraichir", "Refresh"),
+    ));
 }
 
 fn append_graph_help(lines: &mut Vec<Line<'static>>) {

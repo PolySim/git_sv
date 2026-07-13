@@ -8,6 +8,7 @@ mod edit;
 mod filter;
 mod git;
 mod navigation;
+mod project_tree;
 mod search;
 mod staging;
 
@@ -17,6 +18,7 @@ pub use edit::EditAction;
 pub use filter::FilterAction;
 pub use git::GitAction;
 pub use navigation::NavigationAction;
+pub use project_tree::ProjectTreeAction;
 pub use search::SearchAction;
 pub use staging::StagingAction;
 
@@ -56,6 +58,9 @@ pub enum AppAction {
 
     /// Actions de filtrage du graph (nouvelle structure)
     Filter(FilterAction),
+
+    /// Actions de la vue arborescence.
+    ProjectTree(ProjectTreeAction),
 
     /// Changer de mode de vue
     SwitchView(ViewMode),

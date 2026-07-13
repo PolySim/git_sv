@@ -40,10 +40,26 @@ pub mod global {
     pub const VIEW_STAGING: &str = "2";
     /// Vue Branches.
     pub const VIEW_BRANCHES: &str = "3";
+    /// Vue Arborescence.
+    pub const VIEW_PROJECT_TREE: &str = "4";
     /// Selecteur de worktrees.
     pub const VIEW_WORKTREES: &str = "w";
     /// Vue Conflits (si actifs).
-    pub const VIEW_CONFLICTS: &str = "4";
+    pub const VIEW_CONFLICTS: &str = "5";
+}
+
+/// Vue Arborescence.
+pub mod project_tree {
+    /// Ouvrir ou fermer le dossier sélectionné.
+    pub const TOGGLE: &str = "Enter / Space";
+    /// Fermer un dossier ou remonter au parent.
+    pub const COLLAPSE: &str = "← / h";
+    /// Ouvrir un dossier.
+    pub const EXPAND: &str = "→ / l";
+    /// Rechercher un fichier ou dossier.
+    pub const SEARCH: &str = "/";
+    /// Basculer entre les quatre panneaux.
+    pub const SWITCH_PANEL: &str = "Tab";
 }
 
 /// Actions Git disponibles dans la vue Graph.

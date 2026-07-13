@@ -12,6 +12,7 @@ use super::edit::EditHandler;
 use super::filter::FilterHandler;
 use super::git::GitHandler;
 use super::navigation::NavigationHandler;
+use super::project_tree::ProjectTreeHandler;
 use super::search::SearchHandler;
 use super::staging::StagingHandler;
 mod clipboard;
@@ -32,6 +33,7 @@ pub struct ActionDispatcher {
     search: SearchHandler,
     edit: EditHandler,
     filter: FilterHandler,
+    project_tree: ProjectTreeHandler,
 }
 
 impl ActionDispatcher {
@@ -46,6 +48,7 @@ impl ActionDispatcher {
             search: SearchHandler,
             edit: EditHandler,
             filter: FilterHandler,
+            project_tree: ProjectTreeHandler,
         }
     }
 
@@ -63,6 +66,7 @@ impl ActionDispatcher {
             AppAction::Search(search) => self.search.handle(&mut ctx, search),
             AppAction::Edit(edit) => self.edit.handle(&mut ctx, edit),
             AppAction::Filter(filter) => self.filter.handle(&mut ctx, filter),
+            AppAction::ProjectTree(action) => self.project_tree.handle(&mut ctx, action),
 
             // Actions simples
             AppAction::Quit => {
@@ -107,6 +111,8 @@ impl ActionDispatcher {
                     // Depuis la liste de fichiers, Espace ouvre le panneau diff sans plein écran.
                     ctx.state.focus = FocusPanel::BottomRight;
                     ctx.state.graph_view.diff_fullscreen = false;
+                } else if ctx.state.view_mode == ViewMode::ProjectTree {
+                    ctx.state.project_tree_state.toggle_selected_directory();
                 }
                 Ok(())
             }
@@ -218,6 +224,7 @@ impl ActionDispatcher {
                 ctx.state.graph_view.toggle_diff_view_mode();
                 // Aussi toggle le mode dans la vue staging si on y est.
                 ctx.state.staging_state.diff_view_mode.toggle();
+                ctx.state.project_tree_state.diff_view_mode.toggle();
                 Ok(())
             }
 

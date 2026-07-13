@@ -1,7 +1,7 @@
 use crossterm::event::{MouseEvent, MouseEventKind};
 
 use crate::state::action::{BranchAction, NavigationAction, StagingAction};
-use crate::state::{AppAction, AppState, FocusPanel, ViewMode};
+use crate::state::{AppAction, AppState, FocusPanel, ProjectTreeAction, ViewMode};
 
 pub(crate) fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
     use crate::ui::hit_test::hit_test;
@@ -44,6 +44,10 @@ fn handle_mouse_click(
 
     if state.view_mode == ViewMode::Branches {
         return handle_branches_mouse_click(state, &hit);
+    }
+
+    if state.view_mode == ViewMode::ProjectTree {
+        return handle_project_tree_mouse_click(state, &hit);
     }
 
     match hit.zone {
@@ -133,6 +137,61 @@ fn handle_mouse_click(
         }
         ClickableZone::Outside => None,
     }
+}
+
+fn handle_project_tree_mouse_click(
+    state: &AppState,
+    hit: &crate::ui::hit_test::HitTestResult,
+) -> Option<AppAction> {
+    use crate::ui::project_tree_layout::build_project_tree_layout;
+
+    let layout =
+        build_project_tree_layout(state.screen_area, state.project_tree_state.search.is_active);
+    if hit.rect == layout.nav_bar {
+        return calculate_global_nav_action(state, hit.relative_x);
+    }
+
+    let item_y = hit.relative_y.saturating_sub(1) as usize;
+    if hit.rect == layout.tree_panel {
+        if state.project_tree_state.search.is_active {
+            let results = &state.project_tree_state.search.results;
+            let index = results.scroll_offset() + item_y;
+            return (index < results.len()).then_some(AppAction::ProjectTree(
+                ProjectTreeAction::SelectSearchResult(index),
+            ));
+        }
+        let entries = &state.project_tree_state.entries;
+        let index = entries.scroll_offset() + item_y;
+        return (index < entries.len()).then_some(AppAction::ProjectTree(
+            ProjectTreeAction::ActivateTreeEntry(index),
+        ));
+    }
+
+    if hit.rect == layout.history_panel {
+        let index = state.project_tree_state.history.scroll_offset() + item_y;
+        return (index < state.project_tree_state.history.len()).then_some(AppAction::ProjectTree(
+            ProjectTreeAction::SelectHistoryEntry(index),
+        ));
+    }
+
+    if hit.rect == layout.changed_files_panel {
+        let index = state
+            .project_tree_state
+            .changed_file_index_at_visual_row(item_y)?;
+        return Some(AppAction::ProjectTree(
+            ProjectTreeAction::SelectChangedFile(index),
+        ));
+    }
+
+    if hit.rect == layout.diff_panel {
+        return Some(AppAction::ProjectTree(ProjectTreeAction::FocusDiff));
+    }
+
+    if hit.rect == layout.help_bar {
+        return Some(AppAction::ToggleHelp);
+    }
+
+    None
 }
 
 fn handle_modal_click(
@@ -320,6 +379,10 @@ fn handle_mouse_scroll(
         return handle_staging_mouse_scroll(state, &hit, is_up);
     }
 
+    if state.view_mode == ViewMode::ProjectTree {
+        return handle_project_tree_mouse_scroll(state, &hit, is_up);
+    }
+
     let action = match hit.zone {
         ClickableZone::Graph => {
             if is_up {
@@ -349,6 +412,68 @@ fn handle_mouse_scroll(
     };
 
     Some(action)
+}
+
+fn handle_project_tree_mouse_scroll(
+    state: &AppState,
+    hit: &crate::ui::hit_test::HitTestResult,
+    is_up: bool,
+) -> Option<AppAction> {
+    use crate::ui::project_tree_layout::build_project_tree_layout;
+
+    let layout =
+        build_project_tree_layout(state.screen_area, state.project_tree_state.search.is_active);
+    if hit.rect == layout.tree_panel {
+        let selection = if state.project_tree_state.search.is_active {
+            &state.project_tree_state.search.results
+        } else {
+            &state.project_tree_state.entries
+        };
+        let current = selection.selected_index();
+        let next = if is_up {
+            current.saturating_sub(1)
+        } else {
+            (current + 1).min(selection.len().saturating_sub(1))
+        };
+        let action = if state.project_tree_state.search.is_active {
+            ProjectTreeAction::SelectSearchResult(next)
+        } else {
+            ProjectTreeAction::SelectTreeEntry(next)
+        };
+        return Some(AppAction::ProjectTree(action));
+    }
+    if hit.rect == layout.history_panel {
+        let current = state.project_tree_state.history.selected_index();
+        let next = if is_up {
+            current.saturating_sub(1)
+        } else {
+            (current + 1).min(state.project_tree_state.history.len().saturating_sub(1))
+        };
+        return Some(AppAction::ProjectTree(
+            ProjectTreeAction::SelectHistoryEntry(next),
+        ));
+    }
+    if hit.rect == layout.changed_files_panel {
+        let files = &state.project_tree_state.changed_files;
+        let current = files.selected_index();
+        let next = if is_up {
+            current.saturating_sub(1)
+        } else {
+            (current + 1).min(files.len().saturating_sub(1))
+        };
+        return Some(AppAction::ProjectTree(
+            ProjectTreeAction::SelectChangedFile(next),
+        ));
+    }
+    if hit.rect == layout.diff_panel {
+        return Some(AppAction::Navigation(if is_up {
+            NavigationAction::ScrollDiffUp
+        } else {
+            NavigationAction::ScrollDiffDown
+        }));
+    }
+
+    None
 }
 
 fn handle_staging_mouse_scroll(
@@ -413,6 +538,13 @@ fn handle_scroll_with_current_focus(state: &AppState, is_up: bool) -> Option<App
             }
         }
         ViewMode::Branches => {
+            if is_up {
+                Some(AppAction::Navigation(NavigationAction::MoveUp))
+            } else {
+                Some(AppAction::Navigation(NavigationAction::MoveDown))
+            }
+        }
+        ViewMode::ProjectTree => {
             if is_up {
                 Some(AppAction::Navigation(NavigationAction::MoveUp))
             } else {

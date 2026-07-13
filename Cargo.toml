@@ -1,6 +1,6 @@
 [package]
 name = "git_sv"
-version = "0.3.39"
+version = "0.4.0"
 edition = "2021"
 description = "Visualize git graph in your terminal"
 license = "MIT"

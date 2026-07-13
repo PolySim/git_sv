@@ -302,6 +302,26 @@ impl GitRepo {
         super::diff::get_file_diff(&self.repo, oid, file_path)
     }
 
+    /// Retourne les fichiers présents dans le worktree courant.
+    pub fn current_project_files(&self) -> Result<Vec<String>> {
+        super::project_tree::current_project_files(&self.repo)
+    }
+
+    /// Retourne l'historique des modifications d'un fichier ou dossier.
+    pub fn path_history(
+        &self,
+        path: &str,
+        is_directory: bool,
+        max_count: usize,
+    ) -> Result<Vec<CommitInfo>> {
+        super::project_tree::path_history(&self.repo, path, is_directory, max_count)
+    }
+
+    /// Lit le contenu texte d'un fichier tel qu'il existe dans un commit.
+    pub fn file_content_at_commit(&self, oid: git2::Oid, path: &str) -> Result<Option<String>> {
+        super::project_tree::file_content_at_commit(&self.repo, oid, path)
+    }
+
     /// Checkout une branche existante.
     pub fn checkout_branch(&self, name: &str) -> Result<()> {
         super::branch::checkout_branch(&self.repo, name)

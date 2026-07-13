@@ -166,6 +166,51 @@ fn test_mouse_click_nav_bar_switches_view() {
 }
 
 #[test]
+fn test_four_switches_to_project_tree_view() {
+    let state = create_test_state();
+
+    let action = map_key(
+        KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE),
+        &state,
+    );
+
+    assert_eq!(action, Some(AppAction::SwitchView(ViewMode::ProjectTree)));
+}
+
+#[test]
+fn test_project_tree_enter_toggles_selected_directory() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::ProjectTree;
+
+    let action = map_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &state);
+
+    assert_eq!(
+        action,
+        Some(AppAction::ProjectTree(
+            crate::state::ProjectTreeAction::ToggleSelected
+        ))
+    );
+}
+
+#[test]
+fn test_five_switches_to_conflicts_when_available() {
+    let mut state = create_test_state();
+    state.conflicts_state = Some(crate::state::ConflictsState::new(
+        Vec::new(),
+        "merge".to_string(),
+        "main".to_string(),
+        "feature".to_string(),
+    ));
+
+    let action = map_key(
+        KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE),
+        &state,
+    );
+
+    assert_eq!(action, Some(AppAction::SwitchView(ViewMode::Conflicts)));
+}
+
+#[test]
 fn test_mouse_scroll_graph_moves_down() {
     let state = create_test_state();
 

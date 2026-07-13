@@ -21,6 +21,8 @@ pub mod layout;
 pub mod loading;
 pub mod merge_picker;
 pub mod nav_bar;
+pub mod project_tree_layout;
+pub mod project_tree_view;
 pub mod reset_picker;
 pub mod search_bar;
 pub mod staging_layout;
@@ -373,6 +375,10 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                 },
             );
         }
+        ViewMode::ProjectTree => {
+            let unresolved_conflicts = state.unresolved_conflict_count();
+            project_tree_view::render(frame, state, unresolved_conflicts);
+        }
         ViewMode::Help => {
             // Rendre la vue sous-jacente d'abord
             match state.previous_view_mode {
@@ -402,6 +408,10 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                             unresolved_conflicts: state.unresolved_conflict_count(),
                         },
                     );
+                }
+                Some(ViewMode::ProjectTree) => {
+                    let unresolved_conflicts = state.unresolved_conflict_count();
+                    project_tree_view::render(frame, state, unresolved_conflicts);
                 }
                 Some(ViewMode::Conflicts) => {
                     render_conflicts(frame, state);

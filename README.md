@@ -279,7 +279,8 @@ imposer un fond RGB different de celui du terminal :
 | `1` | Vue graph |
 | `2` | Vue staging |
 | `3` | Vue branches |
-| `4` | Vue conflits si active |
+| `4` | Vue arborescence |
+| `5` | Vue conflits si active |
 | `?` | Aide |
 | `q` | Quitter |
 | `Ctrl+c` | Quitter |
@@ -337,6 +338,27 @@ imposer un fond RGB different de celui du terminal :
 | `s` | Sauver un stash |
 | `a` | Appliquer un stash |
 | `p` | Pop un stash |
+
+### Vue Arborescence
+
+| Touche | Action |
+|--------|--------|
+| `j` / `k` | Naviguer dans le panneau actif |
+| `g` / `G` | Aller au debut / a la fin du panneau actif |
+| `PageUp` / `PageDown` | Changer de page dans le panneau actif |
+| `Enter` / `Espace` | Ouvrir ou fermer le dossier selectionne |
+| `←` / `h` | Fermer le dossier ou selectionner son parent |
+| `→` / `l` | Ouvrir le dossier selectionne |
+| `/` | Rechercher rapidement un fichier ou dossier, avec tolerance aux fautes |
+| `Tab` | Parcourir arbre, historique, fichiers touches et diff |
+| `v` | Basculer le diff unifie / cote a cote |
+| `r` | Rafraichir l'arborescence courante |
+| `y` | Copier le chemin, le commit, l'etat du fichier au commit ou le diff actif |
+
+La selection d'un chemin affiche les commits qui l'ont touche. La selection
+d'un commit affiche tous ses fichiers modifies, puis le patch du fichier
+selectionne. Dans le panneau « fichiers touches », `y` copie le contenu exact
+du fichier tel qu'il existe dans le commit.
 
 ---
 
