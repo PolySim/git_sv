@@ -94,15 +94,31 @@ enum Commands {
         #[arg(short = 'n', long, default_value = "20")]
         max_count: usize,
     },
+
+    /// Affiche les thèmes disponibles et permet d'en choisir un
+    #[command(visible_alias = "themes")]
+    Theme {
+        /// Thème à activer directement (dark, light ou solarized)
+        #[arg(
+            value_name = "THEME",
+            value_parser = ["dark", "light", "solarized"]
+        )]
+        theme: Option<String>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
-    let config = AppConfig::load().unwrap_or_default();
+    let mut config = AppConfig::load().unwrap_or_default();
     crate::i18n::set_language(config.language);
-    crate::ui::theme::init_theme(config.theme);
 
     let cli = Cli::parse();
 
+    if let Some(Commands::Theme { theme }) = &cli.command {
+        cli::theme(&mut config, theme.as_deref())?;
+        return Ok(());
+    }
+
+    crate::ui::theme::init_theme(config.theme);
     let repo = GitRepo::open(&cli.path)?;
 
     let format = OutputFormat::from_str(&cli.format).unwrap_or(OutputFormat::Human);
@@ -150,6 +166,7 @@ fn main() -> anyhow::Result<()> {
         Some(Commands::Graph { max_count }) => {
             cli::graph(&repo, max_count, &options)?;
         }
+        Some(Commands::Theme { .. }) => unreachable!("La commande theme est traitée avant Git"),
         None => {
             // Mode par défaut : lance la TUI interactive.
             let app = App::new(repo, options.path)?;
@@ -167,4 +184,28 @@ fn parse_date(date_str: &str) -> Option<i64> {
         .ok()
         .and_then(|date| date.and_hms_opt(0, 0, 0))
         .map(|dt| dt.and_utc().timestamp())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_theme_command_with_direct_value() {
+        let cli = Cli::try_parse_from(["git_sv", "theme", "solarized"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Theme {
+                theme: Some(ref value)
+            }) if value == "solarized"
+        ));
+    }
+
+    #[test]
+    fn test_parse_themes_alias_without_value() {
+        let cli = Cli::try_parse_from(["git_sv", "themes"]).unwrap();
+
+        assert!(matches!(cli.command, Some(Commands::Theme { theme: None })));
+    }
 }

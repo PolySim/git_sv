@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.3.39 - 2026-07-13
+
+### Added
+
+- theme Solarized natif qui herite du fond et des couleurs ANSI du terminal
+- commande `git_sv theme` pour lister et choisir interactivement un theme
+- selection directe avec `git_sv theme <dark|light|solarized>` et alias `themes`
+
+### Changed
+
+- sauvegarde de la configuration utilisateur lors d'un changement de theme
+- commande de theme utilisable meme en dehors d'un depot Git
+
 ## 0.3.38 - 2026-07-10
 
 ### Added

@@ -238,6 +238,36 @@ git_sv --format plain status | grep "^M"
 git_sv log -n 1 --path-filter src/main.rs
 ```
 
+## Configuration
+
+La configuration est chargee depuis `~/.config/git_sv/config.json`. Les themes
+disponibles sont `dark`, `light` et `solarized`.
+
+Pour afficher les thèmes et choisir interactivement :
+
+```bash
+git_sv theme
+```
+
+Un thème peut également être activé directement, même en dehors d'un dépôt
+Git. L'alias `themes` est aussi disponible :
+
+```bash
+git_sv theme solarized
+git_sv themes light
+```
+
+Le theme `solarized` reutilise le fond, le texte et les 16 couleurs ANSI du
+profil terminal. Il s'adapte donc aux variantes Solarized Light et Dark sans
+imposer un fond RGB different de celui du terminal :
+
+```json
+{
+  "language": "fr",
+  "theme": "solarized"
+}
+```
+
 ---
 
 ## Raccourcis clavier principaux

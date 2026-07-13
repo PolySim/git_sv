@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::i18n::Language;
@@ -16,6 +16,22 @@ pub enum ThemeMode {
     Dark,
     /// Thème clair.
     Light,
+    /// Thème utilisant la palette Solarized du terminal.
+    Solarized,
+}
+
+impl ThemeMode {
+    /// Liste ordonnée des thèmes proposés par la CLI.
+    pub const ALL: [Self; 3] = [Self::Dark, Self::Light, Self::Solarized];
+
+    /// Nom utilisé dans le fichier de configuration et la CLI.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::Solarized => "solarized",
+        }
+    }
 }
 
 /// Configuration utilisateur de `git_sv`.
@@ -24,7 +40,7 @@ pub struct AppConfig {
     /// Langue de l'interface.
     #[serde(default)]
     pub language: Language,
-    /// Thème de couleurs (dark ou light).
+    /// Thème de couleurs (dark, light ou solarized).
     #[serde(default)]
     pub theme: ThemeMode,
 }
@@ -87,15 +103,39 @@ impl AppConfig {
             return Ok(());
         }
 
+        if !path.exists() {
+            self.save_to_path(path)?;
+        }
+
+        Ok(())
+    }
+
+    /// Sauvegarde la configuration dans le fichier actuellement utilisé.
+    pub fn save(&self) -> Result<PathBuf> {
+        let candidates = Self::candidate_paths();
+        let path = candidates
+            .iter()
+            .find(|path| path.exists())
+            .cloned()
+            .or_else(|| candidates.into_iter().next())
+            .ok_or_else(|| anyhow!("Aucun chemin de configuration disponible"))?;
+
+        self.save_to_path(&path)?;
+        Ok(path)
+    }
+
+    /// Ecrit la configuration complète dans un chemin donné.
+    pub fn save_to_path(&self, path: &Path) -> Result<()> {
+        if path.as_os_str().is_empty() {
+            return Ok(());
+        }
+
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        if !path.exists() {
-            let content = serde_json::to_string_pretty(self)?;
-            std::fs::write(path, format!("{}\n", content))?;
-        }
-
+        let content = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, format!("{}\n", content))?;
         Ok(())
     }
 }
@@ -125,6 +165,23 @@ mod tests {
     }
 
     #[test]
+    fn test_load_config_with_solarized_theme() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+
+        std::fs::write(&path, r#"{"theme":"solarized"}"#).unwrap();
+
+        let config = AppConfig::load_from_path(&path).unwrap();
+        assert_eq!(config.theme, ThemeMode::Solarized);
+    }
+
+    #[test]
+    fn test_theme_names_are_stable() {
+        let names: Vec<_> = ThemeMode::ALL.iter().map(|theme| theme.as_str()).collect();
+        assert_eq!(names, ["dark", "light", "solarized"]);
+    }
+
+    #[test]
     fn test_candidate_paths_contains_xdg_style_path() {
         let paths = AppConfig::candidate_paths();
         assert!(
@@ -145,5 +202,22 @@ mod tests {
 
         let loaded = AppConfig::load_from_path(&path).unwrap();
         assert_eq!(loaded.language, Language::En);
+    }
+
+    #[test]
+    fn test_save_to_path_updates_existing_config() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"language":"en","theme":"dark"}"#).unwrap();
+
+        let config = AppConfig {
+            language: Language::Fr,
+            theme: ThemeMode::Solarized,
+        };
+        config.save_to_path(&path).unwrap();
+
+        let loaded = AppConfig::load_from_path(&path).unwrap();
+        assert_eq!(loaded.language, Language::Fr);
+        assert_eq!(loaded.theme, ThemeMode::Solarized);
     }
 }

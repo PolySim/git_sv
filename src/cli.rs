@@ -3,12 +3,13 @@
 //! Fournit des commandes utilitaires pour scripts et usages rapides
 //! sans lancer la TUI complète.
 
+use crate::config::{AppConfig, ThemeMode};
 use crate::git::{branch::BranchInfo, commit::CommitInfo, GitRepo};
 use crate::i18n::{text, text_owned};
 use crate::state::GraphFilter;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::Serialize;
-use std::io::Write;
+use std::io::{BufRead, Write};
 
 /// Format de sortie pour les commandes CLI.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -117,6 +118,117 @@ pub fn graph(repo: &GitRepo, max_count: usize, options: &CliOptions) -> Result<(
     }
 
     Ok(())
+}
+
+/// Affiche les thèmes disponibles et enregistre le choix de l'utilisateur.
+pub fn theme(config: &mut AppConfig, requested: Option<&str>) -> Result<()> {
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    let mut input = stdin.lock();
+    let mut output = stdout.lock();
+
+    let Some(selected) = select_theme(config.theme, requested, &mut input, &mut output)? else {
+        writeln!(output, "{}", text("Aucun changement.", "No changes."))?;
+        return Ok(());
+    };
+
+    config.theme = selected;
+    let path = config.save()?;
+    writeln!(
+        output,
+        "\x1b[32m✓ {}\x1b[0m {}",
+        text("Thème activé :", "Theme enabled:"),
+        selected.as_str()
+    )?;
+    writeln!(
+        output,
+        "  {} {}",
+        text("Configuration :", "Configuration:"),
+        path.display()
+    )?;
+    Ok(())
+}
+
+fn select_theme<R: BufRead, W: Write>(
+    current: ThemeMode,
+    requested: Option<&str>,
+    input: &mut R,
+    output: &mut W,
+) -> Result<Option<ThemeMode>> {
+    if let Some(requested) = requested {
+        return parse_theme_choice(requested)
+            .map(Some)
+            .ok_or_else(|| invalid_theme_error(requested));
+    }
+
+    writeln!(
+        output,
+        "{}",
+        text("Thèmes disponibles :", "Available themes:")
+    )?;
+    for (index, theme) in ThemeMode::ALL.iter().copied().enumerate() {
+        let marker = if theme == current { "●" } else { " " };
+        writeln!(
+            output,
+            " {marker} {}. {:<10} {}",
+            index + 1,
+            theme.as_str(),
+            theme_description(theme)
+        )?;
+    }
+
+    write!(
+        output,
+        "\n{} ",
+        text(
+            "Choisissez un thème [1-3, Entrée pour annuler] :",
+            "Choose a theme [1-3, Enter to cancel]:"
+        )
+    )?;
+    output.flush()?;
+
+    let mut choice = String::new();
+    if input.read_line(&mut choice)? == 0 || choice.trim().is_empty() {
+        return Ok(None);
+    }
+
+    parse_theme_choice(&choice)
+        .map(Some)
+        .ok_or_else(|| invalid_theme_error(choice.trim()))
+}
+
+fn parse_theme_choice(value: &str) -> Option<ThemeMode> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "dark" => Some(ThemeMode::Dark),
+        "2" | "light" => Some(ThemeMode::Light),
+        "3" | "solarized" => Some(ThemeMode::Solarized),
+        _ => None,
+    }
+}
+
+fn theme_description(theme: ThemeMode) -> &'static str {
+    match theme {
+        ThemeMode::Dark => text(
+            "Palette sombre à contraste élevé",
+            "High-contrast dark palette",
+        ),
+        ThemeMode::Light => text("Palette claire neutre", "Neutral light palette"),
+        ThemeMode::Solarized => text(
+            "Palette ANSI héritée du terminal",
+            "ANSI palette inherited from the terminal",
+        ),
+    }
+}
+
+fn invalid_theme_error(value: &str) -> anyhow::Error {
+    anyhow!(
+        "{} '{value}'. {}",
+        text("Thème inconnu", "Unknown theme"),
+        text(
+            "Valeurs acceptées : dark, light, solarized",
+            "Accepted values: dark, light, solarized"
+        )
+    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -546,5 +658,52 @@ mod tests {
         let formatted = format_status(&status);
         assert!(formatted.contains('A'));
         assert!(formatted.contains('M'));
+    }
+
+    #[test]
+    fn test_select_theme_by_number_lists_all_themes() {
+        let mut input = std::io::Cursor::new(b"3\n");
+        let mut output = Vec::new();
+
+        let selected = select_theme(ThemeMode::Dark, None, &mut input, &mut output).unwrap();
+        let output = String::from_utf8(output).unwrap();
+
+        assert_eq!(selected, Some(ThemeMode::Solarized));
+        assert!(output.contains("dark"));
+        assert!(output.contains("light"));
+        assert!(output.contains("solarized"));
+    }
+
+    #[test]
+    fn test_select_theme_accepts_direct_name() {
+        let mut input = std::io::Cursor::new(Vec::<u8>::new());
+        let mut output = Vec::new();
+
+        let selected =
+            select_theme(ThemeMode::Dark, Some("LIGHT"), &mut input, &mut output).unwrap();
+
+        assert_eq!(selected, Some(ThemeMode::Light));
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_select_theme_empty_input_cancels() {
+        let mut input = std::io::Cursor::new(b"\n");
+        let mut output = Vec::new();
+
+        let selected = select_theme(ThemeMode::Dark, None, &mut input, &mut output).unwrap();
+
+        assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn test_select_theme_rejects_unknown_value() {
+        let mut input = std::io::Cursor::new(Vec::<u8>::new());
+        let mut output = Vec::new();
+
+        let error =
+            select_theme(ThemeMode::Dark, Some("nord"), &mut input, &mut output).unwrap_err();
+
+        assert!(error.to_string().contains("nord"));
     }
 }

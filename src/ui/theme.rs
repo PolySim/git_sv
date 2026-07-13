@@ -8,7 +8,7 @@ use crate::config::ThemeMode;
 /// Thème de couleurs pour l'application.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Theme {
-    /// Mode du thème (clair ou sombre).
+    /// Mode du thème configuré.
     pub mode: ThemeMode,
     /// Couleur primaire (bordures, éléments actifs)
     pub primary: Color,
@@ -107,11 +107,42 @@ impl Theme {
         }
     }
 
+    /// Thème Solarized piloté par la palette ANSI du terminal.
+    ///
+    /// Les fonds et le texte principal utilisent `Reset` pour conserver les
+    /// couleurs du profil terminal, aussi bien en Solarized Light que Dark.
+    pub fn solarized() -> Self {
+        Self {
+            mode: ThemeMode::Solarized,
+            primary: Color::Cyan,
+            secondary: Color::LightMagenta,
+            selection_bg: Color::LightCyan,
+            selection_fg: Color::Black,
+            border_inactive: Color::LightGreen,
+            border_active: Color::Cyan,
+            status_bar_bg: Color::Reset,
+            status_bar_fg: Color::Reset,
+            error: Color::Red,
+            success: Color::Green,
+            warning: Color::Yellow,
+            info: Color::Blue,
+            commit_hash: Color::LightMagenta,
+            text_normal: Color::Reset,
+            text_secondary: Color::LightGreen,
+            background: Color::Reset,
+            surface: Color::Reset,
+            surface_alt: Color::Reset,
+            ours_bg: Color::Reset,
+            theirs_bg: Color::Reset,
+        }
+    }
+
     /// Construit le thème à partir du mode configuré.
     pub fn from_mode(mode: ThemeMode) -> Self {
         match mode {
             ThemeMode::Dark => Self::dark(),
             ThemeMode::Light => Self::light(),
+            ThemeMode::Solarized => Self::solarized(),
         }
     }
 
@@ -154,11 +185,28 @@ impl Theme {
         Color::Rgb(5, 105, 107),
     ];
 
+    /// Couleurs de branches déléguées aux emplacements ANSI Solarized.
+    const BRANCH_COLORS_SOLARIZED: &[Color] = &[
+        Color::Green,
+        Color::Red,
+        Color::Yellow,
+        Color::Blue,
+        Color::Magenta,
+        Color::Cyan,
+        Color::LightRed,
+        Color::LightMagenta,
+        Color::LightBlue,
+        Color::LightCyan,
+        Color::LightGreen,
+        Color::DarkGray,
+    ];
+
     /// Retourne la couleur pour un index de branche selon le thème actuel.
     pub fn branch_color(&self, index: usize) -> Color {
         let colors = match self.mode {
             ThemeMode::Light => Self::BRANCH_COLORS_LIGHT,
             ThemeMode::Dark => Self::BRANCH_COLORS_DARK,
+            ThemeMode::Solarized => Self::BRANCH_COLORS_SOLARIZED,
         };
         colors[index % colors.len()]
     }
@@ -247,5 +295,21 @@ mod tests {
     #[test]
     fn test_light_theme_contrast() {
         assert_theme_contrast(Theme::light());
+    }
+
+    #[test]
+    fn test_solarized_theme_uses_terminal_palette() {
+        let theme = Theme::solarized();
+
+        assert_eq!(theme.background, Color::Reset);
+        assert_eq!(theme.surface, Color::Reset);
+        assert_eq!(theme.surface_alt, Color::Reset);
+        assert_eq!(theme.text_normal, Color::Reset);
+        assert_eq!(theme.selection_bg, Color::LightCyan);
+        assert_eq!(theme.selection_fg, Color::Black);
+
+        for index in 0..12 {
+            assert!(!matches!(theme.branch_color(index), Color::Rgb(..)));
+        }
     }
 }
