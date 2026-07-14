@@ -261,6 +261,38 @@ fn test_diff_shortcuts_open_external_tool_and_navigate_hunks() {
 }
 
 #[test]
+fn test_configured_shortcut_and_custom_command_take_precedence() {
+    let mut state = create_test_state();
+    let config = crate::config::AppConfig {
+        keybindings: std::collections::BTreeMap::from([(
+            "graph.inspect".to_string(),
+            "ctrl+i".to_string(),
+        )]),
+        custom_commands: vec![crate::config::CustomCommandConfig {
+            name: "Tests".to_string(),
+            key: "alt+t".to_string(),
+            command: "cargo test".to_string(),
+            confirm: true,
+            pause: false,
+        }],
+        ..crate::config::AppConfig::default()
+    };
+    state.apply_config(&config);
+
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('i'), KeyModifiers::CONTROL),
+            &state,
+        ),
+        Some(AppAction::Git(GitAction::RepositoryInsights))
+    );
+    assert_eq!(
+        map_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::ALT), &state,),
+        Some(AppAction::RunCustomCommand(0))
+    );
+}
+
+#[test]
 fn test_project_tree_escape_closes_active_branch_comparison() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::ProjectTree;

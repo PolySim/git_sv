@@ -26,7 +26,95 @@ pub(crate) fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return map_help_key(key, state);
     }
 
+    if let Some(action) = map_configured_key(key, state) {
+        return Some(action);
+    }
+
     map_view_switch_key(key, state).or_else(|| map_view_key(key, state))
+}
+
+fn map_configured_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    for binding in &state.customization.keybindings {
+        if binding.chord.matches(key) {
+            if let Some(action) = configured_action(&binding.action, state) {
+                return Some(action);
+            }
+        }
+    }
+    state
+        .customization
+        .custom_commands
+        .iter()
+        .position(|command| command.chord.matches(key))
+        .map(AppAction::RunCustomCommand)
+}
+
+fn configured_action(name: &str, state: &AppState) -> Option<AppAction> {
+    let graph = state.view_mode == ViewMode::Graph;
+    let staging = state.view_mode == ViewMode::Staging;
+    let branches = state.view_mode == ViewMode::Branches;
+    let tree = state.view_mode == ViewMode::ProjectTree;
+    let diff = matches!(
+        (state.view_mode, state.focus),
+        (ViewMode::Graph, FocusPanel::BottomRight)
+    ) || (staging && state.staging_state.focus == StagingFocus::Diff)
+        || (tree && state.project_tree_state.focus == ProjectTreeFocus::Diff);
+
+    match name {
+        "global.quit" => Some(AppAction::Quit),
+        "global.refresh" => Some(AppAction::Refresh),
+        "global.help" => Some(AppAction::ToggleHelp),
+        "global.copy" => Some(AppAction::CopyPanelContent),
+        "view.graph" => Some(AppAction::SwitchView(ViewMode::Graph)),
+        "view.staging" => Some(AppAction::SwitchView(ViewMode::Staging)),
+        "view.branches" => Some(AppAction::SwitchView(ViewMode::Branches)),
+        "view.tree" => Some(AppAction::SwitchView(ViewMode::ProjectTree)),
+        "git.push" => Some(AppAction::Git(GitAction::Push)),
+        "git.force_push" => Some(AppAction::Git(GitAction::ForcePush)),
+        "git.pull" => Some(AppAction::Git(GitAction::Pull)),
+        "git.fetch" => Some(AppAction::Git(GitAction::Fetch)),
+        "graph.commit" if graph => Some(AppAction::Git(GitAction::CommitPrompt)),
+        "graph.stash" if graph => Some(AppAction::Git(GitAction::StashPrompt)),
+        "graph.merge" if graph => Some(AppAction::Git(GitAction::MergePrompt)),
+        "graph.search" if graph => Some(AppAction::Search(SearchAction::Open)),
+        "graph.filter" if graph => Some(AppAction::Filter(FilterAction::Open)),
+        "graph.blame" if graph => Some(AppAction::Git(GitAction::OpenBlame)),
+        "graph.cherry_pick" if graph => Some(AppAction::Git(GitAction::CherryPick)),
+        "graph.reset" if graph => Some(AppAction::Git(GitAction::ResetPrompt)),
+        "graph.interactive_rebase" if graph => Some(AppAction::Git(GitAction::InteractiveRebase)),
+        "graph.undo" if graph => Some(AppAction::Git(GitAction::UndoLastOperation)),
+        "graph.create_tag" if graph => Some(AppAction::Git(GitAction::CreateTag)),
+        "graph.delete_tag" if graph => Some(AppAction::Git(GitAction::DeleteTag)),
+        "graph.compare_head" if graph => Some(AppAction::Git(GitAction::CompareSelectedWithHead)),
+        "graph.bisect" if graph => Some(AppAction::Git(GitAction::BisectStart)),
+        "graph.inspect" if graph => Some(AppAction::Git(GitAction::RepositoryInsights)),
+        "graph.load_more" if graph => Some(AppAction::LoadMoreHistory),
+        "diff.external" if diff => Some(AppAction::Git(GitAction::OpenExternalDiff)),
+        "diff.next_hunk" if diff => Some(AppAction::Navigation(NavigationAction::NextDiffHunk)),
+        "diff.previous_hunk" if diff => {
+            Some(AppAction::Navigation(NavigationAction::PreviousDiffHunk))
+        }
+        "diff.toggle_view" if diff => Some(AppAction::ToggleDiffViewMode),
+        "diff.fullscreen" if diff && graph => Some(AppAction::ToggleDiffFullscreen),
+        "staging.stage_file" if staging => Some(AppAction::Staging(StagingAction::StageFile)),
+        "staging.unstage_file" if staging => Some(AppAction::Staging(StagingAction::UnstageFile)),
+        "staging.stage_all" if staging => Some(AppAction::Staging(StagingAction::StageAll)),
+        "staging.unstage_all" if staging => Some(AppAction::Staging(StagingAction::UnstageAll)),
+        "staging.stage_hunk" if staging => Some(AppAction::Staging(StagingAction::StageHunk)),
+        "staging.unstage_hunk" if staging => Some(AppAction::Staging(StagingAction::UnstageHunk)),
+        "staging.stage_line" if staging => Some(AppAction::Staging(StagingAction::StageLine)),
+        "staging.unstage_line" if staging => Some(AppAction::Staging(StagingAction::UnstageLine)),
+        "staging.commit" if staging => Some(AppAction::Staging(StagingAction::StartCommitMessage)),
+        "staging.discard_file" if staging => Some(AppAction::Staging(StagingAction::DiscardFile)),
+        "staging.discard_all" if staging => Some(AppAction::Staging(StagingAction::DiscardAll)),
+        "branches.create" if branches => Some(AppAction::Branch(BranchAction::Create)),
+        "branches.delete" if branches => Some(AppAction::Branch(BranchAction::Delete)),
+        "branches.rename" if branches => Some(AppAction::Branch(BranchAction::Rename)),
+        "branches.checkout" if branches => Some(AppAction::Branch(BranchAction::Checkout)),
+        "tree.search" if tree => Some(AppAction::ProjectTree(ProjectTreeAction::OpenSearch)),
+        "tree.compare" if tree => Some(AppAction::Git(GitAction::ComparePrompt)),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

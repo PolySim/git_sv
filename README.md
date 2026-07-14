@@ -268,9 +268,52 @@ imposer un fond RGB different de celui du terminal :
 ```json
 {
   "language": "fr",
-  "theme": "solarized"
+  "theme": "solarized",
+  "keybindings": {
+    "graph.inspect": "ctrl+i",
+    "diff.external": "alt+e",
+    "staging.commit": "ctrl+c"
+  },
+  "custom_commands": [
+    {
+      "name": "Tests Rust",
+      "key": "alt+t",
+      "command": "cargo test",
+      "confirm": true,
+      "pause": true
+    }
+  ]
 }
 ```
+
+Les raccourcis configurés sont prioritaires sur les raccourcis intégrés quand
+les deux utilisent la même combinaison. Les combinaisons acceptent notamment
+`ctrl`, `alt`, `shift` et `super`, ainsi que `enter`, `esc`, `space`, `tab`, les
+flèches, `home`, `end`, `pageup` et `pagedown`.
+
+Identifiants d'action disponibles :
+
+- globaux : `global.quit`, `global.refresh`, `global.help`, `global.copy`,
+  `git.push`, `git.force_push`, `git.pull`, `git.fetch` ;
+- vues : `view.graph`, `view.staging`, `view.branches`, `view.tree` ;
+- graphe : `graph.commit`, `graph.stash`, `graph.merge`, `graph.search`,
+  `graph.filter`, `graph.blame`, `graph.cherry_pick`, `graph.reset`,
+  `graph.interactive_rebase`, `graph.undo`, `graph.create_tag`,
+  `graph.delete_tag`, `graph.compare_head`, `graph.bisect`, `graph.inspect`,
+  `graph.load_more` ;
+- diff : `diff.external`, `diff.next_hunk`, `diff.previous_hunk`,
+  `diff.toggle_view`, `diff.fullscreen` ;
+- staging : `staging.stage_file`, `staging.unstage_file`, `staging.stage_all`,
+  `staging.unstage_all`, `staging.stage_hunk`, `staging.unstage_hunk`,
+  `staging.stage_line`, `staging.unstage_line`, `staging.commit`,
+  `staging.discard_file`, `staging.discard_all` ;
+- branches/arborescence : `branches.create`, `branches.delete`,
+  `branches.rename`, `branches.checkout`, `tree.search`, `tree.compare`.
+
+Une commande personnalisée s'exécute depuis la racine du dépôt avec le shell
+utilisateur, après suspension propre de la TUI. `confirm` protège contre un
+déclenchement accidentel et `pause` conserve sa sortie visible jusqu'à Entrée.
+La variable `GIT_SV_REPO` contient le chemin du dépôt.
 
 ---
 

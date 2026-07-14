@@ -61,6 +61,9 @@ pub struct UiTransientState {
 
     /// Diff externe à lancer après suspension de la TUI.
     pub pending_external_diff: Option<crate::git::external_diff::ExternalDiffRequest>,
+
+    /// Commande utilisateur à lancer après suspension de la TUI.
+    pub pending_custom_command: Option<crate::config::CustomCommandConfig>,
 }
 
 impl UiTransientState {
@@ -77,6 +80,7 @@ impl UiTransientState {
             repository_insights: None,
             repository_insights_scroll: 0,
             pending_external_diff: None,
+            pending_custom_command: None,
         }
     }
 
@@ -259,6 +263,9 @@ pub struct AppState {
 
     /// Protocole terminal et cache de la prévisualisation courante.
     pub image_preview: crate::ui::image_preview::ImagePreviewState,
+
+    /// Raccourcis et commandes utilisateur précompilés.
+    pub customization: crate::config::RuntimeCustomization,
 }
 
 impl AppState {
@@ -290,9 +297,15 @@ impl AppState {
             filters: FilterState::new(),
             diff_cache: DiffCache::new(DIFF_CACHE_CAPACITY),
             image_preview: crate::ui::image_preview::ImagePreviewState::default(),
+            customization: crate::config::RuntimeCustomization::default(),
         };
 
         Ok(state)
+    }
+
+    /// Applique la configuration clavier chargée au démarrage.
+    pub fn apply_config(&mut self, config: &crate::config::AppConfig) {
+        self.customization = config.runtime_customization();
     }
 
     /// Marque l'état comme nécessitant un refresh.

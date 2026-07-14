@@ -103,6 +103,11 @@ impl EventHandler {
                 needs_redraw = true;
             }
 
+            if let Some(command) = self.state.ui.pending_custom_command.take() {
+                self.run_custom_command(session, command)?;
+                needs_redraw = true;
+            }
+
             // Vérifier les résultats d'opérations en arrière-plan
             if let Some(result) = self.background.try_recv() {
                 self.handle_background_result(result)?;
@@ -208,6 +213,33 @@ impl EventHandler {
                 .state
                 .set_flash_message(crate::utils::flash_error("diff externe", error)),
         }
+        Ok(())
+    }
+
+    fn run_custom_command(
+        &mut self,
+        session: &mut TerminalSession,
+        command: crate::config::CustomCommandConfig,
+    ) -> Result<()> {
+        session.suspend()?;
+        let repo_path = std::path::PathBuf::from(&self.state.repo_path);
+        let operation = crate::git::custom_command::run(&repo_path, &command);
+        session.resume()?;
+        session.terminal_mut().clear()?;
+
+        match operation {
+            Ok(status) if status.success() => self
+                .state
+                .set_flash_message(format!("Commande '{}' terminée ✓", command.name)),
+            Ok(status) => self.state.set_flash_message(format!(
+                "Commande '{}' terminée avec {}",
+                command.name, status
+            )),
+            Err(error) => self
+                .state
+                .set_flash_message(crate::utils::flash_error("commande personnalisée", error)),
+        }
+        self.state.mark_dirty();
         Ok(())
     }
 

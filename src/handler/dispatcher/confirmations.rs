@@ -183,6 +183,9 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                         .set_flash_message(flash_error("démarrage bisect", error)),
                 }
             }
+            ConfirmAction::CustomCommand(command) => {
+                ctx.state.ui.pending_custom_command = Some(command);
+            }
         }
     }
     Ok(())

@@ -242,6 +242,25 @@ impl ActionDispatcher {
             // Charger plus d'historique (pagination)
             AppAction::LoadMoreHistory => pickers::handle_load_more_history(&mut ctx),
 
+            AppAction::RunCustomCommand(index) => {
+                let command = ctx
+                    .state
+                    .customization
+                    .custom_commands
+                    .get(index)
+                    .map(|command| command.definition.clone());
+                if let Some(command) = command {
+                    if command.confirm {
+                        ctx.state.open_confirmation(
+                            crate::ui::confirm_dialog::ConfirmAction::CustomCommand(command),
+                        );
+                    } else {
+                        ctx.state.ui.pending_custom_command = Some(command);
+                    }
+                }
+                Ok(())
+            }
+
             // Aucune action
             AppAction::None => Ok(()),
         }

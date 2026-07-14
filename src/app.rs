@@ -26,6 +26,17 @@ impl App {
         Ok(Self { state })
     }
 
+    /// Crée une application avec les raccourcis et commandes utilisateur.
+    pub fn new_with_config(
+        repo: GitRepo,
+        repo_path: String,
+        config: &crate::config::AppConfig,
+    ) -> Result<Self> {
+        let mut app = Self::new(repo, repo_path)?;
+        app.state.apply_config(config);
+        Ok(app)
+    }
+
     /// Lance l'application.
     pub fn run(mut self) -> Result<()> {
         let mut session = TerminalSession::setup()?;

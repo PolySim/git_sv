@@ -47,6 +47,8 @@ pub enum ConfirmAction {
     UndoLastOperation(git2::Oid, String),
     /// Démarrer un bisect entre un commit bon et HEAD.
     BisectStart { good: git2::Oid, bad: git2::Oid },
+    /// Exécuter une commande utilisateur.
+    CustomCommand(crate::config::CustomCommandConfig),
 }
 
 impl ConfirmAction {
@@ -149,6 +151,13 @@ impl ConfirmAction {
                     "Start bisect between good commit {good:.7} and HEAD {bad:.7}?\nThe working tree will change commits during the search."
                 ),
             ),
+            ConfirmAction::CustomCommand(command) => text_owned(
+                format!(
+                    "Exécuter la commande '{}' ?\n\n{}",
+                    command.name, command.command
+                ),
+                format!("Run command '{}'?\n\n{}", command.name, command.command),
+            ),
         }
     }
 
@@ -192,6 +201,7 @@ impl ConfirmAction {
                 text("Confirmer l'annulation", "Confirm undo")
             }
             ConfirmAction::BisectStart { .. } => text("Confirmer le bisect", "Confirm bisect"),
+            ConfirmAction::CustomCommand(_) => text("Confirmer la commande", "Confirm command"),
         }
     }
 }

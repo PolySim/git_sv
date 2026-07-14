@@ -14,14 +14,19 @@ use crate::ui::common::centered_rect;
 use crate::ui::keybindings;
 use crate::ui::theme::current_theme;
 
-pub struct HelpOverlayRenderContext {
+pub struct HelpOverlayRenderContext<'a> {
     pub area: Rect,
     pub active_view: ViewMode,
+    pub custom_commands: &'a [crate::config::ResolvedCustomCommand],
 }
 
 /// Rend l'overlay d'aide complet centré sur l'écran.
-pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
-    let HelpOverlayRenderContext { area, active_view } = ctx;
+pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext<'_>) {
+    let HelpOverlayRenderContext {
+        area,
+        active_view,
+        custom_commands,
+    } = ctx;
 
     let theme = current_theme();
     // Créer une zone centrale pour le popup (70% largeur, 80% hauteur).
@@ -31,7 +36,7 @@ pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
     frame.render_widget(Clear, popup_area);
 
     // Construire le contenu de l'aide.
-    let content = build_help_content(active_view);
+    let content = build_help_content(active_view, custom_commands);
 
     let paragraph = Paragraph::new(content)
         .block(
@@ -48,13 +53,27 @@ pub fn render(frame: &mut Frame, ctx: HelpOverlayRenderContext) {
 }
 
 /// Construit le contenu textuel de l'overlay d'aide.
-fn build_help_content(active_view: ViewMode) -> Vec<Line<'static>> {
+fn build_help_content(
+    active_view: ViewMode,
+    custom_commands: &[crate::config::ResolvedCustomCommand],
+) -> Vec<Line<'static>> {
     let theme = current_theme();
     let mut lines = vec![Line::from("")];
 
     append_global_help(&mut lines);
     lines.push(Line::from(""));
     append_view_help(&mut lines, active_view);
+    if !custom_commands.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(section_header(text(
+            "Commandes personnalisees",
+            "Custom commands",
+        )));
+        lines.push(separator());
+        for command in custom_commands {
+            lines.push(key_line(&command.definition.key, &command.definition.name));
+        }
+    }
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
         text_owned("Esc ou ? pour fermer", "Esc or ? to close"),
@@ -598,7 +617,7 @@ mod tests {
 
     #[test]
     fn test_branches_help_contains_rebase() {
-        let content = lines_to_text(build_help_content(ViewMode::Branches));
+        let content = lines_to_text(build_help_content(ViewMode::Branches, &[]));
 
         assert!(content.contains("Rebase"));
         assert!(content.contains("e"));
@@ -607,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_staging_help_contains_discard_and_stage() {
-        let content = lines_to_text(build_help_content(ViewMode::Staging));
+        let content = lines_to_text(build_help_content(ViewMode::Staging, &[]));
 
         assert!(content.contains("Indexer le fichier") || content.contains("Stage file"));
         assert!(content.contains("Abandonner le fichier") || content.contains("Discard file"));

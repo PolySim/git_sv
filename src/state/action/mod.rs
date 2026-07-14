@@ -109,6 +109,9 @@ pub enum AppAction {
     /// Charger plus d'historique (pagination).
     LoadMoreHistory,
 
+    /// Exécuter une commande utilisateur préconfigurée.
+    RunCustomCommand(usize),
+
     /// Aucune action (événement ignoré)
     None,
 }

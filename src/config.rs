@@ -1,8 +1,10 @@
 //! Chargement de la configuration utilisateur.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
 
 use crate::i18n::Language;
@@ -43,9 +45,147 @@ pub struct AppConfig {
     /// Thème de couleurs (dark, light ou solarized).
     #[serde(default)]
     pub theme: ThemeMode,
+    /// Remplacement de raccourcis, indexé par identifiant d'action.
+    #[serde(default)]
+    pub keybindings: BTreeMap<String, String>,
+    /// Commandes shell déclenchées par un raccourci global.
+    #[serde(default)]
+    pub custom_commands: Vec<CustomCommandConfig>,
+}
+
+/// Commande utilisateur exécutée hors de la TUI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomCommandConfig {
+    pub name: String,
+    pub key: String,
+    pub command: String,
+    /// Demander une confirmation avant l'exécution.
+    #[serde(default = "default_true")]
+    pub confirm: bool,
+    /// Attendre Entrée avant de revenir à la TUI.
+    #[serde(default = "default_true")]
+    pub pause: bool,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+/// Raccourcis précompilés utilisés pendant la boucle d'événements.
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeCustomization {
+    pub keybindings: Vec<ResolvedKeyBinding>,
+    pub custom_commands: Vec<ResolvedCustomCommand>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedKeyBinding {
+    pub action: String,
+    pub chord: KeyChord,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedCustomCommand {
+    pub definition: CustomCommandConfig,
+    pub chord: KeyChord,
+}
+
+/// Représentation compacte d'une combinaison clavier configurée.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyChord {
+    code: KeyCode,
+    modifiers: KeyModifiers,
+}
+
+impl KeyChord {
+    /// Parse `ctrl+shift+x`, `alt+enter`, `pageup`, `space`, etc.
+    pub fn parse(value: &str) -> Option<Self> {
+        let parts = value
+            .split('+')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>();
+        let (key, modifier_parts) = parts.split_last()?;
+        let mut modifiers = KeyModifiers::NONE;
+        for modifier in modifier_parts {
+            match modifier.to_ascii_lowercase().as_str() {
+                "ctrl" | "control" => modifiers |= KeyModifiers::CONTROL,
+                "alt" | "option" => modifiers |= KeyModifiers::ALT,
+                "shift" => modifiers |= KeyModifiers::SHIFT,
+                "super" | "cmd" | "command" => modifiers |= KeyModifiers::SUPER,
+                _ => return None,
+            }
+        }
+        let normalized = key.to_ascii_lowercase();
+        let code = match normalized.as_str() {
+            "enter" | "return" => KeyCode::Enter,
+            "esc" | "escape" => KeyCode::Esc,
+            "space" => KeyCode::Char(' '),
+            "tab" => KeyCode::Tab,
+            "backtab" => KeyCode::BackTab,
+            "up" => KeyCode::Up,
+            "down" => KeyCode::Down,
+            "left" => KeyCode::Left,
+            "right" => KeyCode::Right,
+            "home" => KeyCode::Home,
+            "end" => KeyCode::End,
+            "pageup" | "pgup" => KeyCode::PageUp,
+            "pagedown" | "pgdown" => KeyCode::PageDown,
+            "backspace" => KeyCode::Backspace,
+            "delete" | "del" => KeyCode::Delete,
+            _ if key.chars().count() == 1 => KeyCode::Char(key.chars().next()?),
+            _ => return None,
+        };
+        Some(Self { code, modifiers })
+    }
+
+    pub fn matches(&self, event: KeyEvent) -> bool {
+        const RELEVANT: KeyModifiers = KeyModifiers::CONTROL
+            .union(KeyModifiers::ALT)
+            .union(KeyModifiers::SHIFT)
+            .union(KeyModifiers::SUPER);
+        let code_matches = match (self.code, event.code) {
+            (KeyCode::Char(expected), KeyCode::Char(actual))
+                if self.modifiers.contains(KeyModifiers::SHIFT) =>
+            {
+                expected.eq_ignore_ascii_case(&actual)
+            }
+            _ => self.code == event.code,
+        };
+        code_matches && self.modifiers == event.modifiers.intersection(RELEVANT)
+    }
 }
 
 impl AppConfig {
+    /// Précompile les combinaisons valides une seule fois au démarrage.
+    pub fn runtime_customization(&self) -> RuntimeCustomization {
+        RuntimeCustomization {
+            keybindings: self
+                .keybindings
+                .iter()
+                .filter_map(|(action, key)| {
+                    KeyChord::parse(key).map(|chord| ResolvedKeyBinding {
+                        action: action.clone(),
+                        chord,
+                    })
+                })
+                .collect(),
+            custom_commands: self
+                .custom_commands
+                .iter()
+                .filter(|definition| {
+                    !definition.name.trim().is_empty() && !definition.command.trim().is_empty()
+                })
+                .filter_map(|definition| {
+                    KeyChord::parse(&definition.key).map(|chord| ResolvedCustomCommand {
+                        definition: definition.clone(),
+                        chord,
+                    })
+                })
+                .collect(),
+        }
+    }
+
     /// Charge la configuration depuis le fichier utilisateur.
     pub fn load() -> Result<Self> {
         for path in Self::candidate_paths() {
@@ -213,11 +353,45 @@ mod tests {
         let config = AppConfig {
             language: Language::Fr,
             theme: ThemeMode::Solarized,
+            ..AppConfig::default()
         };
         config.save_to_path(&path).unwrap();
 
         let loaded = AppConfig::load_from_path(&path).unwrap();
         assert_eq!(loaded.language, Language::Fr);
         assert_eq!(loaded.theme, ThemeMode::Solarized);
+    }
+
+    #[test]
+    fn test_key_chord_parses_modifiers_and_named_keys() {
+        let chord = KeyChord::parse("ctrl+shift+x").unwrap();
+        assert!(chord.matches(KeyEvent::new(
+            KeyCode::Char('X'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        )));
+        assert_eq!(KeyChord::parse("pageup").unwrap().code, KeyCode::PageUp);
+        assert!(KeyChord::parse("ctrl+unknown-key").is_none());
+    }
+
+    #[test]
+    fn test_runtime_customization_ignores_invalid_chords() {
+        let config = AppConfig {
+            keybindings: BTreeMap::from([
+                ("global.help".to_string(), "ctrl+h".to_string()),
+                ("global.quit".to_string(), "not-a-key".to_string()),
+            ]),
+            custom_commands: vec![CustomCommandConfig {
+                name: "Tests".to_string(),
+                key: "alt+t".to_string(),
+                command: "cargo test".to_string(),
+                confirm: true,
+                pause: false,
+            }],
+            ..AppConfig::default()
+        };
+
+        let runtime = config.runtime_customization();
+        assert_eq!(runtime.keybindings.len(), 1);
+        assert_eq!(runtime.custom_commands.len(), 1);
     }
 }

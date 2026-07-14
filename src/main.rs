@@ -175,7 +175,7 @@ fn main() -> anyhow::Result<()> {
         Some(Commands::Theme { .. }) => unreachable!("La commande theme est traitée avant Git"),
         None => {
             // Mode par défaut : lance la TUI interactive.
-            let app = App::new(repo, options.path)?;
+            let app = App::new_with_config(repo, options.path, &config)?;
             app.run()?;
         }
     }

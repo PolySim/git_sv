@@ -54,6 +54,39 @@ fn test_dispatch_refresh_action() {
 }
 
 #[test]
+fn test_custom_command_confirmation_schedules_terminal_handoff() {
+    let (dir, repo) = setup_test_repo();
+    let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+    let definition = crate::config::CustomCommandConfig {
+        name: "Tests".to_string(),
+        key: "alt+t".to_string(),
+        command: "cargo test".to_string(),
+        confirm: true,
+        pause: false,
+    };
+    state.apply_config(&crate::config::AppConfig {
+        custom_commands: vec![definition.clone()],
+        ..crate::config::AppConfig::default()
+    });
+    let mut dispatcher = ActionDispatcher::new();
+
+    dispatcher
+        .dispatch(&mut state, AppAction::RunCustomCommand(0))
+        .unwrap();
+    assert_eq!(
+        state.ui.pending_confirmation,
+        Some(crate::ui::confirm_dialog::ConfirmAction::CustomCommand(
+            definition.clone()
+        ))
+    );
+
+    dispatcher
+        .dispatch(&mut state, AppAction::ConfirmAction)
+        .unwrap();
+    assert_eq!(state.ui.pending_custom_command, Some(definition));
+}
+
+#[test]
 fn test_dispatch_toggle_help() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
