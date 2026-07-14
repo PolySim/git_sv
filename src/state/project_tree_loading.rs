@@ -94,13 +94,14 @@ impl AppState {
         };
 
         let cache_key = crate::state::cache::DiffCacheKey::new(commit_oid, &file_path);
-        if let Some(diff) = self.diff_cache.get(&cache_key).cloned() {
+        if let Some(diff) = self.diff_cache.get(&cache_key) {
             self.project_tree_state.set_selected_diff(Some(diff));
             return;
         }
 
         match self.repo.file_diff(commit_oid, &file_path) {
             Ok(diff) => {
+                let diff = std::sync::Arc::new(diff);
                 self.diff_cache.put(cache_key, diff.clone());
                 self.project_tree_state.set_selected_diff(Some(diff));
             }

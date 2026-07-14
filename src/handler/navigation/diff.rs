@@ -113,10 +113,11 @@ pub fn load_commit_file_diff(state: &mut AppState) {
             let cache_key = crate::state::cache::DiffCacheKey::new(commit_oid, &path);
 
             if let Some(cached_diff) = state.diff_cache.get(&cache_key) {
-                state.graph_view.set_file_diff(Some(cached_diff.clone()));
+                state.graph_view.set_file_diff(Some(cached_diff));
             } else {
                 match state.repo.file_diff(commit_oid, &path) {
                     Ok(diff) => {
+                        let diff = std::sync::Arc::new(diff);
                         state.diff_cache.put(cache_key, diff.clone());
                         state.graph_view.set_file_diff(Some(diff));
                     }

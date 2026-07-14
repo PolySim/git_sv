@@ -448,7 +448,7 @@ fn render_diff(frame: &mut Frame, state: &mut AppState, area: ratatui::layout::R
     let total_lines = super::diff_view::render(
         frame,
         super::diff_view::DiffRenderContext {
-            diff: project.selected_diff.as_ref(),
+            diff: project.selected_diff.as_deref(),
             scroll_offset: project.diff_scroll_offset,
             horizontal_offset: project.diff_horizontal_offset,
             area,

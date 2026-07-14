@@ -122,7 +122,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
     super::diff_view::render(
         frame,
         super::diff_view::DiffRenderContext {
-            diff: staging_state.current_diff.as_ref(),
+            diff: staging_state.current_diff.as_deref(),
             scroll_offset: staging_state.diff_scroll,
             horizontal_offset: staging_state.diff_horizontal_offset,
             area: layout.diff_panel,

@@ -3,6 +3,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,
+    sync::Arc,
 };
 
 use crate::git::commit::CommitInfo;
@@ -90,7 +91,7 @@ pub struct ProjectTreeState {
     pub changed_files: ListSelection<DiffFile>,
     pub commit_details_loaded: bool,
     preferred_changed_files_count: usize,
-    pub selected_diff: Option<FileDiff>,
+    pub selected_diff: Option<Arc<FileDiff>>,
     pub diff_loaded: bool,
     pub diff_scroll_offset: usize,
     pub diff_horizontal_offset: usize,
@@ -373,7 +374,7 @@ impl ProjectTreeState {
         self.diff_total_lines = 0;
     }
 
-    pub fn set_selected_diff(&mut self, diff: Option<FileDiff>) {
+    pub fn set_selected_diff(&mut self, diff: Option<Arc<FileDiff>>) {
         self.selected_diff = diff;
         self.diff_loaded = true;
         self.diff_scroll_offset = 0;

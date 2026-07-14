@@ -281,7 +281,7 @@ fn render_graph_diff_panel(
         let total_lines = diff_view::render(
             frame,
             diff_view::DiffRenderContext {
-                diff: state.graph_view.selected_file_diff.as_ref(),
+                diff: state.graph_view.selected_file_diff.as_deref(),
                 scroll_offset: snap.diff_scroll_offset,
                 horizontal_offset: snap.diff_horizontal_offset,
                 area,
@@ -299,7 +299,7 @@ fn render_graph_diff_panel(
         let total_lines = diff_view::render(
             frame,
             diff_view::DiffRenderContext {
-                diff: state.graph_view.selected_file_diff.as_ref(),
+                diff: state.graph_view.selected_file_diff.as_deref(),
                 scroll_offset: snap.diff_scroll_offset,
                 horizontal_offset: snap.diff_horizontal_offset,
                 area: default_area,

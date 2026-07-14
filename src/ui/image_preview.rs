@@ -42,6 +42,16 @@ impl ImagePreviewState {
         }
     }
 
+    /// Libère le protocole et l'image décodée lorsqu'aucune image n'est visible.
+    pub fn clear(&mut self) {
+        #[cfg(feature = "image-preview")]
+        {
+            self.current_key = None;
+            self.protocol = None;
+            self.error = None;
+        }
+    }
+
     /// Rend l'image dans la zone fournie ou retourne la raison du repli texte.
     #[cfg(feature = "image-preview")]
     pub fn render(

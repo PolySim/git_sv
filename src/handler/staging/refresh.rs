@@ -44,10 +44,11 @@ pub fn load_staging_diff(state: &mut AppState) {
         let cache_key = DiffCacheKey::working_dir(&file.path);
 
         if let Some(cached_diff) = state.diff_cache.get(&cache_key) {
-            state.staging_state.current_diff = Some(cached_diff.clone());
+            state.staging_state.current_diff = Some(cached_diff);
         } else {
             match crate::git::diff::working_dir_file_diff(&state.repo.repo, &file.path) {
                 Ok(diff) => {
+                    let diff = std::sync::Arc::new(diff);
                     state.diff_cache.put(cache_key, diff.clone());
                     state.staging_state.current_diff = Some(diff);
                     state.staging_state.diff_scroll = 0;

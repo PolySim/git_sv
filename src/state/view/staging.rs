@@ -4,6 +4,7 @@ use crate::git::diff::{DiffViewMode, FileDiff};
 use crate::git::repo::StatusEntry;
 use crate::state::selection::ListSelection;
 use crate::state::TextEditHistory;
+use std::sync::Arc;
 
 /// Focus dans la vue staging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -39,7 +40,7 @@ pub struct StagingState {
     /// Mode amendement activé.
     pub is_amending: bool,
     /// Diff du fichier sélectionné.
-    pub current_diff: Option<FileDiff>,
+    pub current_diff: Option<Arc<FileDiff>>,
     /// Offset de scroll du diff.
     pub diff_scroll: usize,
     /// Offset de scroll horizontal du diff.

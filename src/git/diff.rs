@@ -116,6 +116,24 @@ pub struct FileDiff {
     pub image_preview: Option<ImagePreview>,
 }
 
+impl FileDiff {
+    /// Estime la mémoire allouée sur le tas par ce diff et son image éventuelle.
+    pub fn estimated_memory_bytes(&self) -> usize {
+        let lines = self.lines.capacity() * std::mem::size_of::<DiffLine>()
+            + self
+                .lines
+                .iter()
+                .map(|line| line.content.capacity())
+                .sum::<usize>();
+        let image = self
+            .image_preview
+            .as_ref()
+            .map_or(0, |preview| preview.bytes.len());
+
+        std::mem::size_of::<Self>() + self.path.capacity() + lines + image
+    }
+}
+
 /// Calcule le diff d'un commit donné.
 ///
 /// Retourne la liste des fichiers modifiés avec leurs stats (+/-).
@@ -295,9 +313,8 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
     } else {
         Some(&commit_tree)
     };
-    file_diff.image_preview = source_tree
-        .and_then(|tree| read_tree_file(repo, tree, file_path))
-        .and_then(|bytes| image_preview(file_path, bytes));
+    file_diff.image_preview =
+        source_tree.and_then(|tree| tree_image_preview(repo, tree, file_path));
     Ok(file_diff)
 }
 
@@ -323,11 +340,7 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         file_path,
         "Fichier non trouvé dans le working directory",
     )?;
-    let bytes = repo
-        .workdir()
-        .and_then(|workdir| fs::read(workdir.join(file_path)).ok())
-        .or_else(|| read_tree_file(repo, &head_tree, file_path));
-    file_diff.image_preview = bytes.and_then(|bytes| image_preview(file_path, bytes));
+    file_diff.image_preview = working_tree_image_preview(repo, &head_tree, file_path);
     Ok(file_diff)
 }
 
@@ -411,14 +424,14 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
     }
 
     let bytes = fs::read(&full_path)?;
-    if let Some(preview) = image_preview(file_path, bytes.clone()) {
+    if let Some(format) = format {
         return Ok(FileDiff {
             path: file_path.to_string(),
             status: DiffStatus::Added,
             lines: Vec::new(),
             additions: 0,
             deletions: 0,
-            image_preview: Some(preview),
+            image_preview: build_image_preview(format, bytes),
         });
     }
     if bytes.contains(&0) {
@@ -483,12 +496,10 @@ fn limited_file_diff(file_path: &str, status: DiffStatus, message: impl Into<Str
     }
 }
 
-fn image_preview(file_path: &str, bytes: Vec<u8>) -> Option<ImagePreview> {
+fn build_image_preview(format: ImageFormat, bytes: Vec<u8>) -> Option<ImagePreview> {
     if bytes.len() > MAX_IMAGE_PREVIEW_BYTES {
         return None;
     }
-
-    let format = image_format(file_path)?;
 
     Some(ImagePreview {
         bytes: Arc::from(bytes),
@@ -514,10 +525,38 @@ fn image_format(_file_path: &str) -> Option<ImageFormat> {
     None
 }
 
-fn read_tree_file(repo: &Repository, tree: &git2::Tree<'_>, file_path: &str) -> Option<Vec<u8>> {
+fn tree_image_preview(
+    repo: &Repository,
+    tree: &git2::Tree<'_>,
+    file_path: &str,
+) -> Option<ImagePreview> {
+    let format = image_format(file_path)?;
     let entry = tree.get_path(Path::new(file_path)).ok()?;
     let blob = repo.find_blob(entry.id()).ok()?;
-    Some(blob.content().to_vec())
+    if blob.size() > MAX_IMAGE_PREVIEW_BYTES {
+        return None;
+    }
+    build_image_preview(format, blob.content().to_vec())
+}
+
+fn working_tree_image_preview(
+    repo: &Repository,
+    head_tree: &git2::Tree<'_>,
+    file_path: &str,
+) -> Option<ImagePreview> {
+    let format = image_format(file_path)?;
+    if let Some(full_path) = repo.workdir().map(|workdir| workdir.join(file_path)) {
+        if let Ok(metadata) = fs::metadata(&full_path) {
+            if metadata.len() > MAX_IMAGE_PREVIEW_BYTES as u64 {
+                return None;
+            }
+            return fs::read(full_path)
+                .ok()
+                .and_then(|bytes| build_image_preview(format, bytes));
+        }
+    }
+
+    tree_image_preview(repo, head_tree, file_path)
 }
 
 fn limit_message_line(message: impl Into<String>) -> DiffLine {
@@ -719,6 +758,14 @@ mod tests {
 
         assert_eq!(preview.format, ImageFormat::Raster);
         assert_eq!(preview.bytes.as_ref(), png);
+    }
+
+    #[test]
+    fn test_image_preview_rejects_oversized_buffer() {
+        let preview =
+            build_image_preview(ImageFormat::Raster, vec![0; MAX_IMAGE_PREVIEW_BYTES + 1]);
+
+        assert!(preview.is_none());
     }
 
     #[test]

@@ -2,9 +2,12 @@
 
 use git2::Oid;
 use lru::LruCache;
-use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 use crate::git::diff::FileDiff;
+
+/// Taille mémoire maximale conservée par le cache de diffs.
+const DEFAULT_MAX_BYTES: usize = 64 * 1_048_576;
 
 /// Etat d'une ressource chargee paresseusement.
 #[allow(dead_code)]
@@ -121,27 +124,58 @@ impl DiffCacheKey {
 
 /// Cache LRU pour les diffs de fichiers.
 pub struct DiffCache {
-    cache: LruCache<DiffCacheKey, FileDiff>,
+    cache: LruCache<DiffCacheKey, Arc<FileDiff>>,
+    max_entries: usize,
+    max_bytes: usize,
+    current_bytes: usize,
 }
 
 impl DiffCache {
     /// Crée un nouveau cache avec la capacité donnée.
     pub fn new(capacity: usize) -> Self {
-        const DEFAULT_CAPACITY: NonZeroUsize = NonZeroUsize::new(1).unwrap();
-        let cap = NonZeroUsize::new(capacity).unwrap_or(DEFAULT_CAPACITY);
+        Self::with_limits(capacity, DEFAULT_MAX_BYTES)
+    }
+
+    fn with_limits(max_entries: usize, max_bytes: usize) -> Self {
         Self {
-            cache: LruCache::new(cap),
+            cache: LruCache::unbounded(),
+            max_entries: max_entries.max(1),
+            max_bytes: max_bytes.max(1),
+            current_bytes: 0,
         }
     }
 
     /// Récupère un diff du cache (et le marque comme récemment utilisé).
-    pub fn get(&mut self, key: &DiffCacheKey) -> Option<&FileDiff> {
-        self.cache.get(key)
+    pub fn get(&mut self, key: &DiffCacheKey) -> Option<Arc<FileDiff>> {
+        self.cache.get(key).cloned()
     }
 
     /// Insère un diff dans le cache.
-    pub fn put(&mut self, key: DiffCacheKey, diff: FileDiff) {
+    pub fn put(&mut self, key: DiffCacheKey, diff: impl Into<Arc<FileDiff>>) {
+        if let Some(previous) = self.cache.pop(&key) {
+            self.current_bytes = self
+                .current_bytes
+                .saturating_sub(previous.estimated_memory_bytes());
+        }
+
+        let diff = diff.into();
+        self.current_bytes = self
+            .current_bytes
+            .saturating_add(diff.estimated_memory_bytes());
         self.cache.put(key, diff);
+        self.enforce_limits();
+    }
+
+    fn enforce_limits(&mut self) {
+        while self.cache.len() > self.max_entries || self.current_bytes > self.max_bytes {
+            let Some((_, diff)) = self.cache.pop_lru() else {
+                self.current_bytes = 0;
+                break;
+            };
+            self.current_bytes = self
+                .current_bytes
+                .saturating_sub(diff.estimated_memory_bytes());
+        }
     }
 
     /// Vérifie si une clé est présente.
@@ -155,19 +189,19 @@ impl DiffCache {
     /// Appelé après stage/unstage/commit pour s'assurer que
     /// les diffs du working directory sont rechargés.
     pub fn clear_working_directory(&mut self) {
-        // LruCache ne permet pas de supprimer par prédicat facilement,
-        // donc on reconstruit le cache sans les entrées WD
-        let _capacity = self.cache.cap();
-        let entries: Vec<_> = self
+        let keys = self
             .cache
             .iter()
-            .filter(|(k, _)| !k.is_working_dir())
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+            .filter(|(key, _)| key.is_working_dir())
+            .map(|(key, _)| key.clone())
+            .collect::<Vec<_>>();
 
-        self.cache.clear();
-        for (k, v) in entries {
-            self.cache.put(k, v);
+        for key in keys {
+            if let Some(diff) = self.cache.pop(&key) {
+                self.current_bytes = self
+                    .current_bytes
+                    .saturating_sub(diff.estimated_memory_bytes());
+            }
         }
     }
 
@@ -180,7 +214,12 @@ impl DiffCache {
     /// Capacité du cache.
     #[cfg(test)]
     pub fn capacity(&self) -> usize {
-        self.cache.cap().get()
+        self.max_entries
+    }
+
+    #[cfg(test)]
+    pub fn memory_bytes(&self) -> usize {
+        self.current_bytes
     }
 }
 
@@ -320,5 +359,52 @@ mod tests {
     fn test_default_capacity() {
         let cache = DiffCache::default();
         assert_eq!(cache.capacity(), 50);
+    }
+
+    #[test]
+    fn test_cache_shares_diff_without_deep_clone() {
+        let mut cache = DiffCache::new(2);
+        let key = DiffCacheKey::new(make_oid(1), "large.rs");
+        let diff = Arc::new(FileDiff {
+            path: "large.rs".to_string(),
+            status: crate::git::diff::DiffStatus::Modified,
+            lines: vec![crate::git::diff::DiffLine {
+                line_type: crate::git::diff::DiffLineType::Context,
+                content: "contenu".repeat(100),
+                old_lineno: Some(1),
+                new_lineno: Some(1),
+            }],
+            additions: 0,
+            deletions: 0,
+            image_preview: None,
+        });
+
+        cache.put(key.clone(), diff.clone());
+        let cached = cache.get(&key).expect("diff en cache");
+
+        assert!(Arc::ptr_eq(&diff, &cached));
+    }
+
+    #[test]
+    fn test_cache_evicts_entries_above_memory_budget() {
+        let mut cache = DiffCache::with_limits(10, 256);
+        let diff = FileDiff {
+            path: "large.rs".to_string(),
+            status: crate::git::diff::DiffStatus::Modified,
+            lines: vec![crate::git::diff::DiffLine {
+                line_type: crate::git::diff::DiffLineType::Context,
+                content: "x".repeat(1_024),
+                old_lineno: Some(1),
+                new_lineno: Some(1),
+            }],
+            additions: 0,
+            deletions: 0,
+            image_preview: None,
+        };
+
+        cache.put(DiffCacheKey::new(make_oid(1), "large.rs"), diff);
+
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.memory_bytes(), 0);
     }
 }

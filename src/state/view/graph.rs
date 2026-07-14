@@ -5,6 +5,7 @@ use crate::git::diff::{DiffFile, FileDiff};
 use crate::git::graph::GraphRow;
 use crate::state::selection::ListSelection;
 use ratatui::widgets::ListState;
+use std::sync::Arc;
 
 /// Nombre d'items visuels par commit (1 ligne commit + 1 ligne connexion).
 const ITEMS_PER_COMMIT: usize = 2;
@@ -31,7 +32,7 @@ pub struct GraphViewState {
     /// Indique si les détails du commit sélectionné ont été chargés.
     pub commit_details_loaded: bool,
     /// Diff du fichier sélectionné.
-    pub selected_file_diff: Option<FileDiff>,
+    pub selected_file_diff: Option<Arc<FileDiff>>,
     /// Offset de scroll vertical dans le diff.
     pub diff_scroll_offset: usize,
     /// Offset de scroll horizontal dans le diff.
@@ -240,7 +241,7 @@ impl GraphViewState {
     }
 
     /// Définit le diff du fichier sélectionné et réinitialise les scrolls.
-    pub fn set_file_diff(&mut self, diff: Option<FileDiff>) {
+    pub fn set_file_diff(&mut self, diff: Option<Arc<FileDiff>>) {
         self.selected_file_diff = diff;
         // Réinitialiser tous les offsets de scroll
         self.diff_scroll_offset = 0;

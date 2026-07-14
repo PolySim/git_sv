@@ -63,6 +63,7 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
             theme,
         );
     }
+    image_state.clear();
 
     // Déterminer si on peut utiliser le mode side-by-side.
     let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
