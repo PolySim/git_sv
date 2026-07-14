@@ -12,6 +12,7 @@ pub mod custom_command;
 pub mod diff;
 pub mod discard;
 pub mod external_diff;
+pub mod github;
 pub mod graph;
 pub mod helpers;
 pub mod insights;

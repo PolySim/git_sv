@@ -262,6 +262,9 @@ impl EventHandler {
             crate::state::AppAction::Git(GitAction::Fetch) => {
                 self.handle_fetch_background()?;
             }
+            crate::state::AppAction::Git(GitAction::GithubPrStatus) => {
+                self.handle_github_pr_background()?;
+            }
             _ => {
                 // Actions normales sans background
                 self.dispatcher.dispatch(&mut self.state, action)?;
@@ -314,6 +317,13 @@ impl EventHandler {
         let repo_path = std::path::PathBuf::from(&self.state.repo_path);
         self.background.spawn_fetch(repo_path);
 
+        Ok(())
+    }
+
+    fn handle_github_pr_background(&mut self) -> Result<()> {
+        self.state.set_loading("Chargement de la PR GitHub...");
+        self.background
+            .spawn_github_pr(std::path::PathBuf::from(&self.state.repo_path));
         Ok(())
     }
 
@@ -409,6 +419,18 @@ impl EventHandler {
                 self.state
                     .set_flash_message(crate::utils::flash_error("fetch", err));
             }
+            BackgroundResult::GithubPr(Ok(crate::git::github::PullRequestLookup::Found(
+                pull_request,
+            ))) => {
+                self.state.ui.github_pull_request = Some(pull_request);
+            }
+            BackgroundResult::GithubPr(Ok(crate::git::github::PullRequestLookup::NotFound)) => {
+                self.state
+                    .set_flash_message("Aucune pull request pour la branche courante".to_string());
+            }
+            BackgroundResult::GithubPr(Err(error)) => self
+                .state
+                .set_flash_message(crate::utils::flash_error("GitHub PR", error)),
         }
         Ok(())
     }

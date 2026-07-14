@@ -309,6 +309,13 @@ fn append_graph_help(lines: &mut Vec<Line<'static>>) {
         ),
     ));
     lines.push(key_line(
+        keybindings::git_actions::GITHUB_PR,
+        text(
+            "Statut de la pull request GitHub",
+            "GitHub pull request status",
+        ),
+    ));
+    lines.push(key_line(
         "[ / ] / \\",
         text(
             "Bisect : bon / mauvais / terminer",

@@ -50,6 +50,11 @@ impl ActionHandler for GitHandler {
                 Ok(())
             }
             GitAction::OpenExternalDiff => handle_open_external_diff(ctx.state),
+            GitAction::GithubPrStatus => Ok(()),
+            GitAction::CloseGithubPrStatus => {
+                ctx.state.ui.github_pull_request = None;
+                Ok(())
+            }
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }

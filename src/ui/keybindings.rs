@@ -114,6 +114,8 @@ pub mod git_actions {
     pub const BISECT_RESET: &str = "\\";
     /// Afficher le diagnostic hooks, signature et sous-modules.
     pub const REPOSITORY_INSIGHTS: &str = "i";
+    /// Charger la pull request GitHub de la branche courante.
+    pub const GITHUB_PR: &str = "O";
 }
 
 /// Recherche et filtres.

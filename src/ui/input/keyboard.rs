@@ -73,6 +73,7 @@ fn configured_action(name: &str, state: &AppState) -> Option<AppAction> {
         "git.force_push" => Some(AppAction::Git(GitAction::ForcePush)),
         "git.pull" => Some(AppAction::Git(GitAction::Pull)),
         "git.fetch" => Some(AppAction::Git(GitAction::Fetch)),
+        "github.pr" => Some(AppAction::Git(GitAction::GithubPrStatus)),
         "graph.commit" if graph => Some(AppAction::Git(GitAction::CommitPrompt)),
         "graph.stash" if graph => Some(AppAction::Git(GitAction::StashPrompt)),
         "graph.merge" if graph => Some(AppAction::Git(GitAction::MergePrompt)),
@@ -137,6 +138,7 @@ fn has_blocking_modal(state: &AppState) -> bool {
             .as_ref()
             .is_some_and(|picker| picker.is_active)
         || state.ui.repository_insights.is_some()
+        || state.ui.github_pull_request.is_some()
         || state.ui.pending_confirmation.is_some()
 }
 
@@ -155,6 +157,15 @@ fn has_blocking_text_input(state: &AppState) -> bool {
 }
 
 fn map_modal_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    if state.ui.github_pull_request.is_some() {
+        return match key.code {
+            KeyCode::Esc | KeyCode::Char('O') => {
+                Some(AppAction::Git(GitAction::CloseGithubPrStatus))
+            }
+            _ => None,
+        };
+    }
+
     if state.ui.repository_insights.is_some() {
         return match key.code {
             KeyCode::Esc | KeyCode::Char('i') => {
@@ -635,6 +646,7 @@ fn map_graph_root_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('C') => Some(AppAction::Git(GitAction::CompareSelectedWithHead)),
         KeyCode::Char('X') => Some(AppAction::Git(GitAction::BisectStart)),
         KeyCode::Char('i') => Some(AppAction::Git(GitAction::RepositoryInsights)),
+        KeyCode::Char('O') => Some(AppAction::Git(GitAction::GithubPrStatus)),
         KeyCode::Char('[') if state.ui.is_bisecting => Some(AppAction::Git(GitAction::BisectGood)),
         KeyCode::Char(']') if state.ui.is_bisecting => Some(AppAction::Git(GitAction::BisectBad)),
         KeyCode::Char('\\') if state.ui.is_bisecting => {

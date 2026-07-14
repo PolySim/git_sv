@@ -10,6 +10,7 @@ pub mod detail_view;
 pub mod diff_view;
 pub mod files_view;
 pub mod filter_popup;
+pub mod github_pr;
 pub mod graph_view;
 pub mod help_bar;
 pub mod help_overlay;
@@ -144,6 +145,17 @@ fn render_conflicts_help_overlay(frame: &mut Frame) {
 }
 
 fn render_global_overlays(frame: &mut Frame, state: &AppState) {
+    if let Some(ref pull_request) = state.ui.github_pull_request {
+        github_pr::render(
+            frame,
+            github_pr::GithubPrRenderContext {
+                pull_request,
+                area: frame.area(),
+            },
+        );
+        return;
+    }
+
     if let Some(ref insights) = state.ui.repository_insights {
         repository_insights::render(
             frame,

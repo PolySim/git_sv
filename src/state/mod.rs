@@ -64,6 +64,9 @@ pub struct UiTransientState {
 
     /// Commande utilisateur à lancer après suspension de la TUI.
     pub pending_custom_command: Option<crate::config::CustomCommandConfig>,
+
+    /// Statut de la pull request GitHub affiché dans un overlay.
+    pub github_pull_request: Option<crate::git::github::GithubPullRequest>,
 }
 
 impl UiTransientState {
@@ -81,6 +84,7 @@ impl UiTransientState {
             repository_insights_scroll: 0,
             pending_external_diff: None,
             pending_custom_command: None,
+            github_pull_request: None,
         }
     }
 

@@ -36,6 +36,7 @@ git_sv/
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md
+│   ├── PERFORMANCE.md
 │   └── CONTRIBUTING.md
 ├── src/
 │   ├── main.rs
@@ -80,7 +81,7 @@ git_sv/
 ## Point d'entree
 
 - `src/main.rs` parse les arguments, ouvre le repository et choisit entre mode CLI et TUI.
-- `src/cli.rs` implemente les commandes non interactives : `log`, `branches`, `status`, `search`, `graph`.
+- `src/cli.rs` implemente les commandes non interactives : `log`, `branches`, `status`, `inspect`, `search`, `graph`.
 - `src/app.rs` initialise l'etat TUI, charge les donnees initiales et lance la boucle evenementielle.
 
 ### Flux global
@@ -104,6 +105,7 @@ Le dossier `src/git/` encapsule les operations metier sur git :
 ```text
 src/git/
 ├── mod.rs
+├── bisect.rs
 ├── repo.rs
 ├── graph.rs
 ├── graph/
@@ -112,6 +114,12 @@ src/git/
 ├── stash.rs
 ├── merge.rs
 ├── diff.rs
+├── external_diff.rs
+├── custom_command.rs
+├── github.rs
+├── insights.rs
+├── reflog.rs
+├── tag.rs
 ├── blame.rs
 ├── discard.rs
 ├── helpers.rs
@@ -255,7 +263,7 @@ EventHandler::run()
 
 ### Background jobs
 
-Les operations reseau potentiellement longues (`push`, `pull`, `fetch`) sont lancees via `src/handler/background.rs` avec spinner de chargement et restitution du resultat dans la boucle principale.
+Les operations reseau potentiellement longues (`push`, `pull`, `fetch` et lecture de PR GitHub) sont lancees via `src/handler/background.rs` avec spinner de chargement et restitution du resultat dans la boucle principale. Le rebase interactif, le difftool et les commandes utilisateur suspendent explicitement le terminal TUI avant de céder la main au processus externe.
 
 ---
 
@@ -342,10 +350,13 @@ Le watcher dans `src/watcher.rs` surveille par polling :
 - `.git/HEAD`
 - `.git/index`
 - `.git/refs/heads/`
+- `.git/packed-refs`
+- un snapshot des fichiers modifies du working tree
 
 Regles actuelles :
 
-- intervalle de verification : 2 secondes ;
+- métadonnées Git : 2 secondes ;
+- working tree : 5 secondes ;
 - debounce : 500 ms ;
 - si un changement est confirme, `state.dirty` est releve puis la boucle recharge les donnees.
 
@@ -358,6 +369,8 @@ Le watcher gere aussi les worktrees de maniere best-effort via `git rev-parse --
 `DiffCache` dans `src/state/cache.rs` stocke les diffs les plus recents via un LRU.
 
 - capacite actuelle : 50 entrees ;
+- budget mémoire estimé : 64 MiB ;
+- valeurs partagées avec `Arc<FileDiff>` pour éviter les copies ;
 - les diffs du working directory sont invalides lors d'un `mark_dirty()` ;
 - les diffs de commits restent en cache jusqu'a eviction.
 

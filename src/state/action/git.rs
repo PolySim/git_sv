@@ -58,6 +58,10 @@ pub enum GitAction {
     RepositoryInsightsDown,
     /// Ouvrir le fichier sélectionné dans le difftool Git.
     OpenExternalDiff,
+    /// Charger le statut de la pull request GitHub courante.
+    GithubPrStatus,
+    /// Fermer le statut de pull request.
+    CloseGithubPrStatus,
     /// Ouvrir le dialogue de reset
     ResetPrompt,
     /// Annuler le merge en cours

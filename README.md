@@ -34,6 +34,10 @@ En une phrase : `git_sv` cherche a apporter une experience proche d'un client Gi
 - recherche de commits et filtres sur le graphe ;
 - blame et resolution de conflits ;
 - operations distantes `push`, `pull`, `fetch` ;
+- tags, comparaison de références, bisect et rebase interactif ;
+- diagnostic des signatures, hooks et sous-modules ;
+- statut de pull request GitHub et checks via `gh` ;
+- raccourcis configurables et commandes personnalisées ;
 - rafraichissement automatique quand l'etat git change.
 
 ---
@@ -294,7 +298,7 @@ flèches, `home`, `end`, `pageup` et `pagedown`.
 Identifiants d'action disponibles :
 
 - globaux : `global.quit`, `global.refresh`, `global.help`, `global.copy`,
-  `git.push`, `git.force_push`, `git.pull`, `git.fetch` ;
+  `git.push`, `git.force_push`, `git.pull`, `git.fetch`, `github.pr` ;
 - vues : `view.graph`, `view.staging`, `view.branches`, `view.tree` ;
 - graphe : `graph.commit`, `graph.stash`, `graph.merge`, `graph.search`,
   `graph.filter`, `graph.blame`, `graph.cherry_pick`, `graph.reset`,
@@ -361,8 +365,13 @@ La variable `GIT_SV_REPO` contient le chemin du dépôt.
 | `X` | Démarrer un bisect avec le commit sélectionné comme commit connu bon |
 | `[` / `]` / `\` | Pendant un bisect : marquer bon / mauvais / terminer |
 | `i` | Inspecter la signature du commit, les hooks et les sous-modules |
+| `O` | Charger le statut, les reviews et les checks de la PR GitHub courante |
 | `e` | Depuis un fichier ou son diff, ouvrir `git difftool` (la TUI est suspendue proprement) |
 | `n` / `N` | Depuis le diff, aller au hunk suivant / précédent |
+
+Le statut de PR utilise `gh pr view` en arrière-plan, avec un délai maximal de
+20 secondes. Il nécessite que [GitHub CLI](https://cli.github.com/) soit installé
+et authentifié ; l'absence de PR ou de `gh` est signalée sans interrompre la TUI.
 
 ### Vue Staging
 
@@ -461,6 +470,8 @@ src/
 ```
 
 Pour le detail des modules et du flux d'execution, voir `docs/ARCHITECTURE.md`.
+Les limites de ressources et les mesures release sont documentées dans
+`docs/PERFORMANCE.md`.
 
 ---
 

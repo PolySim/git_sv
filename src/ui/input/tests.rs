@@ -293,6 +293,36 @@ fn test_configured_shortcut_and_custom_command_take_precedence() {
 }
 
 #[test]
+fn test_github_pr_shortcut_opens_and_closes_overlay() {
+    let mut state = create_test_state();
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('O'), KeyModifiers::SHIFT),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::GithubPrStatus))
+    );
+
+    state.ui.github_pull_request = Some(crate::git::github::GithubPullRequest {
+        number: 1,
+        title: "PR".to_string(),
+        state: "OPEN".to_string(),
+        is_draft: false,
+        review_decision: None,
+        merge_state_status: None,
+        url: "https://example.com/pr/1".to_string(),
+        additions: 1,
+        deletions: 0,
+        changed_files: 1,
+        checks: crate::git::github::CheckSummary::default(),
+    });
+    assert_eq!(
+        map_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state),
+        Some(AppAction::Git(GitAction::CloseGithubPrStatus))
+    );
+}
+
+#[test]
 fn test_project_tree_escape_closes_active_branch_comparison() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::ProjectTree;

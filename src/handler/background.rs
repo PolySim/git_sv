@@ -19,6 +19,8 @@ pub enum BackgroundResult {
     Pull(Result<MergeResult, String>),
     /// Fetch terminé
     Fetch(Result<FetchSuccess, String>),
+    /// Lecture du statut de pull request terminée.
+    GithubPr(Result<crate::git::github::PullRequestLookup, String>),
 }
 
 /// Gestionnaire des opérations en arrière-plan.
@@ -68,6 +70,15 @@ impl BackgroundRunner {
         });
     }
 
+    /// Charge la pull request de la branche courante en arrière-plan.
+    pub fn spawn_github_pr(&self, repo_path: PathBuf) {
+        let tx = self.sender.clone();
+        thread::spawn(move || {
+            let result = crate::git::github::current_pull_request(&repo_path);
+            let _ = tx.send(BackgroundResult::GithubPr(result));
+        });
+    }
+
     /// Vérifie si un résultat est disponible (non bloquant).
     pub fn try_recv(&self) -> Option<BackgroundResult> {
         self.receiver.try_recv().ok()
@@ -97,6 +108,8 @@ mod tests {
         let fetch = BackgroundResult::Fetch(Ok(FetchSuccess {
             remote_name: "origin".to_string(),
         }));
+        let github =
+            BackgroundResult::GithubPr(Ok(crate::git::github::PullRequestLookup::NotFound));
 
         assert!(matches!(push, BackgroundResult::Push(Ok(_))));
         assert!(matches!(
@@ -104,6 +117,7 @@ mod tests {
             BackgroundResult::Pull(Ok(MergeResult::UpToDate))
         ));
         assert!(matches!(fetch, BackgroundResult::Fetch(Ok(_))));
+        assert!(matches!(github, BackgroundResult::GithubPr(Ok(_))));
     }
 
     #[test]
