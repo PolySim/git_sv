@@ -248,6 +248,17 @@ fn append_graph_help(lines: &mut Vec<Line<'static>>) {
         text("Reset", "Reset"),
     ));
     lines.push(key_line(
+        keybindings::git_actions::INTERACTIVE_REBASE,
+        text(
+            "Rebase interactif depuis le commit",
+            "Interactive rebase from commit",
+        ),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::UNDO_REFLOG,
+        text("Annuler via le reflog", "Undo from reflog"),
+    ));
+    lines.push(key_line(
         keybindings::search::OPEN,
         text("Ouvrir la recherche", "Open search"),
     ));
@@ -311,6 +322,14 @@ fn append_staging_help(lines: &mut Vec<Line<'static>>) {
     lines.push(key_line(
         keybindings::staging::OPEN_DIFF,
         text("Ouvrir le diff", "Open diff"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::STAGE_HUNK,
+        text("Indexer le hunk dans le diff", "Stage hunk in diff"),
+    ));
+    lines.push(key_line(
+        keybindings::staging::STAGE_LINE,
+        text("Indexer la ligne dans le diff", "Stage line in diff"),
     ));
     lines.push(key_line(
         keybindings::staging::COMMIT_MESSAGE,

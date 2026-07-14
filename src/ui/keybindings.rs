@@ -94,6 +94,10 @@ pub mod git_actions {
     pub const ABORT_MERGE: &str = "A";
     /// Charger plus d'historique.
     pub const LOAD_MORE: &str = "L";
+    /// Rebase interactif depuis le commit sélectionné.
+    pub const INTERACTIVE_REBASE: &str = "I";
+    /// Annuler la dernière transition de HEAD via le reflog.
+    pub const UNDO_REFLOG: &str = "Z";
 }
 
 /// Recherche et filtres.
@@ -176,6 +180,14 @@ pub mod staging {
     pub const SWITCH_FOCUS: &[&str] = &["Tab"];
     /// Ouvrir le diff depuis la liste active.
     pub const OPEN_DIFF: &str = "Space";
+    /// Stage le hunk sélectionné dans le diff.
+    pub const STAGE_HUNK: &str = "s";
+    /// Stage la ligne sélectionnée dans le diff.
+    pub const STAGE_LINE: &str = "S";
+    /// Unstage le hunk sélectionné dans le diff.
+    pub const UNSTAGE_HUNK: &str = "u";
+    /// Unstage la ligne sélectionnée dans le diff.
+    pub const UNSTAGE_LINE: &str = "U";
 }
 
 /// Diff et affichage.

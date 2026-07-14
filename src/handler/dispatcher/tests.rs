@@ -172,6 +172,24 @@ fn test_dispatch_confirm_action() {
 }
 
 #[test]
+fn test_confirm_interactive_rebase_schedules_terminal_handoff() {
+    let (dir, repo) = setup_test_repo();
+    let oid = repo.repo.head().unwrap().target().unwrap();
+    let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+    state.ui.pending_confirmation = Some(
+        crate::ui::confirm_dialog::ConfirmAction::InteractiveRebase(oid),
+    );
+    let mut dispatcher = ActionDispatcher::new();
+
+    dispatcher
+        .dispatch(&mut state, AppAction::ConfirmAction)
+        .unwrap();
+
+    assert_eq!(state.ui.pending_interactive_rebase, Some(oid));
+    assert!(state.ui.pending_confirmation.is_none());
+}
+
+#[test]
 fn test_dispatch_cancel_action() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();

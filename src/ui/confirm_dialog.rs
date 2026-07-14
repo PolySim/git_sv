@@ -39,6 +39,10 @@ pub enum ConfirmAction {
     ResetMixed(git2::Oid),
     /// Reset hard vers un commit
     ResetHard(git2::Oid),
+    /// Ouvrir l'éditeur Git pour un rebase interactif.
+    InteractiveRebase(git2::Oid),
+    /// Revenir à l'ancien HEAD conservé par le reflog.
+    UndoLastOperation(git2::Oid, String),
 }
 
 impl ConfirmAction {
@@ -111,6 +115,24 @@ impl ConfirmAction {
                     format!("⚠ HARD RESET to {oid:.7} ?\n\n⚠ WARNING: All uncommitted changes will be LOST!"),
                 )
             }
+            ConfirmAction::InteractiveRebase(oid) => text_owned(
+                format!(
+                    "Ouvrir le rebase interactif a partir de {oid:.7} ?\nLa TUI sera suspendue pendant l'edition."
+                ),
+                format!(
+                    "Open interactive rebase from {oid:.7}?\nThe TUI will be suspended while editing."
+                ),
+            ),
+            ConfirmAction::UndoLastOperation(oid, description) => text_owned(
+                format!(
+                    "Annuler '{}' et revenir a {oid:.7} ?\nLes differences seront conservees dans le working tree.",
+                    description
+                ),
+                format!(
+                    "Undo '{}' and return to {oid:.7}?\nDifferences will remain in the working tree.",
+                    description
+                ),
+            ),
         }
     }
 
@@ -142,6 +164,13 @@ impl ConfirmAction {
             ConfirmAction::ResetMixed(_) => text("Confirmer le reset mixed", "Confirm mixed reset"),
             ConfirmAction::ResetHard(_) => {
                 text("⚠ Confirmer le reset hard", "⚠ Confirm hard reset")
+            }
+            ConfirmAction::InteractiveRebase(_) => text(
+                "Confirmer le rebase interactif",
+                "Confirm interactive rebase",
+            ),
+            ConfirmAction::UndoLastOperation(_, _) => {
+                text("Confirmer l'annulation", "Confirm undo")
             }
         }
     }

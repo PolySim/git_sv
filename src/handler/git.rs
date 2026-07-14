@@ -27,6 +27,8 @@ impl ActionHandler for GitHandler {
             GitAction::StashPrompt => handle_stash_prompt(ctx.state),
             GitAction::MergePrompt => handle_merge_prompt(ctx.state),
             GitAction::RebasePrompt => handle_rebase_prompt(ctx.state),
+            GitAction::InteractiveRebase => handle_interactive_rebase(ctx.state),
+            GitAction::UndoLastOperation => handle_undo_last_operation(ctx.state),
             GitAction::ComparePrompt => handle_compare_prompt(ctx.state),
             GitAction::ClearComparison => handle_clear_comparison(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
@@ -337,6 +339,39 @@ fn handle_rebase_prompt(state: &mut AppState) -> Result<()> {
         crate::state::BranchPickerMode::Rebase,
         "aucune autre branche disponible pour rebase",
     );
+    Ok(())
+}
+
+fn handle_interactive_rebase(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::Graph {
+        return Ok(());
+    }
+    if !state.repo.repo.statuses(None)?.is_empty() {
+        state.set_flash_message(flash_error_message(
+            "le rebase interactif nécessite un working tree propre",
+        ));
+        return Ok(());
+    }
+    let Some(oid) = state.selected_commit().map(|commit| commit.oid) else {
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
+        return Ok(());
+    };
+    state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::InteractiveRebase(
+        oid,
+    ));
+    Ok(())
+}
+
+fn handle_undo_last_operation(state: &mut AppState) -> Result<()> {
+    match crate::git::reflog::last_undo_target(&state.repo.repo) {
+        Ok(target) => {
+            state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::UndoLastOperation(
+                target.oid,
+                target.description,
+            ))
+        }
+        Err(error) => state.set_flash_message(flash_error("reflog", error)),
+    }
     Ok(())
 }
 

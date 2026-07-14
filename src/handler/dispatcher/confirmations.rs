@@ -145,6 +145,22 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                     }
                 }
             }
+            ConfirmAction::InteractiveRebase(oid) => {
+                ctx.state.ui.pending_interactive_rebase = Some(oid);
+            }
+            ConfirmAction::UndoLastOperation(oid, _) => {
+                match crate::git::reflog::undo_to(&ctx.state.repo.repo, oid) {
+                    Ok(()) => {
+                        ctx.state.set_flash_message(flash_success(format!(
+                            "Retour à {oid:.7} effectué, changements conservés"
+                        )));
+                        ctx.state.mark_dirty();
+                    }
+                    Err(error) => ctx
+                        .state
+                        .set_flash_message(flash_error("annulation reflog", error)),
+                }
+            }
         }
     }
     Ok(())

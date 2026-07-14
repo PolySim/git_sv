@@ -20,12 +20,11 @@ pub mod traits;
 pub use background::{BackgroundResult, BackgroundRunner};
 pub use dispatcher::ActionDispatcher;
 
-use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io::Stdout;
 use std::time::Duration;
 
 use crate::error::Result;
 use crate::state::AppState;
+use crate::terminal::TerminalSession;
 use crate::ui;
 use crate::ui::input::handle_input_with_timeout;
 use crate::watcher::GitWatcher;
@@ -54,7 +53,7 @@ impl EventHandler {
     }
 
     /// Lance la boucle événementielle principale.
-    pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    pub fn run(&mut self, session: &mut TerminalSession) -> Result<()> {
         // Rafraîchissement initial si nécessaire
         if self.state.dirty {
             self.refresh()?;
@@ -63,7 +62,7 @@ impl EventHandler {
         let mut needs_redraw = true;
         loop {
             if needs_redraw {
-                terminal.draw(|frame| {
+                session.terminal_mut().draw(|frame| {
                     ui::render(frame, &mut self.state);
                     if let Some(spinner) = &mut self.state.ui.loading_spinner {
                         crate::ui::loading::render_overlay(frame, spinner, frame.area());
@@ -92,6 +91,11 @@ impl EventHandler {
 
             if self.state.ui.should_quit {
                 break;
+            }
+
+            if let Some(oid) = self.state.ui.pending_interactive_rebase.take() {
+                self.run_interactive_rebase(session, oid)?;
+                needs_redraw = true;
             }
 
             // Vérifier les résultats d'opérations en arrière-plan
@@ -130,6 +134,54 @@ impl EventHandler {
             timeout = timeout.min(flash_delay);
         }
         timeout.max(Duration::from_millis(1))
+    }
+
+    fn run_interactive_rebase(
+        &mut self,
+        session: &mut TerminalSession,
+        oid: git2::Oid,
+    ) -> Result<()> {
+        session.suspend()?;
+        let repo_path = std::path::PathBuf::from(&self.state.repo_path);
+        let operation = crate::git::rebase::interactive_rebase_from(&repo_path, oid);
+        session.resume()?;
+        session.terminal_mut().clear()?;
+
+        match operation {
+            Ok(crate::git::rebase::InteractiveRebaseResult::Completed) => {
+                self.state
+                    .set_flash_message("Rebase interactif terminé ✓".to_string());
+                self.state.mark_dirty();
+            }
+            Ok(crate::git::rebase::InteractiveRebaseResult::Interrupted(files)) => {
+                self.state.set_flash_message(format!(
+                    "Rebase interrompu ({} conflit(s)) - résolution requise",
+                    files.len()
+                ));
+                if !files.is_empty() {
+                    let branch = self
+                        .state
+                        .current_branch
+                        .clone()
+                        .unwrap_or_else(|| "HEAD".to_string());
+                    self.state.open_conflicts(crate::state::ConflictsState::new(
+                        files,
+                        "rebase interactif".to_string(),
+                        branch,
+                        format!("{oid:.7}"),
+                    ));
+                }
+                self.state.mark_dirty();
+            }
+            Ok(crate::git::rebase::InteractiveRebaseResult::Cancelled) => {
+                self.state
+                    .set_flash_message("Rebase interactif annulé".to_string());
+            }
+            Err(error) => self
+                .state
+                .set_flash_message(crate::utils::flash_error("rebase interactif", error)),
+        }
+        Ok(())
     }
 
     /// Dispatche une action avec accès au background runner si nécessaire.

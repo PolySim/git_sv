@@ -515,6 +515,8 @@ fn map_graph_root_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('B') => Some(AppAction::Git(GitAction::OpenBlame)),
         KeyCode::Char('x') => Some(AppAction::Git(GitAction::CherryPick)),
         KeyCode::Char('R') => Some(AppAction::Git(GitAction::ResetPrompt)),
+        KeyCode::Char('I') => Some(AppAction::Git(GitAction::InteractiveRebase)),
+        KeyCode::Char('Z') => Some(AppAction::Git(GitAction::UndoLastOperation)),
         KeyCode::Char('A') if state.ui.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
         KeyCode::Char('L') => Some(AppAction::LoadMoreHistory),
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),

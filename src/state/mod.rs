@@ -46,6 +46,9 @@ pub struct UiTransientState {
 
     /// Flag pour quitter l'application.
     pub should_quit: bool,
+
+    /// Commit de départ d'un rebase interactif à lancer hors de la TUI.
+    pub pending_interactive_rebase: Option<git2::Oid>,
 }
 
 impl UiTransientState {
@@ -57,6 +60,7 @@ impl UiTransientState {
             loading_spinner: None,
             is_merging: false,
             should_quit: false,
+            pending_interactive_rebase: None,
         }
     }
 

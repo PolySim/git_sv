@@ -307,6 +307,8 @@ imposer un fond RGB different de celui du terminal :
 | `F` | Filtres |
 | `v` | Basculer le mode de diff quand le diff a le focus |
 | `L` | Charger plus d'historique |
+| `I` | Ouvrir un rebase interactif depuis le commit sélectionné |
+| `Z` | Annuler la dernière transition de `HEAD` via le reflog (changements conservés) |
 
 ### Vue Staging
 

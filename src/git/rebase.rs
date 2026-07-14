@@ -1,11 +1,71 @@
 //! Opérations de rebase entre branches.
 
+use std::path::Path;
 use std::process::Command;
 
-use git2::Repository;
+use git2::{Oid, Repository, RepositoryState};
 
 use crate::error::Result;
 use crate::git::conflict::{list_conflict_files, MergeResult};
+
+/// Résultat du retour d'un rebase interactif lancé dans l'éditeur utilisateur.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InteractiveRebaseResult {
+    Completed,
+    Interrupted(Vec<crate::git::conflict::ConflictFile>),
+    Cancelled,
+}
+
+/// Lance un rebase interactif incluant le commit sélectionné.
+///
+/// La commande hérite du terminal courant afin que Git ouvre l'éditeur
+/// configuré par l'utilisateur.
+pub fn interactive_rebase_from(
+    repo_path: &Path,
+    first_commit_oid: Oid,
+) -> Result<InteractiveRebaseResult> {
+    interactive_rebase_from_with_editor(repo_path, first_commit_oid, None)
+}
+
+fn interactive_rebase_from_with_editor(
+    repo_path: &Path,
+    first_commit_oid: Oid,
+    sequence_editor: Option<&str>,
+) -> Result<InteractiveRebaseResult> {
+    let repo = Repository::discover(repo_path)?;
+    let first_commit = repo.find_commit(first_commit_oid)?;
+    let mut command = Command::new("git");
+    command.arg("rebase").arg("--interactive");
+    if let Some(editor) = sequence_editor {
+        command.env("GIT_SEQUENCE_EDITOR", editor);
+    }
+    if first_commit.parent_count() == 0 {
+        command.arg("--root");
+    } else {
+        command.arg(first_commit.parent_id(0)?.to_string());
+    }
+
+    let status = command.current_dir(repo_path).status()?;
+    if status.success() {
+        return Ok(InteractiveRebaseResult::Completed);
+    }
+
+    let reopened = Repository::discover(repo_path)?;
+    if matches!(
+        reopened.state(),
+        RepositoryState::Rebase
+            | RepositoryState::RebaseInteractive
+            | RepositoryState::RebaseMerge
+            | RepositoryState::ApplyMailbox
+            | RepositoryState::ApplyMailboxOrRebase
+    ) {
+        return Ok(InteractiveRebaseResult::Interrupted(
+            list_conflict_files(&reopened).unwrap_or_default(),
+        ));
+    }
+
+    Ok(InteractiveRebaseResult::Cancelled)
+}
 
 /// Effectue un rebase de la branche courante sur une autre branche.
 pub fn rebase_branch_with_result(repo: &Repository, branch_name: &str) -> Result<MergeResult> {
@@ -107,5 +167,21 @@ mod tests {
         assert!(matches!(result, MergeResult::Conflicts(_)));
 
         repo.cleanup_state().unwrap();
+    }
+
+    #[test]
+    fn test_interactive_rebase_can_use_configured_sequence_editor() {
+        let (directory, repo) = create_test_repo();
+        commit_file(&repo, "file.txt", "base\n", "base");
+        let selected = commit_file(&repo, "file.txt", "changed\n", "changed");
+
+        let result =
+            interactive_rebase_from_with_editor(directory.path(), selected, Some("true")).unwrap();
+
+        assert_eq!(result, InteractiveRebaseResult::Completed);
+        assert_eq!(
+            repo.head().unwrap().peel_to_commit().unwrap().summary(),
+            Some("changed")
+        );
     }
 }

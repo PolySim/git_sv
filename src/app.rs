@@ -32,7 +32,7 @@ impl App {
         self.state.image_preview.initialize();
 
         let mut handler = crate::handler::EventHandler::new(self.state)?;
-        let result = handler.run(session.terminal_mut());
+        let result = handler.run(&mut session);
 
         match (result, session.restore()) {
             (Ok(()), Ok(())) => Ok(()),

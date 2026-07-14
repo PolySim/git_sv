@@ -88,6 +88,29 @@ fn test_graph_question_mark_opens_help() {
 }
 
 #[test]
+fn test_graph_history_safety_shortcuts() {
+    let state = create_test_state();
+
+    let interactive_rebase = map_key(
+        KeyEvent::new(KeyCode::Char('I'), KeyModifiers::SHIFT),
+        &state,
+    );
+    let undo_reflog = map_key(
+        KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::SHIFT),
+        &state,
+    );
+
+    assert_eq!(
+        interactive_rebase,
+        Some(AppAction::Git(GitAction::InteractiveRebase))
+    );
+    assert_eq!(
+        undo_reflog,
+        Some(AppAction::Git(GitAction::UndoLastOperation))
+    );
+}
+
+#[test]
 fn test_project_tree_c_opens_branch_comparison_picker() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::ProjectTree;

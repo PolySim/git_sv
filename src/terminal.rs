@@ -48,6 +48,22 @@ impl TerminalSession {
         }
         Ok(())
     }
+
+    /// Suspend temporairement la TUI pour céder le terminal à une commande.
+    pub fn suspend(&mut self) -> Result<()> {
+        self.restore()
+    }
+
+    /// Réactive la TUI après l'exécution d'une commande interactive.
+    pub fn resume(&mut self) -> Result<()> {
+        if self.restored {
+            let (terminal, keyboard_enhancement_enabled) = setup_terminal()?;
+            self.terminal = terminal;
+            self.keyboard_enhancement_enabled = keyboard_enhancement_enabled;
+            self.restored = false;
+        }
+        Ok(())
+    }
 }
 
 impl Drop for TerminalSession {

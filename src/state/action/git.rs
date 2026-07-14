@@ -28,6 +28,10 @@ pub enum GitAction {
     MergePrompt,
     /// Ouvrir le dialogue de rebase
     RebasePrompt,
+    /// Lancer un rebase interactif depuis le commit sélectionné.
+    InteractiveRebase,
+    /// Annuler la dernière transition de HEAD à partir du reflog.
+    UndoLastOperation,
     /// Ouvrir le selecteur de branche pour une comparaison d'historique
     ComparePrompt,
     /// Quitter la comparaison d'historique active
