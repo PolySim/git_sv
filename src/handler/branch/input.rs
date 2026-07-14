@@ -85,6 +85,15 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                 Err(e) => state.set_flash_message(flash_error_message(e)),
             }
         }
+        Some(InputAction::CreateTag(target)) => {
+            match crate::git::tag::create_tag(&state.repo.repo, &input, target) {
+                Ok(()) => {
+                    state.set_flash_message(flash_success(format!("Tag '{}' créé", input)));
+                    state.mark_dirty();
+                }
+                Err(error) => state.set_flash_message(flash_error("création tag", error)),
+            }
+        }
         Some(InputAction::RenameBranch) => {
             if let Some(branch) = state.branches_view_state.selected_branch() {
                 let old_name = branch.name.clone();

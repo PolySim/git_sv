@@ -3,6 +3,7 @@
 //! Ce module expose tous les sous-modules git et les types
 //! principaux nécessaires aux autres modules de l'application.
 
+pub mod bisect;
 pub mod blame;
 pub mod branch;
 pub mod commit;
@@ -20,6 +21,7 @@ pub mod repo;
 pub mod search;
 pub mod staging;
 pub mod stash;
+pub mod tag;
 pub mod worktree;
 
 pub use repo::GitRepo;

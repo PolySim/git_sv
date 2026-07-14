@@ -143,6 +143,10 @@ fn render_conflicts_help_overlay(frame: &mut Frame) {
 }
 
 fn render_global_overlays(frame: &mut Frame, state: &AppState) {
+    if state.branches_view_state.focus == crate::state::BranchesFocus::Input {
+        branches_view::render_input_overlay(frame, &state.branches_view_state, frame.area());
+    }
+
     if let Some(ref picker) = state.merge_picker {
         if picker.is_active {
             merge_picker::render(

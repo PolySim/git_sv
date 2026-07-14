@@ -28,6 +28,7 @@ pub enum BranchesFocus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputAction {
     CreateBranch,
+    CreateTag(git2::Oid),
     CreateWorktree,
     RenameBranch,
     SaveStash,

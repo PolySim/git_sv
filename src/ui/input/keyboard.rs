@@ -57,8 +57,7 @@ fn has_blocking_text_input(state: &AppState) -> bool {
         || state.filters.filter_popup.is_open
         || (state.view_mode == ViewMode::Staging
             && state.staging_state.focus == StagingFocus::CommitMessage)
-        || (state.view_mode == ViewMode::Branches
-            && state.branches_view_state.focus == BranchesFocus::Input)
+        || state.branches_view_state.focus == BranchesFocus::Input
         || (state.view_mode == ViewMode::Conflicts
             && state
                 .conflicts_state
@@ -109,9 +108,7 @@ fn map_text_input_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return map_staging_commit_input_key(key);
     }
 
-    if state.view_mode == ViewMode::Branches
-        && state.branches_view_state.focus == BranchesFocus::Input
-    {
+    if state.branches_view_state.focus == BranchesFocus::Input {
         return map_branches_input_key(key);
     }
 
@@ -517,6 +514,15 @@ fn map_graph_root_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('R') => Some(AppAction::Git(GitAction::ResetPrompt)),
         KeyCode::Char('I') => Some(AppAction::Git(GitAction::InteractiveRebase)),
         KeyCode::Char('Z') => Some(AppAction::Git(GitAction::UndoLastOperation)),
+        KeyCode::Char('t') => Some(AppAction::Git(GitAction::CreateTag)),
+        KeyCode::Char('T') => Some(AppAction::Git(GitAction::DeleteTag)),
+        KeyCode::Char('C') => Some(AppAction::Git(GitAction::CompareSelectedWithHead)),
+        KeyCode::Char('X') => Some(AppAction::Git(GitAction::BisectStart)),
+        KeyCode::Char('[') if state.ui.is_bisecting => Some(AppAction::Git(GitAction::BisectGood)),
+        KeyCode::Char(']') if state.ui.is_bisecting => Some(AppAction::Git(GitAction::BisectBad)),
+        KeyCode::Char('\\') if state.ui.is_bisecting => {
+            Some(AppAction::Git(GitAction::BisectReset))
+        }
         KeyCode::Char('A') if state.ui.is_merging => Some(AppAction::Git(GitAction::AbortMerge)),
         KeyCode::Char('L') => Some(AppAction::LoadMoreHistory),
         KeyCode::Char('?') => Some(AppAction::ToggleHelp),

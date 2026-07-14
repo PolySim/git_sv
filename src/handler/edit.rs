@@ -4,7 +4,7 @@ use super::traits::{ActionHandler, HandlerContext};
 use crate::error::Result;
 use crate::state::action::EditAction;
 use crate::state::text_edit::TextSnapshot;
-use crate::state::{selection_range, AppState, BranchesFocus, TextEditHistory, ViewMode};
+use crate::state::{selection_range, AppState, BranchesFocus, TextEditHistory};
 
 /// Buffer de texte éditable avec curseur.
 struct TextBuffer<'a> {
@@ -369,9 +369,7 @@ impl ActionHandler for EditHandler {
 /// Détermine le buffer actif selon le contexte de l'application.
 fn get_active_buffer(state: &mut AppState) -> Option<TextBuffer<'_>> {
     // Priorité 1 : Vue Branches en mode Input
-    if state.view_mode == ViewMode::Branches
-        && state.branches_view_state.focus == BranchesFocus::Input
-    {
+    if state.branches_view_state.focus == BranchesFocus::Input {
         return Some(TextBuffer::new(
             &mut state.branches_view_state.input_text,
             &mut state.branches_view_state.input_cursor,
@@ -432,7 +430,7 @@ pub(super) fn edit_text(
 mod tests {
     use super::*;
     use crate::git::repo::GitRepo;
-    use crate::state::InputAction;
+    use crate::state::{InputAction, ViewMode};
     use tempfile::TempDir;
 
     fn setup_test_repo() -> (TempDir, GitRepo) {

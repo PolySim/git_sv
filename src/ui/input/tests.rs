@@ -124,6 +124,75 @@ fn test_project_tree_c_opens_branch_comparison_picker() {
 }
 
 #[test]
+fn test_graph_reference_shortcuts() {
+    let state = create_test_state();
+
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::CreateTag))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('T'), KeyModifiers::SHIFT),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::DeleteTag))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::CompareSelectedWithHead))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('X'), KeyModifiers::SHIFT),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::BisectStart))
+    );
+}
+
+#[test]
+fn test_graph_bisect_shortcuts_are_active_during_bisect() {
+    let mut state = create_test_state();
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+            &state
+        ),
+        None
+    );
+
+    state.ui.is_bisecting = true;
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::BisectGood))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::BisectBad))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::NONE),
+            &state,
+        ),
+        Some(AppAction::Git(GitAction::BisectReset))
+    );
+}
+
+#[test]
 fn test_project_tree_escape_closes_active_branch_comparison() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::ProjectTree;

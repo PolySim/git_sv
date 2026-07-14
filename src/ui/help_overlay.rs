@@ -259,6 +259,29 @@ fn append_graph_help(lines: &mut Vec<Line<'static>>) {
         text("Annuler via le reflog", "Undo from reflog"),
     ));
     lines.push(key_line(
+        keybindings::git_actions::CREATE_TAG,
+        text("Creer un tag sur le commit", "Create tag on commit"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::DELETE_TAG,
+        text("Supprimer le tag du commit", "Delete commit tag"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::COMPARE_HEAD,
+        text("Comparer le commit a HEAD", "Compare commit with HEAD"),
+    ));
+    lines.push(key_line(
+        keybindings::git_actions::BISECT_START,
+        text("Demarrer un bisect", "Start bisect"),
+    ));
+    lines.push(key_line(
+        "[ / ] / \\",
+        text(
+            "Bisect : bon / mauvais / terminer",
+            "Bisect: good / bad / reset",
+        ),
+    ));
+    lines.push(key_line(
         keybindings::search::OPEN,
         text("Ouvrir la recherche", "Open search"),
     ));

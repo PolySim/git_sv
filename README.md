@@ -309,6 +309,10 @@ imposer un fond RGB different de celui du terminal :
 | `L` | Charger plus d'historique |
 | `I` | Ouvrir un rebase interactif depuis le commit sélectionné |
 | `Z` | Annuler la dernière transition de `HEAD` via le reflog (changements conservés) |
+| `t` / `T` | Créer / supprimer un tag sur le commit sélectionné |
+| `C` | Comparer le commit sélectionné à `HEAD` (commits et statistiques du diff) |
+| `X` | Démarrer un bisect avec le commit sélectionné comme commit connu bon |
+| `[` / `]` / `\` | Pendant un bisect : marquer bon / mauvais / terminer |
 
 ### Vue Staging
 

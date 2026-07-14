@@ -98,6 +98,20 @@ pub mod git_actions {
     pub const INTERACTIVE_REBASE: &str = "I";
     /// Annuler la dernière transition de HEAD via le reflog.
     pub const UNDO_REFLOG: &str = "Z";
+    /// Créer un tag sur le commit sélectionné.
+    pub const CREATE_TAG: &str = "t";
+    /// Supprimer un tag du commit sélectionné.
+    pub const DELETE_TAG: &str = "T";
+    /// Comparer le commit sélectionné à HEAD.
+    pub const COMPARE_HEAD: &str = "C";
+    /// Démarrer un bisect depuis le commit sélectionné.
+    pub const BISECT_START: &str = "X";
+    /// Marquer le commit courant comme bon pendant un bisect.
+    pub const BISECT_GOOD: &str = "[";
+    /// Marquer le commit courant comme mauvais pendant un bisect.
+    pub const BISECT_BAD: &str = "]";
+    /// Terminer le bisect.
+    pub const BISECT_RESET: &str = "\\";
 }
 
 /// Recherche et filtres.

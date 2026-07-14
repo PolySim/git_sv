@@ -36,6 +36,16 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                 }
                 ctx.state.mark_dirty();
             }
+            ConfirmAction::TagDelete(name) => {
+                if let Err(error) = crate::git::tag::delete_tag(&ctx.state.repo.repo, &name) {
+                    ctx.state
+                        .set_flash_message(flash_error("suppression tag", error));
+                } else {
+                    ctx.state
+                        .set_flash_message(flash_success(format!("Tag '{}' supprimé", name)));
+                    ctx.state.mark_dirty();
+                }
+            }
             ConfirmAction::AbortMerge => {
                 if let Err(e) = crate::git::conflict::abort_merge(&ctx.state.repo.repo) {
                     ctx.state.set_flash_message(flash_error_message(e));
@@ -159,6 +169,18 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                     Err(error) => ctx
                         .state
                         .set_flash_message(flash_error("annulation reflog", error)),
+                }
+            }
+            ConfirmAction::BisectStart { good, bad } => {
+                match crate::git::bisect::start(&ctx.state.repo.repo, good, bad) {
+                    Ok(message) => {
+                        ctx.state.ui.is_bisecting = true;
+                        ctx.state.set_flash_message(flash_success(message));
+                        ctx.state.mark_dirty();
+                    }
+                    Err(error) => ctx
+                        .state
+                        .set_flash_message(flash_error("démarrage bisect", error)),
                 }
             }
         }

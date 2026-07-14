@@ -467,11 +467,6 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
 
     // Help bar contextuelle.
     render_branches_help(frame, &state.section, &state.focus, layout.help_bar);
-
-    // Overlay d'input si actif.
-    if state.focus == BranchesFocus::Input {
-        render_input_overlay(frame, state, frame.area());
-    }
 }
 
 /// Rend les onglets de la vue branches.
@@ -739,13 +734,14 @@ fn render_branches_help(
 }
 
 /// Rend l'overlay d'input.
-fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
+pub fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: Rect) {
     let theme = current_theme();
     let popup = centered_rect(50, 20, area);
     frame.render_widget(Clear, popup);
 
     let title = match state.input_action {
         Some(InputAction::CreateBranch) => text(" Nouvelle branche ", " New branch "),
+        Some(InputAction::CreateTag(_)) => text(" Nouveau tag ", " New tag "),
         Some(InputAction::RenameBranch) => text(" Renommer la branche ", " Rename branch "),
         Some(InputAction::CreateWorktree) => text(
             " Nouveau worktree: nom chemin [branche] ",

@@ -29,8 +29,15 @@ impl ActionHandler for GitHandler {
             GitAction::RebasePrompt => handle_rebase_prompt(ctx.state),
             GitAction::InteractiveRebase => handle_interactive_rebase(ctx.state),
             GitAction::UndoLastOperation => handle_undo_last_operation(ctx.state),
+            GitAction::CreateTag => handle_create_tag(ctx.state),
+            GitAction::DeleteTag => handle_delete_tag(ctx.state),
             GitAction::ComparePrompt => handle_compare_prompt(ctx.state),
             GitAction::ClearComparison => handle_clear_comparison(ctx.state),
+            GitAction::CompareSelectedWithHead => handle_compare_selected_with_head(ctx.state),
+            GitAction::BisectStart => handle_bisect_start(ctx.state),
+            GitAction::BisectGood => handle_bisect_good(ctx.state),
+            GitAction::BisectBad => handle_bisect_bad(ctx.state),
+            GitAction::BisectReset => handle_bisect_reset(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
@@ -375,6 +382,41 @@ fn handle_undo_last_operation(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
+fn handle_create_tag(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::Graph {
+        return Ok(());
+    }
+    let Some(oid) = state.selected_commit().map(|commit| commit.oid) else {
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
+        return Ok(());
+    };
+
+    state.branches_view_state.focus = crate::state::BranchesFocus::Input;
+    state.branches_view_state.input_action = Some(crate::state::InputAction::CreateTag(oid));
+    state.branches_view_state.input_text.clear();
+    state.branches_view_state.reset_input_editing();
+    Ok(())
+}
+
+fn handle_delete_tag(state: &mut AppState) -> Result<()> {
+    let tag = state.selected_commit().and_then(|commit| {
+        commit
+            .refs
+            .iter()
+            .find(|reference| reference.ref_type == crate::git::graph::RefType::Tag)
+            .map(|reference| reference.name.clone())
+    });
+    match tag {
+        Some(tag) => {
+            state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::TagDelete(tag))
+        }
+        None => state.set_flash_message(flash_error_message(
+            "aucun tag présent sur le commit sélectionné",
+        )),
+    }
+    Ok(())
+}
+
 fn handle_compare_prompt(state: &mut AppState) -> Result<()> {
     if state.view_mode != ViewMode::ProjectTree {
         return Ok(());
@@ -385,6 +427,120 @@ fn handle_compare_prompt(state: &mut AppState) -> Result<()> {
         crate::state::BranchPickerMode::Compare,
         "aucune autre branche disponible pour comparaison",
     );
+    Ok(())
+}
+
+fn handle_compare_selected_with_head(state: &mut AppState) -> Result<()> {
+    let Some(selected_oid) = state.selected_commit().map(|commit| commit.oid) else {
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
+        return Ok(());
+    };
+    let message = {
+        let head = state.repo.repo.head()?.peel_to_commit()?;
+        let selected = state.repo.repo.find_commit(selected_oid)?;
+        let (ahead, behind) = state
+            .repo
+            .repo
+            .graph_ahead_behind(head.id(), selected.id())?;
+        let head_tree = head.tree()?;
+        let selected_tree = selected.tree()?;
+        let diff =
+            state
+                .repo
+                .repo
+                .diff_tree_to_tree(Some(&selected_tree), Some(&head_tree), None)?;
+        let files = diff.deltas().len();
+        let stats = diff.stats()?;
+        format!(
+            "HEAD ↔ {selected_oid:.7} · +{ahead}/-{behind} commits · {files} fichiers (+{}/-{})",
+            stats.insertions(),
+            stats.deletions()
+        )
+    };
+    state.set_flash_message(message);
+    Ok(())
+}
+
+fn handle_bisect_start(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::Graph {
+        return Ok(());
+    }
+    if state.ui.is_bisecting {
+        state.set_flash_message(flash_error_message("un bisect est déjà en cours"));
+        return Ok(());
+    }
+    if !state.repo.repo.statuses(None)?.is_empty() {
+        state.set_flash_message(flash_error_message(
+            "le bisect nécessite un working tree propre",
+        ));
+        return Ok(());
+    }
+
+    let Some(good) = state.selected_commit().map(|commit| commit.oid) else {
+        state.set_flash_message(flash_error_message("aucun commit sélectionné"));
+        return Ok(());
+    };
+    let bad = state.repo.repo.head()?.peel_to_commit()?.id();
+    if good == bad {
+        state.set_flash_message(flash_error_message(
+            "sélectionnez un ancien commit connu comme bon",
+        ));
+        return Ok(());
+    }
+    if !state.repo.repo.graph_descendant_of(bad, good)? {
+        state.set_flash_message(flash_error_message(
+            "le commit bon doit être un ancêtre de HEAD",
+        ));
+        return Ok(());
+    }
+
+    state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::BisectStart { good, bad });
+    Ok(())
+}
+
+fn handle_bisect_good(state: &mut AppState) -> Result<()> {
+    update_bisect(state, true)
+}
+
+fn handle_bisect_bad(state: &mut AppState) -> Result<()> {
+    update_bisect(state, false)
+}
+
+fn update_bisect(state: &mut AppState, is_good: bool) -> Result<()> {
+    if !state.ui.is_bisecting {
+        state.set_flash_message(flash_error_message("aucun bisect en cours"));
+        return Ok(());
+    }
+
+    let result = if is_good {
+        crate::git::bisect::mark_good(&state.repo.repo)
+    } else {
+        crate::git::bisect::mark_bad(&state.repo.repo)
+    };
+    match result {
+        Ok(message) => {
+            state.set_flash_message(flash_success(message));
+            state.mark_dirty();
+        }
+        Err(error) => state.set_flash_message(flash_error("bisect", error)),
+    }
+    Ok(())
+}
+
+fn handle_bisect_reset(state: &mut AppState) -> Result<()> {
+    if !state.ui.is_bisecting {
+        state.set_flash_message(flash_error_message("aucun bisect en cours"));
+        return Ok(());
+    }
+
+    match crate::git::bisect::reset(&state.repo.repo) {
+        Ok(message) => {
+            state.ui.is_bisecting = false;
+            state.set_flash_message(flash_success(message));
+            state.mark_dirty();
+        }
+        Err(error) => state.set_flash_message(flash_error("arrêt bisect", error)),
+    }
     Ok(())
 }
 
@@ -402,6 +558,11 @@ fn open_branch_picker(
                 .map(|branch| branch.name.clone())
                 .collect::<Vec<_>>();
             branch_names.extend(remote.into_iter().map(|branch| branch.name));
+            if mode == crate::state::BranchPickerMode::Compare {
+                if let Ok(tags) = crate::git::tag::list_tags(&state.repo.repo) {
+                    branch_names.extend(tags.into_iter().map(|tag| format!("refs/tags/{tag}")));
+                }
+            }
 
             if branch_names.is_empty() {
                 state.set_flash_message(flash_error_message(empty_message));

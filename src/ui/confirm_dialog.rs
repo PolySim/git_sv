@@ -21,6 +21,8 @@ pub struct ConfirmDialogRenderContext<'a> {
 pub enum ConfirmAction {
     /// Supprimer une branche
     BranchDelete(String),
+    /// Supprimer un tag.
+    TagDelete(String),
     /// Supprimer un worktree
     WorktreeRemove(String),
     /// Supprimer un stash
@@ -43,6 +45,8 @@ pub enum ConfirmAction {
     InteractiveRebase(git2::Oid),
     /// Revenir à l'ancien HEAD conservé par le reflog.
     UndoLastOperation(git2::Oid, String),
+    /// Démarrer un bisect entre un commit bon et HEAD.
+    BisectStart { good: git2::Oid, bad: git2::Oid },
 }
 
 impl ConfirmAction {
@@ -55,6 +59,10 @@ impl ConfirmAction {
                     format!("Are you sure you want to delete branch '{}' ?", name),
                 )
             }
+            ConfirmAction::TagDelete(name) => text_owned(
+                format!("Supprimer le tag '{}' ?", name),
+                format!("Delete tag '{}' ?", name),
+            ),
             ConfirmAction::WorktreeRemove(name) => {
                 text_owned(
                     format!("Etes-vous sur de vouloir supprimer le worktree '{}' ?", name),
@@ -133,6 +141,14 @@ impl ConfirmAction {
                     description
                 ),
             ),
+            ConfirmAction::BisectStart { good, bad } => text_owned(
+                format!(
+                    "Démarrer un bisect entre le commit bon {good:.7} et HEAD {bad:.7} ?\nLe working tree changera de commit pendant la recherche."
+                ),
+                format!(
+                    "Start bisect between good commit {good:.7} and HEAD {bad:.7}?\nThe working tree will change commits during the search."
+                ),
+            ),
         }
     }
 
@@ -141,6 +157,9 @@ impl ConfirmAction {
         match self {
             ConfirmAction::BranchDelete(_) => {
                 text("Confirmer suppression branche", "Confirm branch deletion")
+            }
+            ConfirmAction::TagDelete(_) => {
+                text("Confirmer suppression tag", "Confirm tag deletion")
             }
             ConfirmAction::WorktreeRemove(_) => text(
                 "Confirmer suppression worktree",
@@ -172,6 +191,7 @@ impl ConfirmAction {
             ConfirmAction::UndoLastOperation(_, _) => {
                 text("Confirmer l'annulation", "Confirm undo")
             }
+            ConfirmAction::BisectStart { .. } => text("Confirmer le bisect", "Confirm bisect"),
         }
     }
 }

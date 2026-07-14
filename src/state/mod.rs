@@ -44,6 +44,9 @@ pub struct UiTransientState {
     /// Indique si un merge est en cours (MERGE_HEAD existe).
     pub is_merging: bool,
 
+    /// Indique si une recherche bisect est en cours.
+    pub is_bisecting: bool,
+
     /// Flag pour quitter l'application.
     pub should_quit: bool,
 
@@ -59,6 +62,7 @@ impl UiTransientState {
             pending_confirmation: None,
             loading_spinner: None,
             is_merging: false,
+            is_bisecting: false,
             should_quit: false,
             pending_interactive_rebase: None,
         }
@@ -535,6 +539,7 @@ impl AppState {
         }
 
         self.ui.is_merging = crate::git::conflict::is_merging(&self.repo.repo);
+        self.ui.is_bisecting = crate::git::bisect::is_active(&self.repo.repo);
         self.dirty = false;
 
         Ok(())
