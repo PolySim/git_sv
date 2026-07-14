@@ -13,7 +13,8 @@ use crate::state::action::StagingAction;
 use self::commit_ops::{handle_cancel_commit, handle_confirm_commit, handle_start_commit};
 use self::file_ops::{
     handle_discard_all, handle_discard_file, handle_stage_all, handle_stage_file,
-    handle_unstage_all, handle_unstage_file,
+    handle_stage_hunk, handle_stage_line, handle_unstage_all, handle_unstage_file,
+    handle_unstage_hunk, handle_unstage_line,
 };
 use self::focus::{
     handle_focus_diff, handle_focus_staged, handle_focus_unstaged, handle_select_staged,
@@ -35,6 +36,10 @@ impl ActionHandler for StagingHandler {
             StagingAction::UnstageFile => handle_unstage_file(ctx.state),
             StagingAction::StageAll => handle_stage_all(ctx.state),
             StagingAction::UnstageAll => handle_unstage_all(ctx.state),
+            StagingAction::StageHunk => handle_stage_hunk(ctx.state),
+            StagingAction::UnstageHunk => handle_unstage_hunk(ctx.state),
+            StagingAction::StageLine => handle_stage_line(ctx.state),
+            StagingAction::UnstageLine => handle_unstage_line(ctx.state),
             StagingAction::DiscardFile => handle_discard_file(ctx.state),
             StagingAction::DiscardAll => handle_discard_all(ctx.state),
             StagingAction::StartCommitMessage => handle_start_commit(ctx.state),

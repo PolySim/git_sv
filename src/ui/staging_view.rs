@@ -49,6 +49,7 @@ struct CommitInputRenderContext<'a> {
 
 struct StagingHelpRenderContext<'a> {
     focus: &'a StagingFocus,
+    last_file_focus: StagingFocus,
     is_merging: bool,
     area: Rect,
 }
@@ -130,6 +131,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
             view_mode: staging_state.diff_view_mode,
             is_fullscreen: false,
             image_state,
+            selected_line: Some(staging_state.diff_selected_line),
         },
     );
 
@@ -153,6 +155,7 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         frame,
         StagingHelpRenderContext {
             focus: &staging_state.focus,
+            last_file_focus: staging_state.last_file_focus,
             is_merging,
             area: layout.help_bar,
         },
@@ -352,6 +355,7 @@ fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
 fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
     let StagingHelpRenderContext {
         focus,
+        last_file_focus,
         is_merging,
         area,
     } = ctx;
@@ -373,13 +377,28 @@ fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
             KeyHint::new("Tab", text("non indexes", "unstaged")),
             KeyHint::new("c", text("commit", "commit")),
         ],
-        StagingFocus::Diff => vec![
-            KeyHint::new("j/k", text("defiler", "scroll")),
-            KeyHint::new("h/l", text("horizontal", "horizontal")),
-            KeyHint::new("v", text("changer vue", "change view")),
-            KeyHint::new("Tab/Echap", text("retour liste", "back to list")),
-            KeyHint::new("c", text("commit", "commit")),
-        ],
+        StagingFocus::Diff => {
+            let mut hints = vec![
+                KeyHint::new("j/k", text("selectionner ligne", "select line")),
+                KeyHint::new("h/l", text("horizontal", "horizontal")),
+            ];
+            if last_file_focus == StagingFocus::Unstaged {
+                hints.extend([
+                    KeyHint::new("s", text("indexer hunk", "stage hunk")),
+                    KeyHint::new("S", text("indexer ligne", "stage line")),
+                ]);
+            } else if last_file_focus == StagingFocus::Staged {
+                hints.extend([
+                    KeyHint::new("u", text("desindexer hunk", "unstage hunk")),
+                    KeyHint::new("U", text("desindexer ligne", "unstage line")),
+                ]);
+            }
+            hints.push(KeyHint::new(
+                "Tab/Echap",
+                text("retour liste", "back to list"),
+            ));
+            hints
+        }
         StagingFocus::CommitMessage => vec![
             KeyHint::new("Entree", text("confirmer", "confirm")),
             KeyHint::new("Echap", text("annuler", "cancel")),

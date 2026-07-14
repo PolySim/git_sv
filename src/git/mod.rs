@@ -17,6 +17,7 @@ pub mod rebase;
 pub mod remote;
 pub mod repo;
 pub mod search;
+pub mod staging;
 pub mod stash;
 pub mod worktree;
 

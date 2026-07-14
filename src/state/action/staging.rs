@@ -10,6 +10,14 @@ pub enum StagingAction {
     StageAll,
     /// Retirer tous les fichiers
     UnstageAll,
+    /// Ajouter le hunk sélectionné à l'index.
+    StageHunk,
+    /// Retirer le hunk sélectionné de l'index.
+    UnstageHunk,
+    /// Ajouter la ligne sélectionnée à l'index.
+    StageLine,
+    /// Retirer la ligne sélectionnée de l'index.
+    UnstageLine,
     /// Commencer l'édition du message de commit
     StartCommitMessage,
     /// Valider le commit

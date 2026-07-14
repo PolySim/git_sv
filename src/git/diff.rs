@@ -98,6 +98,13 @@ pub struct DiffLine {
     pub new_lineno: Option<u32>,
 }
 
+/// Position logique d'une modification sélectionnée dans un diff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DiffLineSelection {
+    pub hunk_index: usize,
+    pub change_index: usize,
+}
+
 /// Diff complet d'un fichier dans un commit.
 #[derive(Debug, Clone)]
 pub struct FileDiff {
@@ -131,6 +138,49 @@ impl FileDiff {
             .map_or(0, |preview| preview.bytes.len());
 
         std::mem::size_of::<Self>() + self.path.capacity() + lines + image
+    }
+
+    /// Retourne le hunk contenant une ligne affichée.
+    pub fn hunk_at_line(&self, selected_line: usize) -> Option<usize> {
+        let mut current_hunk = None;
+        for (line_index, line) in self.lines.iter().enumerate() {
+            if line.line_type == DiffLineType::HunkHeader {
+                current_hunk = Some(current_hunk.map_or(0, |index| index + 1));
+            }
+            if line_index == selected_line {
+                return current_hunk;
+            }
+        }
+        None
+    }
+
+    /// Retourne la modification ajoutée ou supprimée correspondant à une ligne.
+    pub fn change_at_line(&self, selected_line: usize) -> Option<DiffLineSelection> {
+        let mut current_hunk = None;
+        let mut change_index = 0;
+
+        for (line_index, line) in self.lines.iter().enumerate() {
+            if line.line_type == DiffLineType::HunkHeader {
+                current_hunk = Some(current_hunk.map_or(0, |index| index + 1));
+                change_index = 0;
+                continue;
+            }
+
+            let is_change = matches!(
+                line.line_type,
+                DiffLineType::Addition | DiffLineType::Deletion
+            );
+            if line_index == selected_line && is_change {
+                return current_hunk.map(|hunk_index| DiffLineSelection {
+                    hunk_index,
+                    change_index,
+                });
+            }
+            if is_change {
+                change_index += 1;
+            }
+        }
+        None
     }
 }
 
@@ -325,14 +375,13 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         return build_untracked_file_diff(repo, file_path);
     }
 
-    let head = repo.head()?;
-    let head_oid = head
-        .target()
-        .ok_or_else(|| git2::Error::from_str("HEAD ne pointe pas vers un commit"))?;
-    let head_commit = repo.find_commit(head_oid)?;
-    let head_tree = head_commit.tree()?;
-
-    let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), None)?;
+    let mut options = git2::DiffOptions::new();
+    options
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .show_untracked_content(true)
+        .pathspec(file_path);
+    let diff = repo.diff_index_to_workdir(None, Some(&mut options))?;
 
     // Trouver le delta correspondant au fichier.
     let mut file_diff = find_and_extract_file_diff(
@@ -340,7 +389,20 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         file_path,
         "Fichier non trouvé dans le working directory",
     )?;
-    file_diff.image_preview = working_tree_image_preview(repo, &head_tree, file_path);
+    file_diff.image_preview = working_tree_image_preview(repo, file_path);
+    Ok(file_diff)
+}
+
+/// Récupère le diff d'un fichier déjà présent dans l'index.
+pub fn staged_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
+    let head = repo.head()?;
+    let head_tree = head.peel_to_tree()?;
+    let mut options = git2::DiffOptions::new();
+    options.pathspec(file_path);
+    let diff = repo.diff_tree_to_index(Some(&head_tree), None, Some(&mut options))?;
+    let mut file_diff =
+        find_and_extract_file_diff(&diff, file_path, "Fichier non trouvé dans l'index")?;
+    file_diff.image_preview = index_image_preview(repo, file_path);
     Ok(file_diff)
 }
 
@@ -539,11 +601,7 @@ fn tree_image_preview(
     build_image_preview(format, blob.content().to_vec())
 }
 
-fn working_tree_image_preview(
-    repo: &Repository,
-    head_tree: &git2::Tree<'_>,
-    file_path: &str,
-) -> Option<ImagePreview> {
+fn working_tree_image_preview(repo: &Repository, file_path: &str) -> Option<ImagePreview> {
     let format = image_format(file_path)?;
     if let Some(full_path) = repo.workdir().map(|workdir| workdir.join(file_path)) {
         if let Ok(metadata) = fs::metadata(&full_path) {
@@ -556,7 +614,18 @@ fn working_tree_image_preview(
         }
     }
 
-    tree_image_preview(repo, head_tree, file_path)
+    None
+}
+
+fn index_image_preview(repo: &Repository, file_path: &str) -> Option<ImagePreview> {
+    let format = image_format(file_path)?;
+    let index = repo.index().ok()?;
+    let entry = index.get_path(Path::new(file_path), 0)?;
+    let blob = repo.find_blob(entry.id).ok()?;
+    if blob.size() > MAX_IMAGE_PREVIEW_BYTES {
+        return None;
+    }
+    build_image_preview(format, blob.content().to_vec())
 }
 
 fn limit_message_line(message: impl Into<String>) -> DiffLine {
@@ -744,6 +813,65 @@ mod tests {
         assert_eq!(file_diff.path, "test.txt");
         assert!(matches!(file_diff.status, DiffStatus::Modified));
         assert!(!file_diff.lines.is_empty());
+    }
+
+    #[test]
+    fn test_staged_and_working_diffs_are_separated() {
+        let (_temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "test.txt", "base\n", "Initial commit");
+        create_file(&repo, "test.txt", "base\nstaged\n");
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("test.txt")).unwrap();
+        index.write().unwrap();
+        create_file(&repo, "test.txt", "base\nstaged\nunstaged\n");
+
+        let staged = staged_file_diff(&repo, "test.txt").unwrap();
+        let unstaged = working_dir_file_diff(&repo, "test.txt").unwrap();
+
+        assert!(staged.lines.iter().any(|line| line.content == "staged"));
+        assert!(!staged.lines.iter().any(|line| line.content == "unstaged"));
+        assert!(unstaged.lines.iter().any(|line| line.content == "unstaged"));
+    }
+
+    #[test]
+    fn test_diff_selection_resolves_hunk_and_change() {
+        let diff = FileDiff {
+            path: "file.txt".to_string(),
+            status: DiffStatus::Modified,
+            lines: vec![
+                DiffLine {
+                    line_type: DiffLineType::HunkHeader,
+                    content: "@@ -1,1 +1,2 @@".to_string(),
+                    old_lineno: None,
+                    new_lineno: None,
+                },
+                DiffLine {
+                    line_type: DiffLineType::Context,
+                    content: "base".to_string(),
+                    old_lineno: Some(1),
+                    new_lineno: Some(1),
+                },
+                DiffLine {
+                    line_type: DiffLineType::Addition,
+                    content: "added".to_string(),
+                    old_lineno: None,
+                    new_lineno: Some(2),
+                },
+            ],
+            additions: 1,
+            deletions: 0,
+            image_preview: None,
+        };
+
+        assert_eq!(diff.hunk_at_line(1), Some(0));
+        assert_eq!(
+            diff.change_at_line(2),
+            Some(DiffLineSelection {
+                hunk_index: 0,
+                change_index: 0
+            })
+        );
+        assert_eq!(diff.change_at_line(1), None);
     }
 
     #[test]

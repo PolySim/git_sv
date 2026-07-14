@@ -27,7 +27,7 @@ En une phrase : `git_sv` cherche a apporter une experience proche d'un client Gi
 ## Points forts
 
 - graphe de commits avec couleurs stables par branche ;
-- staging interactif avec diff et message de commit ;
+- staging interactif par fichier, hunk ou ligne, avec diff et message de commit ;
 - prévisualisation des images PNG, JPEG, GIF, WebP et SVG dans les diffs ;
 - gestion des branches locales et distantes ;
 - worktrees et stashes ;
@@ -322,6 +322,9 @@ imposer un fond RGB different de celui du terminal :
 | `c` | Editer le message de commit |
 | `A` | Amend |
 | `Tab` | Changer de focus |
+
+Quand le panneau diff a le focus, `s`/`u` indexe ou désindexe le hunk
+sélectionné et `S`/`U` applique uniquement la ligne ajoutée ou supprimée.
 
 ### Vue Branches
 

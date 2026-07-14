@@ -690,6 +690,18 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                 Some(AppAction::Git(GitAction::AmendCommit))
             }
             KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
+            KeyCode::Char('s') if state.staging_state.last_file_focus == StagingFocus::Unstaged => {
+                Some(AppAction::Staging(StagingAction::StageHunk))
+            }
+            KeyCode::Char('S') if state.staging_state.last_file_focus == StagingFocus::Unstaged => {
+                Some(AppAction::Staging(StagingAction::StageLine))
+            }
+            KeyCode::Char('u') if state.staging_state.last_file_focus == StagingFocus::Staged => {
+                Some(AppAction::Staging(StagingAction::UnstageHunk))
+            }
+            KeyCode::Char('U') if state.staging_state.last_file_focus == StagingFocus::Staged => {
+                Some(AppAction::Staging(StagingAction::UnstageLine))
+            }
             _ => None,
         },
         StagingFocus::CommitMessage => None,

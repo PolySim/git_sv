@@ -175,6 +175,49 @@ fn test_staging_space_opens_diff_panel() {
 }
 
 #[test]
+fn test_staging_diff_shortcuts_follow_source_list() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::Staging;
+    state.staging_state.focus = StagingFocus::Diff;
+    state.staging_state.last_file_focus = StagingFocus::Unstaged;
+
+    let stage_hunk = map_key(
+        KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+        &state,
+    );
+    let stage_line = map_key(
+        KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT),
+        &state,
+    );
+    assert_eq!(
+        stage_hunk,
+        Some(AppAction::Staging(StagingAction::StageHunk))
+    );
+    assert_eq!(
+        stage_line,
+        Some(AppAction::Staging(StagingAction::StageLine))
+    );
+
+    state.staging_state.last_file_focus = StagingFocus::Staged;
+    let unstage_hunk = map_key(
+        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE),
+        &state,
+    );
+    let unstage_line = map_key(
+        KeyEvent::new(KeyCode::Char('U'), KeyModifiers::SHIFT),
+        &state,
+    );
+    assert_eq!(
+        unstage_hunk,
+        Some(AppAction::Staging(StagingAction::UnstageHunk))
+    );
+    assert_eq!(
+        unstage_line,
+        Some(AppAction::Staging(StagingAction::UnstageLine))
+    );
+}
+
+#[test]
 fn test_mouse_click_nav_bar_switches_view() {
     let state = create_test_state();
 

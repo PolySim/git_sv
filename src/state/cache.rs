@@ -98,6 +98,8 @@ pub struct DiffCacheKey {
     pub commit_oid: Oid,
     /// Chemin du fichier
     pub file_path: String,
+    /// Distingue le diff indexé du diff du working tree.
+    staged: bool,
 }
 
 impl DiffCacheKey {
@@ -105,6 +107,7 @@ impl DiffCacheKey {
         Self {
             commit_oid,
             file_path: file_path.into(),
+            staged: false,
         }
     }
 
@@ -113,6 +116,16 @@ impl DiffCacheKey {
         Self {
             commit_oid: Oid::zero(),
             file_path: file_path.into(),
+            staged: false,
+        }
+    }
+
+    /// Clé pour les changements présents dans l'index.
+    pub fn staged(file_path: impl Into<String>) -> Self {
+        Self {
+            commit_oid: Oid::zero(),
+            file_path: file_path.into(),
+            staged: true,
         }
     }
 
@@ -347,9 +360,12 @@ mod tests {
     #[test]
     fn test_cache_key_working_dir() {
         let wd_key = DiffCacheKey::working_dir("test.rs");
+        let staged_key = DiffCacheKey::staged("test.rs");
         assert!(wd_key.is_working_dir());
         assert_eq!(wd_key.commit_oid, Oid::zero());
         assert_eq!(wd_key.file_path, "test.rs");
+        assert_ne!(wd_key, staged_key);
+        assert!(staged_key.is_working_dir());
 
         let commit_key = DiffCacheKey::new(make_oid(1), "test.rs");
         assert!(!commit_key.is_working_dir());

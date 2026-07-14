@@ -26,6 +26,8 @@ pub struct DiffRenderContext<'a> {
     pub view_mode: DiffViewMode,
     pub is_fullscreen: bool,
     pub image_state: &'a mut ImagePreviewState,
+    /// Ligne mise en évidence pour une opération de staging partiel.
+    pub selected_line: Option<usize>,
 }
 
 struct DiffPanelContext<'a> {
@@ -36,6 +38,7 @@ struct DiffPanelContext<'a> {
     is_focused: bool,
     is_fullscreen: bool,
     theme: &'a Theme,
+    selected_line: Option<usize>,
 }
 
 /// Rend le diff d'un fichier avec coloration syntaxique.
@@ -49,6 +52,7 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
         view_mode,
         is_fullscreen,
         image_state,
+        selected_line,
     } = ctx;
 
     let theme = current_theme();
@@ -67,7 +71,9 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
 
     // Déterminer si on peut utiliser le mode side-by-side.
     let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
-    let effective_mode = if can_side_by_side {
+    let effective_mode = if selected_line.is_some() && is_focused {
+        DiffViewMode::Unified
+    } else if can_side_by_side {
         view_mode
     } else {
         DiffViewMode::Unified
@@ -81,6 +87,7 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
         is_focused,
         is_fullscreen,
         theme,
+        selected_line,
     };
 
     match effective_mode {
@@ -147,10 +154,11 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         is_focused,
         is_fullscreen,
         theme,
+        selected_line,
     } = ctx;
 
     let content = match diff {
-        Some(d) => build_diff_lines(d),
+        Some(d) => build_diff_lines(d, selected_line),
         None => vec![Line::from(text(
             "Selectionnez un fichier pour voir le diff",
             "Select a file to view the diff",
@@ -225,6 +233,7 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         is_focused,
         is_fullscreen,
         theme,
+        selected_line: _,
     } = ctx;
 
     let border_style = if is_focused {
@@ -339,11 +348,12 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
 }
 
 /// Construit les lignes de diff avec coloration (mode unifié).
-fn build_diff_lines(diff: &FileDiff) -> Vec<Line<'static>> {
+fn build_diff_lines(diff: &FileDiff, selected_line: Option<usize>) -> Vec<Line<'static>> {
     let theme = current_theme();
     diff.lines
         .iter()
-        .map(|line| {
+        .enumerate()
+        .map(|(line_index, line)| {
             let (prefix, fg_color, bg_color) = match line.line_type {
                 DiffLineType::Addition => ("+", theme.success, Some(theme.ours_bg)),
                 DiffLineType::Deletion => ("-", theme.error, Some(theme.theirs_bg)),
@@ -384,6 +394,15 @@ fn build_diff_lines(diff: &FileDiff) -> Vec<Line<'static>> {
                     style
                 };
                 spans.push(Span::styled(format!("{}{}", prefix, line.content), style));
+            }
+
+            if selected_line == Some(line_index) {
+                for span in &mut spans {
+                    span.style = span
+                        .style
+                        .bg(theme.selection_bg)
+                        .add_modifier(ratatui::style::Modifier::BOLD);
+                }
             }
 
             Line::from(spans)

@@ -289,6 +289,7 @@ fn render_graph_diff_panel(
                 view_mode: snap.diff_view_mode,
                 is_fullscreen: true,
                 image_state: &mut state.image_preview,
+                selected_line: None,
             },
         );
         state.graph_view.diff_total_lines = total_lines;
@@ -307,6 +308,7 @@ fn render_graph_diff_panel(
                 view_mode: snap.diff_view_mode,
                 is_fullscreen: false,
                 image_state: &mut state.image_preview,
+                selected_line: None,
             },
         );
         state.graph_view.diff_total_lines = total_lines;

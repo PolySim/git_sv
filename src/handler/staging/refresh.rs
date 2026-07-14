@@ -17,47 +17,75 @@ pub fn refresh_staging_with_entries(
 }
 
 pub fn load_staging_diff(state: &mut AppState) {
-    let selected_file = match state.staging_state.focus {
-        StagingFocus::Unstaged => state
-            .staging_state
-            .unstaged_files()
-            .get(state.staging_state.unstaged_selected()),
-        StagingFocus::Staged => state
-            .staging_state
-            .staged_files()
-            .get(state.staging_state.staged_selected()),
-        StagingFocus::Diff => match state.staging_state.last_file_focus {
-            StagingFocus::Unstaged => state
+    let (selected_file, is_staged) = match state.staging_state.focus {
+        StagingFocus::Unstaged => (
+            state
                 .staging_state
                 .unstaged_files()
                 .get(state.staging_state.unstaged_selected()),
-            StagingFocus::Staged => state
+            false,
+        ),
+        StagingFocus::Staged => (
+            state
                 .staging_state
                 .staged_files()
                 .get(state.staging_state.staged_selected()),
-            _ => None,
+            true,
+        ),
+        StagingFocus::Diff => match state.staging_state.last_file_focus {
+            StagingFocus::Unstaged => (
+                state
+                    .staging_state
+                    .unstaged_files()
+                    .get(state.staging_state.unstaged_selected()),
+                false,
+            ),
+            StagingFocus::Staged => (
+                state
+                    .staging_state
+                    .staged_files()
+                    .get(state.staging_state.staged_selected()),
+                true,
+            ),
+            _ => (None, false),
         },
-        _ => None,
+        _ => (None, false),
     };
 
     if let Some(file) = selected_file {
-        let cache_key = DiffCacheKey::working_dir(&file.path);
+        let cache_key = if is_staged {
+            DiffCacheKey::staged(&file.path)
+        } else {
+            DiffCacheKey::working_dir(&file.path)
+        };
 
         if let Some(cached_diff) = state.diff_cache.get(&cache_key) {
             state.staging_state.current_diff = Some(cached_diff);
         } else {
-            match crate::git::diff::working_dir_file_diff(&state.repo.repo, &file.path) {
+            let loaded_diff = if is_staged {
+                crate::git::diff::staged_file_diff(&state.repo.repo, &file.path)
+            } else {
+                crate::git::diff::working_dir_file_diff(&state.repo.repo, &file.path)
+            };
+            match loaded_diff {
                 Ok(diff) => {
                     let diff = std::sync::Arc::new(diff);
                     state.diff_cache.put(cache_key, diff.clone());
                     state.staging_state.current_diff = Some(diff);
                     state.staging_state.diff_scroll = 0;
+                    state.staging_state.diff_selected_line = 0;
                     state.staging_state.diff_horizontal_offset = 0;
                 }
                 Err(_) => {
                     state.staging_state.current_diff = None;
                 }
             }
+        }
+        if let Some(diff) = &state.staging_state.current_diff {
+            state.staging_state.diff_selected_line = state
+                .staging_state
+                .diff_selected_line
+                .min(diff.lines.len().saturating_sub(1));
         }
     } else {
         state.staging_state.current_diff = None;

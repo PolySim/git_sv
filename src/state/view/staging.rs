@@ -43,6 +43,8 @@ pub struct StagingState {
     pub current_diff: Option<Arc<FileDiff>>,
     /// Offset de scroll du diff.
     pub diff_scroll: usize,
+    /// Ligne sélectionnée dans le diff pour les opérations partielles.
+    pub diff_selected_line: usize,
     /// Offset de scroll horizontal du diff.
     pub diff_horizontal_offset: usize,
     /// Mode d'affichage du diff (unifié ou côte à côte).
