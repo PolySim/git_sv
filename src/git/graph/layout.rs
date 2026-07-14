@@ -16,10 +16,10 @@ pub(super) fn build_commit_cells(
         if col == commit_col {
             cells.push(None);
         } else if col < active_columns.len() && active_columns[col].expected_oid.is_some() {
-            cells.push(Some(GraphCell {
-                edge_type: EdgeType::Vertical,
-                color_index: active_columns[col].color_index,
-            }));
+            cells.push(Some(GraphCell::new(
+                EdgeType::Vertical,
+                active_columns[col].color_index,
+            )));
         } else {
             cells.push(None);
         }
@@ -38,27 +38,27 @@ pub(super) fn build_commit_cells(
 
         for cell in cells.iter_mut().take(end).skip(start) {
             match cell {
-                Some(existing) if existing.edge_type == EdgeType::Vertical => {
-                    existing.edge_type = EdgeType::Cross;
+                Some(existing) if existing.edge_type() == EdgeType::Vertical => {
+                    *existing = GraphCell::new(EdgeType::Cross, existing.color_index());
                 }
                 Some(_) => {}
                 None => {
-                    *cell = Some(GraphCell {
-                        edge_type: EdgeType::Horizontal,
-                        color_index: active_columns[commit_col].color_index,
-                    });
+                    *cell = Some(GraphCell::new(
+                        EdgeType::Horizontal,
+                        active_columns[commit_col].color_index,
+                    ));
                 }
             }
         }
 
-        cells[merged_col] = Some(GraphCell {
-            edge_type: if merged_col > commit_col {
+        cells[merged_col] = Some(GraphCell::new(
+            if merged_col > commit_col {
                 EdgeType::MergeFromLeft
             } else {
                 EdgeType::MergeFromRight
             },
-            color_index: active_columns[merged_col].color_index,
-        });
+            active_columns[merged_col].color_index,
+        ));
     }
 
     cells
@@ -114,10 +114,7 @@ pub(super) fn build_connection_row(
 
     for (col, state) in active_columns.iter().enumerate() {
         if state.expected_oid.is_some() {
-            cells[col] = Some(GraphCell {
-                edge_type: EdgeType::Vertical,
-                color_index: state.color_index,
-            });
+            cells[col] = Some(GraphCell::new(EdgeType::Vertical, state.color_index));
         }
     }
 
@@ -133,59 +130,35 @@ pub(super) fn build_connection_row(
         }
 
         if to_col > from_col {
-            cells[from_col] = Some(GraphCell {
-                edge_type: EdgeType::MergeFromRight,
-                color_index: color,
-            });
+            cells[from_col] = Some(GraphCell::new(EdgeType::MergeFromRight, color));
 
             for slot in cells.iter_mut().take(to_col).skip(from_col + 1) {
                 if let Some(existing_cell) = slot.as_ref() {
-                    if existing_cell.edge_type == EdgeType::Vertical {
-                        let existing_color = existing_cell.color_index;
-                        *slot = Some(GraphCell {
-                            edge_type: EdgeType::Cross,
-                            color_index: existing_color,
-                        });
+                    if existing_cell.edge_type() == EdgeType::Vertical {
+                        let existing_color = existing_cell.color_index();
+                        *slot = Some(GraphCell::new(EdgeType::Cross, existing_color));
                         continue;
                     }
                 }
-                *slot = Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: color,
-                });
+                *slot = Some(GraphCell::new(EdgeType::Horizontal, color));
             }
 
-            cells[to_col] = Some(GraphCell {
-                edge_type: EdgeType::ForkRight,
-                color_index: color,
-            });
+            cells[to_col] = Some(GraphCell::new(EdgeType::ForkRight, color));
         } else {
-            cells[from_col] = Some(GraphCell {
-                edge_type: EdgeType::MergeFromLeft,
-                color_index: color,
-            });
+            cells[from_col] = Some(GraphCell::new(EdgeType::MergeFromLeft, color));
 
             for slot in cells.iter_mut().take(from_col).skip(to_col + 1) {
                 if let Some(existing_cell) = slot.as_ref() {
-                    if existing_cell.edge_type == EdgeType::Vertical {
-                        let existing_color = existing_cell.color_index;
-                        *slot = Some(GraphCell {
-                            edge_type: EdgeType::Cross,
-                            color_index: existing_color,
-                        });
+                    if existing_cell.edge_type() == EdgeType::Vertical {
+                        let existing_color = existing_cell.color_index();
+                        *slot = Some(GraphCell::new(EdgeType::Cross, existing_color));
                         continue;
                     }
                 }
-                *slot = Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: color,
-                });
+                *slot = Some(GraphCell::new(EdgeType::Horizontal, color));
             }
 
-            cells[to_col] = Some(GraphCell {
-                edge_type: EdgeType::ForkLeft,
-                color_index: color,
-            });
+            cells[to_col] = Some(GraphCell::new(EdgeType::ForkLeft, color));
         }
     }
 

@@ -212,10 +212,10 @@ mod tests {
                     column: 0,
                     color_index: 0,
                 },
-                cells: vec![Some(GraphCell {
-                    edge_type: crate::git::graph::EdgeType::Vertical,
-                    color_index: 0,
-                })],
+                cells: vec![Some(GraphCell::new(
+                    crate::git::graph::EdgeType::Vertical,
+                    0,
+                ))],
                 connection: None,
             },
             GraphRow {
@@ -233,10 +233,10 @@ mod tests {
                     column: 0,
                     color_index: 0,
                 },
-                cells: vec![Some(GraphCell {
-                    edge_type: crate::git::graph::EdgeType::Vertical,
-                    color_index: 0,
-                })],
+                cells: vec![Some(GraphCell::new(
+                    crate::git::graph::EdgeType::Vertical,
+                    0,
+                ))],
                 connection: None,
             },
         ]

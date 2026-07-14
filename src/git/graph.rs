@@ -18,7 +18,9 @@ use self::layout::{
 use self::refs::collect_refs;
 
 use self::types::ColumnState;
-pub use self::types::{CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow, RefInfo, RefType};
+pub use self::types::{
+    CommitNode, ConnectionRow, EdgeType, GraphCell, GraphRow, RefInfo, RefType, GRAPH_COLOR_COUNT,
+};
 
 /// Construit le graphe de commits avec placement en colonnes et edges de connexion.
 pub fn build_graph(repo: &Repository, commits: &[CommitInfo]) -> Result<Vec<GraphRow>> {

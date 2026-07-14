@@ -47,8 +47,8 @@ pub(super) fn build_commit_line(
             }
         } else if col < row.cells.len() {
             if let Some(ref cell) = row.cells[col] {
-                let color = get_branch_color(cell.color_index);
-                let ch = match cell.edge_type {
+                let color = get_branch_color(cell.color_index());
+                let ch = match cell.edge_type() {
                     EdgeType::Vertical => "│",
                     EdgeType::Horizontal => "─",
                     EdgeType::Cross => "┼",
@@ -306,8 +306,8 @@ pub(super) fn build_connection_line(connection: &ConnectionRow) -> Line<'static>
 
     for col in 0..num_cols {
         if let Some(ref cell) = connection.cells[col] {
-            let color = get_branch_color(cell.color_index);
-            let ch = match cell.edge_type {
+            let color = get_branch_color(cell.color_index());
+            let ch = match cell.edge_type() {
                 EdgeType::Vertical => "│",
                 EdgeType::ForkRight => "╮",
                 EdgeType::ForkLeft => "╭",
@@ -322,11 +322,11 @@ pub(super) fn build_connection_line(connection: &ConnectionRow) -> Line<'static>
                 let needs_horizontal_right = col + 1 < num_cols
                     && connection.cells[col + 1]
                         .as_ref()
-                        .is_some_and(|c| c.edge_type == EdgeType::Horizontal);
+                        .is_some_and(|c| c.edge_type() == EdgeType::Horizontal);
                 let needs_horizontal_left = col > 0
                     && connection.cells[col - 1]
                         .as_ref()
-                        .is_some_and(|c| c.edge_type == EdgeType::Horizontal);
+                        .is_some_and(|c| c.edge_type() == EdgeType::Horizontal);
 
                 if needs_horizontal_right || needs_horizontal_left {
                     spans.push(Span::styled("─", Style::default().fg(color)));
@@ -342,7 +342,7 @@ pub(super) fn build_connection_line(connection: &ConnectionRow) -> Line<'static>
                     .and_then(|c| c.as_ref())
                     .is_some_and(|c| {
                         matches!(
-                            c.edge_type,
+                            c.edge_type(),
                             EdgeType::Horizontal | EdgeType::MergeFromRight | EdgeType::Cross
                         )
                     });
@@ -354,7 +354,7 @@ pub(super) fn build_connection_line(connection: &ConnectionRow) -> Line<'static>
                     .and_then(|c| c.as_ref())
                     .is_some_and(|c| {
                         matches!(
-                            c.edge_type,
+                            c.edge_type(),
                             EdgeType::Horizontal
                                 | EdgeType::ForkRight
                                 | EdgeType::ForkLeft
@@ -385,14 +385,16 @@ pub(super) fn find_horizontal_color_bounded(
 ) -> Option<usize> {
     for c in (0..col).rev() {
         match &connection.cells[c] {
-            Some(cell) if cell.edge_type == EdgeType::Horizontal => return Some(cell.color_index),
+            Some(cell) if cell.edge_type() == EdgeType::Horizontal => {
+                return Some(cell.color_index())
+            }
             Some(cell)
                 if matches!(
-                    cell.edge_type,
+                    cell.edge_type(),
                     EdgeType::MergeFromRight | EdgeType::MergeFromLeft
                 ) =>
             {
-                return Some(cell.color_index)
+                return Some(cell.color_index())
             }
             Some(_) => break,
             None => continue,
@@ -401,9 +403,11 @@ pub(super) fn find_horizontal_color_bounded(
 
     for c in (col + 1)..connection.cells.len() {
         match &connection.cells[c] {
-            Some(cell) if cell.edge_type == EdgeType::Horizontal => return Some(cell.color_index),
-            Some(cell) if matches!(cell.edge_type, EdgeType::ForkRight | EdgeType::ForkLeft) => {
-                return Some(cell.color_index)
+            Some(cell) if cell.edge_type() == EdgeType::Horizontal => {
+                return Some(cell.color_index())
+            }
+            Some(cell) if matches!(cell.edge_type(), EdgeType::ForkRight | EdgeType::ForkLeft) => {
+                return Some(cell.color_index())
             }
             Some(_) => break,
             None => continue,

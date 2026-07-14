@@ -174,10 +174,7 @@ mod tests {
                     column: 0,
                     color_index: 0,
                 },
-                cells: vec![Some(GraphCell {
-                    edge_type: EdgeType::Vertical,
-                    color_index: 0,
-                })],
+                cells: vec![Some(GraphCell::new(EdgeType::Vertical, 0))],
                 connection: None,
             },
             GraphRow {
@@ -192,10 +189,7 @@ mod tests {
                     column: 0,
                     color_index: 0,
                 },
-                cells: vec![Some(GraphCell {
-                    edge_type: EdgeType::Vertical,
-                    color_index: 0,
-                })],
+                cells: vec![Some(GraphCell::new(EdgeType::Vertical, 0))],
                 connection: None,
             },
         ]
@@ -332,13 +326,7 @@ mod tests {
                 column: 0,
                 color_index: 0,
             },
-            cells: vec![
-                None,
-                Some(GraphCell {
-                    edge_type: EdgeType::MergeFromLeft,
-                    color_index: 1,
-                }),
-            ],
+            cells: vec![None, Some(GraphCell::new(EdgeType::MergeFromLeft, 1))],
             connection: None,
         };
 
@@ -474,23 +462,11 @@ mod tests {
     fn test_no_horizontal_leak_past_fork() {
         let connection = ConnectionRow {
             cells: vec![
-                Some(GraphCell {
-                    edge_type: EdgeType::MergeFromRight,
-                    color_index: 0,
-                }),
-                Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: 0,
-                }),
-                Some(GraphCell {
-                    edge_type: EdgeType::ForkRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::MergeFromRight, 0)),
+                Some(GraphCell::new(EdgeType::Horizontal, 0)),
+                Some(GraphCell::new(EdgeType::ForkRight, 0)),
                 None,
-                Some(GraphCell {
-                    edge_type: EdgeType::Vertical,
-                    color_index: 1,
-                }),
+                Some(GraphCell::new(EdgeType::Vertical, 1)),
             ],
         };
 
@@ -507,15 +483,9 @@ mod tests {
     fn test_horizontal_between_merge_and_fork() {
         let connection = ConnectionRow {
             cells: vec![
-                Some(GraphCell {
-                    edge_type: EdgeType::MergeFromRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::MergeFromRight, 0)),
                 None,
-                Some(GraphCell {
-                    edge_type: EdgeType::ForkRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::ForkRight, 0)),
             ],
         };
 
@@ -529,23 +499,11 @@ mod tests {
     fn test_find_horizontal_color_bounded() {
         let connection1 = ConnectionRow {
             cells: vec![
-                Some(GraphCell {
-                    edge_type: EdgeType::MergeFromRight,
-                    color_index: 0,
-                }),
-                Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::MergeFromRight, 0)),
+                Some(GraphCell::new(EdgeType::Horizontal, 0)),
                 None,
-                Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: 0,
-                }),
-                Some(GraphCell {
-                    edge_type: EdgeType::ForkRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::Horizontal, 0)),
+                Some(GraphCell::new(EdgeType::ForkRight, 0)),
             ],
         };
 
@@ -553,15 +511,9 @@ mod tests {
 
         let connection2 = ConnectionRow {
             cells: vec![
-                Some(GraphCell {
-                    edge_type: EdgeType::MergeFromRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::MergeFromRight, 0)),
                 None,
-                Some(GraphCell {
-                    edge_type: EdgeType::ForkRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::ForkRight, 0)),
             ],
         };
 
@@ -569,15 +521,9 @@ mod tests {
 
         let connection3 = ConnectionRow {
             cells: vec![
-                Some(GraphCell {
-                    edge_type: EdgeType::ForkRight,
-                    color_index: 0,
-                }),
+                Some(GraphCell::new(EdgeType::ForkRight, 0)),
                 None,
-                Some(GraphCell {
-                    edge_type: EdgeType::Horizontal,
-                    color_index: 1,
-                }),
+                Some(GraphCell::new(EdgeType::Horizontal, 1)),
             ],
         };
 
@@ -645,10 +591,7 @@ mod tests {
                 column: 0,
                 color_index: 0,
             },
-            cells: vec![Some(GraphCell {
-                edge_type: EdgeType::Vertical,
-                color_index: 0,
-            })],
+            cells: vec![Some(GraphCell::new(EdgeType::Vertical, 0))],
             connection: None,
         }];
 

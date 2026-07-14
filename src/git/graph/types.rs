@@ -1,4 +1,9 @@
+use std::num::NonZeroU8;
+
 use git2::Oid;
+
+/// Nombre de couleurs distinctes utilisées pour les branches.
+pub const GRAPH_COLOR_COUNT: usize = 12;
 
 /// Type de référence git.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -26,7 +31,7 @@ impl RefInfo {
 }
 
 /// Type de segment visuel dans le graphe.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeType {
     Vertical,
     ForkRight,
@@ -37,11 +42,48 @@ pub enum EdgeType {
     Cross,
 }
 
-/// Cellule du graphe : représente ce qui est dessiné dans une colonne donnée.
-#[derive(Debug, Clone)]
-pub struct GraphCell {
-    pub edge_type: EdgeType,
-    pub color_index: usize,
+/// Cellule du graphe compactée sur un octet.
+///
+/// La valeur zéro reste libre afin que `Option<GraphCell>` occupe également
+/// un seul octet. Les autres valeurs encodent le type d'arête et la couleur.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GraphCell(NonZeroU8);
+
+impl GraphCell {
+    const EDGE_TYPE_COUNT: usize = 7;
+
+    pub fn new(edge_type: EdgeType, color_index: usize) -> Self {
+        let edge_code = match edge_type {
+            EdgeType::Vertical => 0,
+            EdgeType::ForkRight => 1,
+            EdgeType::ForkLeft => 2,
+            EdgeType::MergeFromRight => 3,
+            EdgeType::MergeFromLeft => 4,
+            EdgeType::Horizontal => 5,
+            EdgeType::Cross => 6,
+        };
+        let normalized_color = color_index % GRAPH_COLOR_COUNT;
+        let packed = normalized_color * Self::EDGE_TYPE_COUNT + edge_code + 1;
+
+        Self(NonZeroU8::new(packed as u8).expect("une cellule encodée ne peut pas valoir zéro"))
+    }
+
+    pub fn edge_type(self) -> EdgeType {
+        match (usize::from(self.0.get()) - 1) % Self::EDGE_TYPE_COUNT {
+            0 => EdgeType::Vertical,
+            1 => EdgeType::ForkRight,
+            2 => EdgeType::ForkLeft,
+            3 => EdgeType::MergeFromRight,
+            4 => EdgeType::MergeFromLeft,
+            5 => EdgeType::Horizontal,
+            6 => EdgeType::Cross,
+            _ => unreachable!("le code d'arête est borné par le modulo"),
+        }
+    }
+
+    pub fn color_index(self) -> usize {
+        (usize::from(self.0.get()) - 1) / Self::EDGE_TYPE_COUNT
+    }
 }
 
 /// Rangée intermédiaire entre deux commits (pour les connexions).
@@ -100,4 +142,35 @@ pub(super) struct ColumnState {
     pub expected_oid: Option<Oid>,
     pub color_index: usize,
     pub branch_name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_graph_cell_round_trip() {
+        let edge_types = [
+            EdgeType::Vertical,
+            EdgeType::ForkRight,
+            EdgeType::ForkLeft,
+            EdgeType::MergeFromRight,
+            EdgeType::MergeFromLeft,
+            EdgeType::Horizontal,
+            EdgeType::Cross,
+        ];
+
+        for edge_type in edge_types {
+            for color_index in 0..(GRAPH_COLOR_COUNT * 2) {
+                let cell = GraphCell::new(edge_type, color_index);
+                assert_eq!(cell.edge_type(), edge_type);
+                assert_eq!(cell.color_index(), color_index % GRAPH_COLOR_COUNT);
+            }
+        }
+    }
+
+    #[test]
+    fn test_optional_graph_cell_fits_in_one_byte() {
+        assert_eq!(std::mem::size_of::<Option<GraphCell>>(), 1);
+    }
 }

@@ -208,6 +208,7 @@ impl Theme {
             ThemeMode::Dark => Self::BRANCH_COLORS_DARK,
             ThemeMode::Solarized => Self::BRANCH_COLORS_SOLARIZED,
         };
+        debug_assert_eq!(colors.len(), crate::git::graph::GRAPH_COLOR_COUNT);
         colors[index % colors.len()]
     }
 }
