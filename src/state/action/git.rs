@@ -56,6 +56,8 @@ pub enum GitAction {
     RepositoryInsightsUp,
     /// Faire défiler le diagnostic vers le bas.
     RepositoryInsightsDown,
+    /// Ouvrir le fichier sélectionné dans le difftool Git.
+    OpenExternalDiff,
     /// Ouvrir le dialogue de reset
     ResetPrompt,
     /// Annuler le merge en cours

@@ -182,6 +182,39 @@ impl FileDiff {
         }
         None
     }
+
+    /// Retourne la ligne du hunk suivant, avec retour au premier.
+    pub fn next_hunk_line(&self, current_line: usize) -> Option<usize> {
+        self.lines
+            .iter()
+            .enumerate()
+            .find(|(index, line)| {
+                *index > current_line && line.line_type == DiffLineType::HunkHeader
+            })
+            .map(|(index, _)| index)
+            .or_else(|| {
+                self.lines
+                    .iter()
+                    .position(|line| line.line_type == DiffLineType::HunkHeader)
+            })
+    }
+
+    /// Retourne la ligne du hunk précédent, avec retour au dernier.
+    pub fn previous_hunk_line(&self, current_line: usize) -> Option<usize> {
+        self.lines
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(index, line)| {
+                *index < current_line && line.line_type == DiffLineType::HunkHeader
+            })
+            .map(|(index, _)| index)
+            .or_else(|| {
+                self.lines
+                    .iter()
+                    .rposition(|line| line.line_type == DiffLineType::HunkHeader)
+            })
+    }
 }
 
 /// Calcule le diff d'un commit donné.
@@ -872,6 +905,34 @@ mod tests {
             })
         );
         assert_eq!(diff.change_at_line(1), None);
+    }
+
+    #[test]
+    fn test_hunk_navigation_wraps() {
+        let line = |line_type| DiffLine {
+            line_type,
+            content: String::new(),
+            old_lineno: None,
+            new_lineno: None,
+        };
+        let diff = FileDiff {
+            path: "file.txt".to_string(),
+            status: DiffStatus::Modified,
+            lines: vec![
+                line(DiffLineType::HunkHeader),
+                line(DiffLineType::Context),
+                line(DiffLineType::HunkHeader),
+                line(DiffLineType::Addition),
+            ],
+            additions: 1,
+            deletions: 0,
+            image_preview: None,
+        };
+
+        assert_eq!(diff.next_hunk_line(0), Some(2));
+        assert_eq!(diff.next_hunk_line(2), Some(0));
+        assert_eq!(diff.previous_hunk_line(2), Some(0));
+        assert_eq!(diff.previous_hunk_line(0), Some(2));
     }
 
     #[test]

@@ -318,6 +318,8 @@ imposer un fond RGB different de celui du terminal :
 | `X` | Démarrer un bisect avec le commit sélectionné comme commit connu bon |
 | `[` / `]` / `\` | Pendant un bisect : marquer bon / mauvais / terminer |
 | `i` | Inspecter la signature du commit, les hooks et les sous-modules |
+| `e` | Depuis un fichier ou son diff, ouvrir `git difftool` (la TUI est suspendue proprement) |
+| `n` / `N` | Depuis le diff, aller au hunk suivant / précédent |
 
 ### Vue Staging
 
@@ -336,6 +338,8 @@ imposer un fond RGB different de celui du terminal :
 
 Quand le panneau diff a le focus, `s`/`u` indexe ou désindexe le hunk
 sélectionné et `S`/`U` applique uniquement la ligne ajoutée ou supprimée.
+`n`/`N` navigue entre les hunks et `e` ouvre le fichier dans l'outil défini par
+`git config diff.tool`.
 
 ### Vue Branches
 
@@ -368,6 +372,8 @@ sélectionné et `S`/`U` applique uniquement la ligne ajoutée ou supprimée.
 | `C` | Comparer les commits du chemin avec une autre branche |
 | `Esc` | Fermer la comparaison de chemin active |
 | `v` | Basculer le diff unifie / cote a cote |
+| `e` | Depuis les fichiers touchés ou le diff, ouvrir `git difftool` |
+| `n` / `N` | Depuis le diff, aller au hunk suivant / précédent |
 | `r` | Rafraichir l'arborescence courante |
 | `y` | Copier le chemin, le commit, l'etat du fichier au commit ou le diff actif |
 
@@ -378,6 +384,9 @@ du fichier tel qu'il existe dans le commit. La comparaison de branches affiche
 uniquement les commits divergents qui ont touche le chemin : `+` indique la
 branche courante et `-` la branche comparee. Le diff reste celui du commit
 selectionne afin de parcourir les modifications une par une.
+
+En mode CLI humain, `git_sv status` rend également les chemins cliquables dans
+les terminaux compatibles OSC 8. Définissez `NO_HYPERLINK=1` pour les désactiver.
 
 ---
 

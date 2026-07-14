@@ -9,7 +9,8 @@ use crate::i18n::{text, text_owned};
 use crate::state::GraphFilter;
 use anyhow::{anyhow, Result};
 use serde::Serialize;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, IsTerminal, Write};
+use std::path::Path;
 
 /// Format de sortie pour les commandes CLI.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -89,7 +90,7 @@ pub fn status(repo: &GitRepo, options: &CliOptions) -> Result<()> {
     match options.format {
         OutputFormat::Json => print_status_json(&entries)?,
         OutputFormat::Plain => print_status_plain(&entries)?,
-        OutputFormat::Human => print_status_human(&entries)?,
+        OutputFormat::Human => print_status_human(&entries, repo.repo.workdir())?,
     }
 
     Ok(())
@@ -327,8 +328,14 @@ fn print_branches_human(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<(
     Ok(())
 }
 
-fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
+fn print_status_human(
+    entries: &[crate::git::repo::StatusEntry],
+    workdir: Option<&Path>,
+) -> Result<()> {
     let stdout = std::io::stdout();
+    let hyperlinks = stdout.is_terminal()
+        && std::env::var_os("NO_HYPERLINK").is_none()
+        && std::env::var("TERM").map_or(true, |term| term != "dumb");
     let mut handle = stdout.lock();
 
     if entries.is_empty() {
@@ -371,7 +378,11 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
             text("Changements a valider :", "Changes to be committed:")
         )?;
         for path in &staged {
-            writeln!(handle, "  \x1b[32m+ {}\x1b[0m", path)?;
+            writeln!(
+                handle,
+                "  \x1b[32m+ {}\x1b[0m",
+                terminal_file_link(workdir, path, hyperlinks)
+            )?;
         }
         writeln!(handle)?;
     }
@@ -386,7 +397,11 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
             )
         )?;
         for path in &unstaged {
-            writeln!(handle, "  \x1b[33mM {}\x1b[0m", path)?;
+            writeln!(
+                handle,
+                "  \x1b[33mM {}\x1b[0m",
+                terminal_file_link(workdir, path, hyperlinks)
+            )?;
         }
         writeln!(handle)?;
     }
@@ -398,11 +413,39 @@ fn print_status_human(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
             text("Fichiers non suivis :", "Untracked files:")
         )?;
         for path in &untracked {
-            writeln!(handle, "  \x1b[90m? {}\x1b[0m", path)?;
+            writeln!(
+                handle,
+                "  \x1b[90m? {}\x1b[0m",
+                terminal_file_link(workdir, path, hyperlinks)
+            )?;
         }
     }
 
     Ok(())
+}
+
+fn terminal_file_link(workdir: Option<&Path>, path: &str, enabled: bool) -> String {
+    if !enabled {
+        return path.to_string();
+    }
+    let Some(workdir) = workdir else {
+        return path.to_string();
+    };
+    let absolute = workdir.join(path);
+    let encoded = percent_encode_path(&absolute.to_string_lossy());
+    format!("\x1b]8;;file://{encoded}\x1b\\{path}\x1b]8;;\x1b\\")
+}
+
+fn percent_encode_path(path: &str) -> String {
+    let mut encoded = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~' | b':') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
 }
 
 fn print_graph_text(graph_rows: &[crate::git::graph::GraphRow]) -> Result<()> {
@@ -699,6 +742,18 @@ mod tests {
         let formatted = format_status(&status);
         assert!(formatted.contains('A'));
         assert!(formatted.contains('M'));
+    }
+
+    #[test]
+    fn test_terminal_file_link_encodes_path() {
+        let link = terminal_file_link(Some(Path::new("/tmp/repo")), "a file#1.rs", true);
+
+        assert!(link.contains("file:///tmp/repo/a%20file%231.rs"));
+        assert!(link.contains("a file#1.rs"));
+        assert_eq!(
+            terminal_file_link(Some(Path::new("/tmp/repo")), "file.rs", false),
+            "file.rs"
+        );
     }
 
     #[test]

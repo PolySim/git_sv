@@ -130,6 +130,67 @@ fn staging_diff_last_line(state: &AppState) -> usize {
         .map_or(0, |diff| diff.lines.len().saturating_sub(1))
 }
 
+pub(super) fn handle_select_next_hunk(state: &mut AppState) {
+    select_hunk(state, true);
+}
+
+pub(super) fn handle_select_previous_hunk(state: &mut AppState) {
+    select_hunk(state, false);
+}
+
+fn select_hunk(state: &mut AppState, forward: bool) {
+    match state.view_mode {
+        ViewMode::Staging => {
+            let current = state.staging_state.diff_selected_line;
+            let target = state.staging_state.current_diff.as_ref().and_then(|diff| {
+                if forward {
+                    diff.next_hunk_line(current)
+                } else {
+                    diff.previous_hunk_line(current)
+                }
+            });
+            if let Some(target) = target {
+                state.staging_state.diff_selected_line = target;
+                keep_staging_diff_selection_visible(state);
+            }
+        }
+        ViewMode::ProjectTree => {
+            let current = state.project_tree_state.diff_scroll_offset;
+            let target = state
+                .project_tree_state
+                .selected_diff
+                .as_ref()
+                .and_then(|diff| {
+                    if forward {
+                        diff.next_hunk_line(current)
+                    } else {
+                        diff.previous_hunk_line(current)
+                    }
+                });
+            if let Some(target) = target {
+                state.project_tree_state.diff_scroll_offset = target;
+            }
+        }
+        _ => {
+            let current = state.graph_view.diff_scroll_offset;
+            let target = state
+                .graph_view
+                .selected_file_diff
+                .as_ref()
+                .and_then(|diff| {
+                    if forward {
+                        diff.next_hunk_line(current)
+                    } else {
+                        diff.previous_hunk_line(current)
+                    }
+                });
+            if let Some(target) = target {
+                state.graph_view.diff_scroll_offset = target;
+            }
+        }
+    }
+}
+
 fn keep_staging_diff_selection_visible(state: &mut AppState) {
     let selected = state.staging_state.diff_selected_line;
     let scroll = &mut state.staging_state.diff_scroll;

@@ -49,6 +49,7 @@ impl ActionHandler for GitHandler {
                     ctx.state.ui.repository_insights_scroll.saturating_add(1);
                 Ok(())
             }
+            GitAction::OpenExternalDiff => handle_open_external_diff(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
@@ -573,6 +574,65 @@ fn handle_repository_insights(state: &mut AppState) -> Result<()> {
             state.ui.repository_insights_scroll = 0;
         }
         Err(error) => state.set_flash_message(flash_error("diagnostic dépôt", error)),
+    }
+    Ok(())
+}
+
+fn handle_open_external_diff(state: &mut AppState) -> Result<()> {
+    use crate::git::external_diff::ExternalDiffRequest;
+
+    let request = match state.view_mode {
+        ViewMode::Graph => {
+            let commit = state.selected_commit().map(|commit| commit.oid);
+            let path = state
+                .graph_view
+                .commit_files
+                .get(state.graph_view.file_selected_index)
+                .map(|file| file.path.clone());
+            commit
+                .zip(path)
+                .map(|(commit, path)| ExternalDiffRequest::Commit { commit, path })
+        }
+        ViewMode::Staging => {
+            let focus = if state.staging_state.focus == StagingFocus::Diff {
+                state.staging_state.last_file_focus
+            } else {
+                state.staging_state.focus
+            };
+            match focus {
+                StagingFocus::Unstaged => {
+                    state.staging_state.unstaged.selected_item().map(|entry| {
+                        ExternalDiffRequest::WorkingTree {
+                            path: entry.path.clone(),
+                            staged: false,
+                        }
+                    })
+                }
+                StagingFocus::Staged => state.staging_state.staged.selected_item().map(|entry| {
+                    ExternalDiffRequest::WorkingTree {
+                        path: entry.path.clone(),
+                        staged: true,
+                    }
+                }),
+                _ => None,
+            }
+        }
+        ViewMode::ProjectTree => state
+            .project_tree_state
+            .selected_history_commit()
+            .zip(state.project_tree_state.selected_changed_file())
+            .map(|(commit, file)| ExternalDiffRequest::Commit {
+                commit: commit.oid,
+                path: file.path.clone(),
+            }),
+        _ => None,
+    };
+
+    match request {
+        Some(request) => state.ui.pending_external_diff = Some(request),
+        None => state.set_flash_message(flash_error_message(
+            "sélectionnez un fichier dont le diff est chargé",
+        )),
     }
     Ok(())
 }

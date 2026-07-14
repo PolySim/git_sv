@@ -98,6 +98,11 @@ impl EventHandler {
                 needs_redraw = true;
             }
 
+            if let Some(request) = self.state.ui.pending_external_diff.take() {
+                self.run_external_diff(session, request)?;
+                needs_redraw = true;
+            }
+
             // Vérifier les résultats d'opérations en arrière-plan
             if let Some(result) = self.background.try_recv() {
                 self.handle_background_result(result)?;
@@ -180,6 +185,28 @@ impl EventHandler {
             Err(error) => self
                 .state
                 .set_flash_message(crate::utils::flash_error("rebase interactif", error)),
+        }
+        Ok(())
+    }
+
+    fn run_external_diff(
+        &mut self,
+        session: &mut TerminalSession,
+        request: crate::git::external_diff::ExternalDiffRequest,
+    ) -> Result<()> {
+        session.suspend()?;
+        let repo_path = std::path::PathBuf::from(&self.state.repo_path);
+        let operation = crate::git::external_diff::open(&repo_path, &request);
+        session.resume()?;
+        session.terminal_mut().clear()?;
+
+        match operation {
+            Ok(()) => self
+                .state
+                .set_flash_message("Outil de diff externe fermé".to_string()),
+            Err(error) => self
+                .state
+                .set_flash_message(crate::utils::flash_error("diff externe", error)),
         }
         Ok(())
     }

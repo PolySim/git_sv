@@ -174,6 +174,9 @@ fn map_view_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 
 fn map_project_tree_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     if state.project_tree_state.focus == ProjectTreeFocus::Diff {
+        if key.code == KeyCode::Char('e') {
+            return Some(AppAction::Git(GitAction::OpenExternalDiff));
+        }
         let diff_action = match key.code {
             KeyCode::Char('j') | KeyCode::Down => Some(NavigationAction::ScrollDiffDown),
             KeyCode::Char('k') | KeyCode::Up => Some(NavigationAction::ScrollDiffUp),
@@ -183,6 +186,8 @@ fn map_project_tree_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('G') | KeyCode::End => Some(NavigationAction::ScrollDiffBottom),
             KeyCode::PageUp => Some(NavigationAction::ScrollDiffPageUp),
             KeyCode::PageDown => Some(NavigationAction::ScrollDiffPageDown),
+            KeyCode::Char('n') => Some(NavigationAction::NextDiffHunk),
+            KeyCode::Char('N') => Some(NavigationAction::PreviousDiffHunk),
             _ => None,
         };
         if let Some(action) = diff_action {
@@ -223,6 +228,9 @@ fn map_project_tree_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         }
         KeyCode::Char('/') => Some(AppAction::ProjectTree(ProjectTreeAction::OpenSearch)),
         KeyCode::Char('C') => Some(AppAction::Git(GitAction::ComparePrompt)),
+        KeyCode::Char('e') if state.project_tree_state.focus == ProjectTreeFocus::ChangedFiles => {
+            Some(AppAction::Git(GitAction::OpenExternalDiff))
+        }
         KeyCode::Char('v') if state.project_tree_state.focus == ProjectTreeFocus::Diff => {
             Some(AppAction::ToggleDiffViewMode)
         }
@@ -469,6 +477,7 @@ fn map_graph_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             }
             KeyCode::Char(' ') => Some(AppAction::Select),
             KeyCode::Char('z') | KeyCode::Enter => Some(AppAction::ToggleDiffFullscreen),
+            KeyCode::Char('e') => Some(AppAction::Git(GitAction::OpenExternalDiff)),
             _ => None,
         },
         FocusPanel::BottomRight => match key.code {
@@ -492,6 +501,9 @@ fn map_graph_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             }
             KeyCode::Char('z') | KeyCode::Enter => Some(AppAction::ToggleDiffFullscreen),
             KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
+            KeyCode::Char('e') => Some(AppAction::Git(GitAction::OpenExternalDiff)),
+            KeyCode::Char('n') => Some(AppAction::Navigation(NavigationAction::NextDiffHunk)),
+            KeyCode::Char('N') => Some(AppAction::Navigation(NavigationAction::PreviousDiffHunk)),
             KeyCode::PageUp => Some(AppAction::Navigation(NavigationAction::ScrollDiffPageUp)),
             KeyCode::PageDown => Some(AppAction::Navigation(NavigationAction::ScrollDiffPageDown)),
             _ => None,
@@ -675,6 +687,7 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('A') if !state.ui.is_merging => {
                 Some(AppAction::Git(GitAction::AmendCommit))
             }
+            KeyCode::Char('e') => Some(AppAction::Git(GitAction::OpenExternalDiff)),
             _ => None,
         },
         StagingFocus::Staged => match key.code {
@@ -694,6 +707,7 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             KeyCode::Char('A') if !state.ui.is_merging => {
                 Some(AppAction::Git(GitAction::AmendCommit))
             }
+            KeyCode::Char('e') => Some(AppAction::Git(GitAction::OpenExternalDiff)),
             _ => None,
         },
         StagingFocus::Diff => match key.code {
@@ -715,6 +729,9 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
                 Some(AppAction::Git(GitAction::AmendCommit))
             }
             KeyCode::Char('v') => Some(AppAction::ToggleDiffViewMode),
+            KeyCode::Char('e') => Some(AppAction::Git(GitAction::OpenExternalDiff)),
+            KeyCode::Char('n') => Some(AppAction::Navigation(NavigationAction::NextDiffHunk)),
+            KeyCode::Char('N') => Some(AppAction::Navigation(NavigationAction::PreviousDiffHunk)),
             KeyCode::Char('s') if state.staging_state.last_file_focus == StagingFocus::Unstaged => {
                 Some(AppAction::Staging(StagingAction::StageHunk))
             }

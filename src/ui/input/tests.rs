@@ -223,6 +223,44 @@ fn test_graph_i_opens_and_closes_repository_insights() {
 }
 
 #[test]
+fn test_diff_shortcuts_open_external_tool_and_navigate_hunks() {
+    let mut state = create_test_state();
+    state.focus = FocusPanel::BottomRight;
+
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::OpenExternalDiff))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Navigation(NavigationAction::NextDiffHunk))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('N'), KeyModifiers::SHIFT),
+            &state
+        ),
+        Some(AppAction::Navigation(NavigationAction::PreviousDiffHunk))
+    );
+
+    state.view_mode = ViewMode::Staging;
+    state.staging_state.focus = StagingFocus::Diff;
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::OpenExternalDiff))
+    );
+}
+
+#[test]
 fn test_project_tree_escape_closes_active_branch_comparison() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::ProjectTree;

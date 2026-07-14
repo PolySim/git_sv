@@ -220,6 +220,12 @@ pub mod diff {
     pub const LEFT: &[&str] = &["h", "←"];
     /// Scroll à droite.
     pub const RIGHT: &[&str] = &["l", "→"];
+    /// Ouvrir le diff dans l'outil externe configuré par Git.
+    pub const EXTERNAL: &str = "e";
+    /// Aller au hunk suivant.
+    pub const NEXT_HUNK: &str = "n";
+    /// Aller au hunk précédent.
+    pub const PREVIOUS_HUNK: &str = "N";
 }
 
 /// Vue Blame.

@@ -32,6 +32,10 @@ pub enum NavigationAction {
     ScrollDiffLeft,
     /// Faire défiler le diff vers la droite (horizontal)
     ScrollDiffRight,
+    /// Aller au hunk suivant dans le diff.
+    NextDiffHunk,
+    /// Aller au hunk précédent dans le diff.
+    PreviousDiffHunk,
     /// Faire défiler le diff de stash vers le haut
     ScrollStashDiffUp,
     /// Faire défiler le diff de stash vers le bas

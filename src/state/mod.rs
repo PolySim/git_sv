@@ -58,6 +58,9 @@ pub struct UiTransientState {
 
     /// Défilement vertical de l'overlay de diagnostic.
     pub repository_insights_scroll: u16,
+
+    /// Diff externe à lancer après suspension de la TUI.
+    pub pending_external_diff: Option<crate::git::external_diff::ExternalDiffRequest>,
 }
 
 impl UiTransientState {
@@ -73,6 +76,7 @@ impl UiTransientState {
             pending_interactive_rebase: None,
             repository_insights: None,
             repository_insights_scroll: 0,
+            pending_external_diff: None,
         }
     }
 

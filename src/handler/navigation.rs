@@ -16,7 +16,7 @@ use self::diff::{
     handle_scroll_diff_bottom, handle_scroll_diff_down, handle_scroll_diff_left,
     handle_scroll_diff_page_down, handle_scroll_diff_page_up, handle_scroll_diff_right,
     handle_scroll_diff_top, handle_scroll_diff_up, handle_scroll_stash_diff_down,
-    handle_scroll_stash_diff_up,
+    handle_scroll_stash_diff_up, handle_select_next_hunk, handle_select_previous_hunk,
 };
 use self::graph::{
     handle_back_to_graph, handle_file_down, handle_file_up, handle_go_bottom, handle_go_top,
@@ -46,6 +46,8 @@ impl ActionHandler for NavigationHandler {
             NavigationAction::ScrollDiffBottom => handle_scroll_diff_bottom(ctx.state),
             NavigationAction::ScrollDiffLeft => handle_scroll_diff_left(ctx.state),
             NavigationAction::ScrollDiffRight => handle_scroll_diff_right(ctx.state),
+            NavigationAction::NextDiffHunk => handle_select_next_hunk(ctx.state),
+            NavigationAction::PreviousDiffHunk => handle_select_previous_hunk(ctx.state),
             NavigationAction::ScrollStashDiffUp => handle_scroll_stash_diff_up(ctx.state),
             NavigationAction::ScrollStashDiffDown => handle_scroll_stash_diff_down(ctx.state),
             NavigationAction::FileUp => handle_file_up(ctx.state),

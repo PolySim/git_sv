@@ -178,6 +178,14 @@ fn append_project_tree_help(lines: &mut Vec<Line<'static>>) {
         keybindings::global::REFRESH,
         text("Rafraichir", "Refresh"),
     ));
+    lines.push(key_line(
+        keybindings::diff::EXTERNAL,
+        text("Ouvrir le diff externe", "Open external diff"),
+    ));
+    lines.push(key_line(
+        "n / N",
+        text("Hunk suivant / precedent", "Next / previous hunk"),
+    ));
 }
 
 fn append_graph_help(lines: &mut Vec<Line<'static>>) {
@@ -300,6 +308,14 @@ fn append_graph_help(lines: &mut Vec<Line<'static>>) {
         keybindings::diff::TOGGLE_VIEW,
         text("Basculer le mode diff", "Toggle diff mode"),
     ));
+    lines.push(key_line(
+        keybindings::diff::EXTERNAL,
+        text("Ouvrir le diff externe", "Open external diff"),
+    ));
+    lines.push(key_line(
+        "n / N",
+        text("Hunk suivant / precedent", "Next / previous hunk"),
+    ));
 }
 
 fn append_staging_help(lines: &mut Vec<Line<'static>>) {
@@ -380,6 +396,14 @@ fn append_staging_help(lines: &mut Vec<Line<'static>>) {
     lines.push(key_line(
         keybindings::diff::TOGGLE_VIEW,
         text("Basculer le mode diff", "Toggle diff mode"),
+    ));
+    lines.push(key_line(
+        keybindings::diff::EXTERNAL,
+        text("Ouvrir le diff externe", "Open external diff"),
+    ));
+    lines.push(key_line(
+        "n / N",
+        text("Hunk suivant / precedent", "Next / previous hunk"),
     ));
 }
 
