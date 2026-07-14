@@ -60,6 +60,10 @@ pub mod project_tree {
     pub const SEARCH: &str = "/";
     /// Basculer entre les quatre panneaux.
     pub const SWITCH_PANEL: &str = "Tab";
+    /// Comparer l'historique du chemin avec une branche.
+    pub const COMPARE: &str = "C";
+    /// Fermer la comparaison de chemin active.
+    pub const CLOSE_COMPARISON: &str = "Esc";
 }
 
 /// Actions Git disponibles dans la vue Graph.

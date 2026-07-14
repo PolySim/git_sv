@@ -45,6 +45,10 @@ pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
             format!(" Rebase '{}' sur ", current_branch_name),
             format!(" Rebase '{}' onto ", current_branch_name),
         ),
+        BranchPickerMode::Compare => text_owned(
+            format!(" Comparer '{}' avec ", current_branch_name),
+            format!(" Compare '{}' with ", current_branch_name),
+        ),
     };
 
     // Construire la liste des branches
@@ -103,6 +107,10 @@ fn render_help_bar(frame: &mut Frame, popup_area: Rect, mode: BranchPickerMode) 
         BranchPickerMode::Rebase => text(
             "j/k:naviguer  Enter:rebase  Esc:annuler",
             "j/k:navigate  Enter:rebase  Esc:cancel",
+        ),
+        BranchPickerMode::Compare => text(
+            "j/k:naviguer  Enter:comparer  Esc:annuler",
+            "j/k:navigate  Enter:compare  Esc:cancel",
         ),
     };
 

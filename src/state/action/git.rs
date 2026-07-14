@@ -28,6 +28,10 @@ pub enum GitAction {
     MergePrompt,
     /// Ouvrir le dialogue de rebase
     RebasePrompt,
+    /// Ouvrir le selecteur de branche pour une comparaison d'historique
+    ComparePrompt,
+    /// Quitter la comparaison d'historique active
+    ClearComparison,
     /// Ouvrir le dialogue de reset
     ResetPrompt,
     /// Annuler le merge en cours

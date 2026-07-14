@@ -1,12 +1,13 @@
 //! État de la vue arborescence et historique par chemin.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,
 };
 
 use crate::git::commit::CommitInfo;
 use crate::git::diff::{DiffFile, DiffViewMode, FileDiff};
+use crate::git::project_tree::{PathHistoryComparison, PathHistorySide};
 use crate::state::project_search::fuzzy_path_score;
 use crate::state::selection::ListSelection;
 use crate::state::TextEditHistory;
@@ -44,6 +45,15 @@ pub enum ProjectTreeFocus {
     Diff,
 }
 
+/// Contexte de comparaison du chemin sélectionné avec une branche.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectTreeComparison {
+    pub base_branch: String,
+    pub target_branch: String,
+    pub ahead: Option<usize>,
+    pub behind: Option<usize>,
+}
+
 /// État de la recherche rapide de fichiers et dossiers.
 #[derive(Debug, Clone)]
 pub struct ProjectTreeSearchState {
@@ -74,9 +84,14 @@ pub struct ProjectTreeState {
     pub focus: ProjectTreeFocus,
     pub entries: ListSelection<ProjectTreeEntry>,
     pub history: ListSelection<CommitInfo>,
+    pub history_loaded: bool,
+    pub comparison: Option<ProjectTreeComparison>,
+    history_sides: HashMap<git2::Oid, PathHistorySide>,
     pub changed_files: ListSelection<DiffFile>,
+    pub commit_details_loaded: bool,
     preferred_changed_files_count: usize,
     pub selected_diff: Option<FileDiff>,
+    pub diff_loaded: bool,
     pub diff_scroll_offset: usize,
     pub diff_horizontal_offset: usize,
     pub diff_total_lines: usize,
@@ -94,9 +109,14 @@ impl Default for ProjectTreeState {
             focus: ProjectTreeFocus::Tree,
             entries: ListSelection::new(),
             history: ListSelection::new(),
+            history_loaded: false,
+            comparison: None,
+            history_sides: HashMap::new(),
             changed_files: ListSelection::new(),
+            commit_details_loaded: false,
             preferred_changed_files_count: 0,
             selected_diff: None,
+            diff_loaded: false,
             diff_scroll_offset: 0,
             diff_horizontal_offset: 0,
             diff_total_lines: 0,
@@ -131,6 +151,7 @@ impl ProjectTreeState {
 
         self.rebuild_visible_entries(selected_path.as_deref());
         self.update_search_results();
+        self.invalidate_path_history();
     }
 
     pub fn selected_entry(&self) -> Option<&ProjectTreeEntry> {
@@ -181,14 +202,23 @@ impl ProjectTreeState {
             .iter()
             .position(|candidate| candidate.path == parent)
         {
-            self.entries.select(index);
+            self.select_tree_entry(index);
         }
     }
 
     /// Sélectionne une entrée et bascule son dossier éventuel.
     pub fn activate_entry(&mut self, index: usize) {
-        self.entries.select(index);
+        self.select_tree_entry(index);
         self.toggle_selected_directory();
+    }
+
+    /// Sélectionne une entrée et invalide les données du chemin précédent.
+    pub fn select_tree_entry(&mut self, index: usize) {
+        let previous = self.entries.selected_index();
+        self.entries.select(index);
+        if self.entries.selected_index() != previous {
+            self.invalidate_path_history();
+        }
     }
 
     pub fn selected_history_commit(&self) -> Option<&CommitInfo> {
@@ -197,6 +227,77 @@ impl ProjectTreeState {
 
     pub fn selected_changed_file(&self) -> Option<&DiffFile> {
         self.changed_files.selected_item()
+    }
+
+    /// Sélectionne un commit et invalide ses détails précédemment chargés.
+    pub fn select_history_entry(&mut self, index: usize) {
+        let previous = self.history.selected_index();
+        self.history.select(index);
+        if self.history.selected_index() != previous {
+            self.invalidate_commit_details();
+        }
+    }
+
+    /// Sélectionne un fichier et invalide le diff précédemment chargé.
+    pub fn select_changed_file(&mut self, index: usize) {
+        let previous = self.changed_files.selected_index();
+        self.changed_files.select(index);
+        if self.changed_files.selected_index() != previous {
+            self.invalidate_diff();
+        }
+    }
+
+    /// Remplace l'historique chargé pour le chemin sélectionné.
+    pub fn set_path_history(&mut self, history: Vec<CommitInfo>) {
+        self.history_sides.clear();
+        self.history.set_items(history);
+        self.history.select_first();
+        self.history_loaded = true;
+        self.invalidate_commit_details();
+    }
+
+    /// Active une comparaison de chemin avec une branche.
+    pub fn start_comparison(&mut self, base_branch: String, target_branch: String) {
+        self.comparison = Some(ProjectTreeComparison {
+            base_branch,
+            target_branch,
+            ahead: None,
+            behind: None,
+        });
+        self.invalidate_path_history();
+    }
+
+    /// Ferme la comparaison de chemin active.
+    pub fn clear_comparison(&mut self) {
+        self.comparison = None;
+        self.invalidate_path_history();
+    }
+
+    /// Remplace l'historique par les commits divergents annotés par branche.
+    pub fn set_compared_path_history(&mut self, comparison: PathHistoryComparison) {
+        self.history_sides = comparison
+            .commits
+            .iter()
+            .map(|entry| (entry.commit.oid, entry.side))
+            .collect();
+        self.history.set_items(
+            comparison
+                .commits
+                .into_iter()
+                .map(|entry| entry.commit)
+                .collect(),
+        );
+        self.history.select_first();
+        self.history_loaded = true;
+        if let Some(active) = self.comparison.as_mut() {
+            active.ahead = Some(comparison.ahead);
+            active.behind = Some(comparison.behind);
+        }
+        self.invalidate_commit_details();
+    }
+
+    pub fn history_side(&self, oid: git2::Oid) -> Option<PathHistorySide> {
+        self.history_sides.get(&oid).copied()
     }
 
     /// Regroupe en tête les fichiers correspondant au chemin consulté.
@@ -213,6 +314,8 @@ impl ProjectTreeState {
         preferred.extend(others);
         self.changed_files.set_items(preferred);
         self.changed_files.select_first();
+        self.commit_details_loaded = true;
+        self.invalidate_diff();
     }
 
     pub fn has_changed_files_separator(&self) -> bool {
@@ -244,10 +347,35 @@ impl ProjectTreeState {
         None
     }
 
-    pub fn clear_history_details(&mut self) {
+    pub fn invalidate_path_history(&mut self) {
+        self.history.clear();
+        self.history_sides.clear();
+        self.history_loaded = false;
+        if let Some(comparison) = self.comparison.as_mut() {
+            comparison.ahead = None;
+            comparison.behind = None;
+        }
+        self.invalidate_commit_details();
+    }
+
+    pub fn invalidate_commit_details(&mut self) {
         self.changed_files.clear();
+        self.commit_details_loaded = false;
         self.preferred_changed_files_count = 0;
+        self.invalidate_diff();
+    }
+
+    pub fn invalidate_diff(&mut self) {
         self.selected_diff = None;
+        self.diff_loaded = false;
+        self.diff_scroll_offset = 0;
+        self.diff_horizontal_offset = 0;
+        self.diff_total_lines = 0;
+    }
+
+    pub fn set_selected_diff(&mut self, diff: Option<FileDiff>) {
+        self.selected_diff = diff;
+        self.diff_loaded = true;
         self.diff_scroll_offset = 0;
         self.diff_horizontal_offset = 0;
         self.diff_total_lines = 0;
@@ -300,6 +428,7 @@ impl ProjectTreeState {
 
     /// Révèle un résultat de recherche dans l'arborescence et le sélectionne.
     pub fn reveal_path(&mut self, path: &str) {
+        let previous_path = self.selected_entry().map(|entry| entry.path.clone());
         let mut current = String::new();
         let components: Vec<_> = path.split('/').collect();
         for component in components.iter().take(components.len().saturating_sub(1)) {
@@ -310,6 +439,9 @@ impl ProjectTreeState {
             self.expanded_directories.insert(current.clone());
         }
         self.rebuild_visible_entries(Some(path));
+        if self.selected_entry().map(|entry| &entry.path) != previous_path.as_ref() {
+            self.invalidate_path_history();
+        }
     }
 
     fn rebuild_visible_entries(&mut self, selected_path: Option<&str>) {
@@ -551,6 +683,123 @@ mod tests {
         assert_eq!(state.changed_files_separator_index(), Some(2));
         assert_eq!(state.changed_file_index_at_visual_row(2), None);
         assert_eq!(state.changed_file_index_at_visual_row(3), Some(2));
+    }
+
+    #[test]
+    fn changing_tree_selection_invalidates_all_dependent_panels() {
+        let mut state = ProjectTreeState::new();
+        state.set_files(vec!["a.rs".to_string(), "b.rs".to_string()]);
+        state.set_path_history(vec![commit_info(1)]);
+        state.set_changed_files(vec![diff_file("a.rs")]);
+        state.set_selected_diff(None);
+
+        state.select_tree_entry(1);
+
+        assert_eq!(state.selected_entry().unwrap().path, "b.rs");
+        assert!(state.history.is_empty());
+        assert!(!state.history_loaded);
+        assert!(state.changed_files.is_empty());
+        assert!(!state.commit_details_loaded);
+        assert!(!state.diff_loaded);
+    }
+
+    #[test]
+    fn selecting_same_tree_entry_keeps_loaded_panels() {
+        let mut state = ProjectTreeState::new();
+        state.set_files(vec!["a.rs".to_string(), "b.rs".to_string()]);
+        state.set_path_history(vec![commit_info(1)]);
+        state.set_changed_files(vec![diff_file("a.rs")]);
+        state.set_selected_diff(None);
+
+        state.select_tree_entry(0);
+
+        assert!(state.history_loaded);
+        assert!(state.commit_details_loaded);
+        assert!(state.diff_loaded);
+    }
+
+    #[test]
+    fn changing_history_and_file_selection_invalidates_only_descendants() {
+        let mut state = ProjectTreeState::new();
+        state.set_files(vec!["a.rs".to_string()]);
+        state.set_path_history(vec![commit_info(1), commit_info(2)]);
+        state.set_changed_files(vec![diff_file("a.rs"), diff_file("b.rs")]);
+        state.set_selected_diff(None);
+
+        state.select_history_entry(1);
+
+        assert!(state.history_loaded);
+        assert!(!state.commit_details_loaded);
+        assert!(!state.diff_loaded);
+
+        state.set_changed_files(vec![diff_file("a.rs"), diff_file("b.rs")]);
+        state.set_selected_diff(None);
+        state.select_changed_file(1);
+
+        assert!(state.commit_details_loaded);
+        assert!(!state.diff_loaded);
+    }
+
+    #[test]
+    fn compared_history_tracks_sides_and_survives_path_changes() {
+        let mut state = ProjectTreeState::new();
+        state.set_files(vec!["a.rs".to_string(), "b.rs".to_string()]);
+        state.start_comparison("main".to_string(), "feature".to_string());
+        let current = commit_info(1);
+        let target = commit_info(2);
+        state.set_compared_path_history(PathHistoryComparison {
+            commits: vec![
+                crate::git::project_tree::ComparedPathCommit {
+                    commit: current.clone(),
+                    side: PathHistorySide::Current,
+                },
+                crate::git::project_tree::ComparedPathCommit {
+                    commit: target.clone(),
+                    side: PathHistorySide::Target,
+                },
+            ],
+            ahead: 1,
+            behind: 1,
+        });
+
+        assert_eq!(
+            state.history_side(current.oid),
+            Some(PathHistorySide::Current)
+        );
+        assert_eq!(
+            state.history_side(target.oid),
+            Some(PathHistorySide::Target)
+        );
+        assert_eq!(
+            state
+                .comparison
+                .as_ref()
+                .map(|comparison| (comparison.ahead, comparison.behind)),
+            Some((Some(1), Some(1)))
+        );
+
+        state.select_tree_entry(1);
+
+        let comparison = state.comparison.as_ref().unwrap();
+        assert_eq!(comparison.target_branch, "feature");
+        assert_eq!((comparison.ahead, comparison.behind), (None, None));
+        assert!(!state.history_loaded);
+        assert_eq!(state.history_side(current.oid), None);
+
+        state.clear_comparison();
+        assert!(state.comparison.is_none());
+    }
+
+    fn commit_info(byte: u8) -> CommitInfo {
+        CommitInfo {
+            oid: git2::Oid::from_bytes(&[byte; 20]).unwrap(),
+            message: format!("commit {byte}"),
+            author: "Test".to_string(),
+            email: "test@example.com".to_string(),
+            timestamp: 0,
+            parents: Vec::new(),
+            changed_paths: None,
+        }
     }
 
     fn diff_file(path: &str) -> DiffFile {

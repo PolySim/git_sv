@@ -22,42 +22,42 @@ impl ActionHandler for ProjectTreeHandler {
                 ctx.state
                     .project_tree_state
                     .collapse_selected_or_select_parent();
-                ctx.state.refresh_selected_path_history();
             }
             ProjectTreeAction::ActivateTreeEntry(index) => {
                 ctx.state.project_tree_state.activate_entry(index);
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::Tree;
-                ctx.state.refresh_selected_path_history();
             }
             ProjectTreeAction::FocusTree => {
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::Tree;
             }
             ProjectTreeAction::FocusHistory => {
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::History;
+                ctx.state.ensure_project_tree_focus_loaded();
             }
             ProjectTreeAction::FocusChangedFiles => {
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::ChangedFiles;
+                ctx.state.ensure_project_tree_focus_loaded();
             }
             ProjectTreeAction::FocusDiff => {
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::Diff;
+                ctx.state.ensure_project_tree_focus_loaded();
             }
             ProjectTreeAction::SelectTreeEntry(index) => {
-                ctx.state.project_tree_state.entries.select(index);
+                ctx.state.project_tree_state.select_tree_entry(index);
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::Tree;
-                ctx.state.refresh_selected_path_history();
             }
             ProjectTreeAction::SelectSearchResult(index) => {
                 ctx.state.project_tree_state.search.results.select(index);
             }
             ProjectTreeAction::SelectHistoryEntry(index) => {
-                ctx.state.project_tree_state.history.select(index);
+                ctx.state.project_tree_state.select_history_entry(index);
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::History;
-                ctx.state.refresh_selected_history_commit_details();
+                ctx.state.ensure_project_tree_focus_loaded();
             }
             ProjectTreeAction::SelectChangedFile(index) => {
-                ctx.state.project_tree_state.changed_files.select(index);
+                ctx.state.project_tree_state.select_changed_file(index);
                 ctx.state.project_tree_state.focus = ProjectTreeFocus::ChangedFiles;
-                ctx.state.refresh_selected_history_file_diff();
+                ctx.state.ensure_project_tree_focus_loaded();
             }
             ProjectTreeAction::OpenSearch => {
                 ctx.state.project_tree_state.open_search();
@@ -108,5 +108,4 @@ fn confirm_search(ctx: &mut HandlerContext) {
     ctx.state.project_tree_state.close_search();
     ctx.state.project_tree_state.reveal_path(&path);
     ctx.state.project_tree_state.focus = ProjectTreeFocus::Tree;
-    ctx.state.refresh_selected_path_history();
 }

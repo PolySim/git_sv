@@ -8,6 +8,7 @@ pub enum BranchPickerMode {
     #[default]
     Merge,
     Rebase,
+    Compare,
 }
 
 /// État du sélecteur de branche pour le merge.
@@ -37,6 +38,15 @@ impl MergePickerState {
             branches: ListSelection::with_items(branches),
             is_active: true,
             mode: BranchPickerMode::Rebase,
+        }
+    }
+
+    /// Cree un picker pour comparer l'historique avec une branche.
+    pub fn new_compare(branches: Vec<String>) -> Self {
+        Self {
+            branches: ListSelection::with_items(branches),
+            is_active: true,
+            mode: BranchPickerMode::Compare,
         }
     }
 

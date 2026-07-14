@@ -1,14 +1,17 @@
 use super::super::traits::HandlerContext;
 use crate::error::Result;
-use crate::handler::navigation;
 use crate::state::{BranchPickerMode, ViewMode};
 use crate::utils::{flash_error, flash_success};
 
+#[derive(Debug, Clone, Copy)]
+enum IntegrationMode {
+    Merge,
+    Rebase,
+}
+
 /// Gère la confirmation du merge picker.
 pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()> {
-    use crate::git::conflict::MergeResult;
-
-    let branch_to_merge = ctx
+    let selected_branch = ctx
         .state
         .merge_picker
         .as_ref()
@@ -21,93 +24,108 @@ pub(super) fn handle_merge_picker_confirm(ctx: &mut HandlerContext) -> Result<()
         .map(|picker| picker.mode)
         .unwrap_or(BranchPickerMode::Merge);
 
-    if let Some(branch_name) = branch_to_merge {
-        let result = match picker_mode {
+    if let Some(branch_name) = selected_branch {
+        match picker_mode {
+            BranchPickerMode::Compare => {
+                if let Err(error) =
+                    crate::handler::git::activate_project_tree_comparison(ctx.state, &branch_name)
+                {
+                    ctx.state
+                        .set_flash_message(flash_error("comparaison", error));
+                }
+            }
             BranchPickerMode::Merge => {
-                crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, &branch_name)
+                confirm_branch_integration(ctx, &branch_name, IntegrationMode::Merge)
             }
             BranchPickerMode::Rebase => {
-                crate::git::rebase::rebase_branch_with_result(&ctx.state.repo.repo, &branch_name)
-            }
-        };
-
-        match result {
-            Ok(MergeResult::UpToDate) => {
-                let message = match picker_mode {
-                    BranchPickerMode::Merge => {
-                        format!("Branche '{}' est déjà à jour", branch_name)
-                    }
-                    BranchPickerMode::Rebase => {
-                        format!("Branche courante déjà à jour sur '{}'", branch_name)
-                    }
-                };
-                ctx.state.set_flash_message(flash_success(message));
-            }
-            Ok(MergeResult::FastForward) => {
-                let message = match picker_mode {
-                    BranchPickerMode::Merge => format!("Fast-forward vers '{}'", branch_name),
-                    BranchPickerMode::Rebase => {
-                        format!("Rebase fast-forward sur '{}'", branch_name)
-                    }
-                };
-                ctx.state.set_flash_message(flash_success(message));
-                ctx.state.mark_dirty();
-            }
-            Ok(MergeResult::Success) => {
-                let message = match picker_mode {
-                    BranchPickerMode::Merge => {
-                        format!("Branche '{}' mergée avec succès", branch_name)
-                    }
-                    BranchPickerMode::Rebase => {
-                        format!("Rebase effectué sur '{}'", branch_name)
-                    }
-                };
-                ctx.state.set_flash_message(flash_success(message));
-                ctx.state.mark_dirty();
-            }
-            Ok(MergeResult::Conflicts(conflicts)) => {
-                let message = match picker_mode {
-                    BranchPickerMode::Merge => format!(
-                        "Conflits lors du merge avec '{}' ({} fichiers)",
-                        branch_name,
-                        conflicts.len()
-                    ),
-                    BranchPickerMode::Rebase => format!(
-                        "Conflits lors du rebase sur '{}' ({} fichiers)",
-                        branch_name,
-                        conflicts.len()
-                    ),
-                };
-                ctx.state.set_flash_message(message);
-                // Activer la vue conflits
-                let current = ctx
-                    .state
-                    .current_branch
-                    .clone()
-                    .unwrap_or_else(|| "HEAD".to_string());
-                ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
-                    conflicts,
-                    match picker_mode {
-                        BranchPickerMode::Merge => format!("merge {}", branch_name),
-                        BranchPickerMode::Rebase => format!("rebase {}", branch_name),
-                    },
-                    current,
-                    branch_name,
-                ));
-                ctx.state.view_mode = ViewMode::Conflicts;
-            }
-            Err(e) => {
-                let operation = match picker_mode {
-                    BranchPickerMode::Merge => "merge",
-                    BranchPickerMode::Rebase => "rebase",
-                };
-                ctx.state.set_flash_message(flash_error(operation, e));
+                confirm_branch_integration(ctx, &branch_name, IntegrationMode::Rebase)
             }
         }
     }
 
     ctx.state.merge_picker = None;
     Ok(())
+}
+
+fn confirm_branch_integration(ctx: &mut HandlerContext, branch_name: &str, mode: IntegrationMode) {
+    use crate::git::conflict::MergeResult;
+
+    let result = match mode {
+        IntegrationMode::Merge => {
+            crate::git::merge::merge_branch_with_result(&ctx.state.repo.repo, branch_name)
+        }
+        IntegrationMode::Rebase => {
+            crate::git::rebase::rebase_branch_with_result(&ctx.state.repo.repo, branch_name)
+        }
+    };
+
+    match result {
+        Ok(MergeResult::UpToDate) => {
+            let message = match mode {
+                IntegrationMode::Merge => format!("Branche '{}' est déjà à jour", branch_name),
+                IntegrationMode::Rebase => {
+                    format!("Branche courante déjà à jour sur '{}'", branch_name)
+                }
+            };
+            ctx.state.set_flash_message(flash_success(message));
+        }
+        Ok(MergeResult::FastForward) => {
+            let message = match mode {
+                IntegrationMode::Merge => format!("Fast-forward vers '{}'", branch_name),
+                IntegrationMode::Rebase => format!("Rebase fast-forward sur '{}'", branch_name),
+            };
+            ctx.state.set_flash_message(flash_success(message));
+            ctx.state.mark_dirty();
+        }
+        Ok(MergeResult::Success) => {
+            let message = match mode {
+                IntegrationMode::Merge => {
+                    format!("Branche '{}' mergée avec succès", branch_name)
+                }
+                IntegrationMode::Rebase => format!("Rebase effectué sur '{}'", branch_name),
+            };
+            ctx.state.set_flash_message(flash_success(message));
+            ctx.state.mark_dirty();
+        }
+        Ok(MergeResult::Conflicts(conflicts)) => {
+            let message = match mode {
+                IntegrationMode::Merge => format!(
+                    "Conflits lors du merge avec '{}' ({} fichiers)",
+                    branch_name,
+                    conflicts.len()
+                ),
+                IntegrationMode::Rebase => format!(
+                    "Conflits lors du rebase sur '{}' ({} fichiers)",
+                    branch_name,
+                    conflicts.len()
+                ),
+            };
+            ctx.state.set_flash_message(message);
+            let current = ctx
+                .state
+                .current_branch
+                .clone()
+                .unwrap_or_else(|| "HEAD".to_string());
+            let operation = match mode {
+                IntegrationMode::Merge => format!("merge {}", branch_name),
+                IntegrationMode::Rebase => format!("rebase {}", branch_name),
+            };
+            ctx.state.conflicts_state = Some(crate::state::ConflictsState::new(
+                conflicts,
+                operation,
+                current,
+                branch_name.to_string(),
+            ));
+            ctx.state.view_mode = ViewMode::Conflicts;
+        }
+        Err(error) => {
+            let operation = match mode {
+                IntegrationMode::Merge => "merge",
+                IntegrationMode::Rebase => "rebase",
+            };
+            ctx.state.set_flash_message(flash_error(operation, error));
+        }
+    }
 }
 
 /// Gère le chargement progressif de l'historique.
@@ -239,19 +257,12 @@ pub fn maybe_load_more_history(state: &mut crate::state::AppState) -> Result<boo
         return Ok(false);
     }
 
-    let previously_selected = state.selected_commit().map(|commit| commit.oid);
     let previous_loaded = state.graph_view.loaded_count;
     let mut ctx = HandlerContext { state };
     handle_load_more_history(&mut ctx)?;
 
     if ctx.state.graph_view.loaded_count == previous_loaded {
         return Ok(false);
-    }
-
-    if let Some(oid) = previously_selected {
-        if ctx.state.selected_commit().map(|commit| commit.oid) == Some(oid) {
-            navigation::refresh_commit_file_data(ctx.state);
-        }
     }
 
     Ok(true)

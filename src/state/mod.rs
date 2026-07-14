@@ -4,6 +4,7 @@ pub mod action;
 pub mod cache;
 pub mod filter;
 pub(crate) mod project_search;
+mod project_tree_loading;
 pub mod selection;
 pub mod text_edit;
 pub mod view;
@@ -384,14 +385,12 @@ impl AppState {
             match self.repo.commit_diff(oid) {
                 Ok(files) => self.graph_view.set_commit_files(files),
                 Err(e) => {
-                    self.graph_view.commit_files.clear();
-                    self.graph_view.file_selected_index = 0;
+                    self.graph_view.invalidate_commit_details();
                     self.set_flash_message(crate::utils::flash_error("chargement fichiers", e));
                 }
             }
         } else {
-            self.graph_view.commit_files.clear();
-            self.graph_view.file_selected_index = 0;
+            self.graph_view.invalidate_commit_details();
         }
     }
 
@@ -448,6 +447,7 @@ impl AppState {
     }
 
     fn refresh_with_commit_limit(&mut self, commit_limit: usize) -> crate::error::Result<()> {
+        let previous_branch = self.current_branch.clone();
         self.current_branch = match self.repo.current_branch() {
             Ok(branch) => Some(branch),
             Err(e) => {
@@ -455,13 +455,16 @@ impl AppState {
                 None
             }
         };
+        if previous_branch.is_some() && previous_branch != self.current_branch {
+            self.project_tree_state.clear_comparison();
+        }
 
         let (new_graph, can_load_more) = if self.filters.graph_filter.is_active() {
             match self
                 .repo
                 .build_graph_filtered_with_more(commit_limit, &self.filters.graph_filter)
             {
-                Ok(result) => result,
+                Ok((graph, has_more)) => (graph, has_more),
                 Err(e) => {
                     self.set_flash_message(crate::utils::flash_error("chargement graphe", e));
                     (
@@ -472,7 +475,7 @@ impl AppState {
             }
         } else {
             match self.repo.build_graph_with_more(commit_limit) {
-                Ok(result) => result,
+                Ok((graph, has_more)) => (graph, has_more),
                 Err(e) => {
                     self.set_flash_message(crate::utils::flash_error("chargement graphe", e));
                     (
@@ -514,107 +517,13 @@ impl AppState {
 
         if self.view_mode == ViewMode::ProjectTree {
             self.refresh_project_tree();
+            self.ensure_project_tree_focus_loaded();
         }
 
         self.ui.is_merging = crate::git::conflict::is_merging(&self.repo.repo);
         self.dirty = false;
 
         Ok(())
-    }
-
-    /// Rafraîchit l'arborescence et l'historique du chemin sélectionné.
-    pub fn refresh_project_tree(&mut self) {
-        match self.repo.current_project_files() {
-            Ok(files) => {
-                self.project_tree_state.set_files(files);
-                self.refresh_selected_path_history();
-            }
-            Err(error) => {
-                self.set_flash_message(crate::utils::flash_error("arborescence", error));
-            }
-        }
-    }
-
-    /// Recharge l'historique du fichier ou dossier sélectionné.
-    pub fn refresh_selected_path_history(&mut self) {
-        let Some(entry) = self.project_tree_state.selected_entry().cloned() else {
-            self.project_tree_state.history.clear();
-            self.project_tree_state.clear_history_details();
-            return;
-        };
-
-        match self
-            .repo
-            .path_history(&entry.path, entry.is_directory(), MAX_TOTAL_COMMITS)
-        {
-            Ok(history) => {
-                self.project_tree_state.history.set_items(history);
-                self.project_tree_state.history.select_first();
-                self.refresh_selected_history_commit_details();
-            }
-            Err(error) => {
-                self.project_tree_state.history.clear();
-                self.project_tree_state.clear_history_details();
-                self.set_flash_message(crate::utils::flash_error("historique du chemin", error));
-            }
-        }
-    }
-
-    /// Recharge les fichiers touchés par le commit d'historique sélectionné.
-    pub fn refresh_selected_history_commit_details(&mut self) {
-        let Some(oid) = self
-            .project_tree_state
-            .selected_history_commit()
-            .map(|commit| commit.oid)
-        else {
-            self.project_tree_state.clear_history_details();
-            return;
-        };
-
-        match self.repo.commit_diff(oid) {
-            Ok(files) => {
-                self.project_tree_state.set_changed_files(files);
-                self.refresh_selected_history_file_diff();
-            }
-            Err(error) => {
-                self.project_tree_state.clear_history_details();
-                self.set_flash_message(crate::utils::flash_error("fichiers du commit", error));
-            }
-        }
-    }
-
-    /// Recharge le diff du fichier sélectionné dans le commit d'historique.
-    pub fn refresh_selected_history_file_diff(&mut self) {
-        let commit_oid = self
-            .project_tree_state
-            .selected_history_commit()
-            .map(|commit| commit.oid);
-        let file_path = self
-            .project_tree_state
-            .selected_changed_file()
-            .map(|file| file.path.clone());
-        let (Some(commit_oid), Some(file_path)) = (commit_oid, file_path) else {
-            self.project_tree_state.selected_diff = None;
-            return;
-        };
-
-        let cache_key = crate::state::cache::DiffCacheKey::new(commit_oid, &file_path);
-        if let Some(diff) = self.diff_cache.get(&cache_key).cloned() {
-            self.project_tree_state.selected_diff = Some(diff);
-        } else {
-            match self.repo.file_diff(commit_oid, &file_path) {
-                Ok(diff) => {
-                    self.diff_cache.put(cache_key, diff.clone());
-                    self.project_tree_state.selected_diff = Some(diff);
-                }
-                Err(error) => {
-                    self.project_tree_state.selected_diff = None;
-                    self.set_flash_message(crate::utils::flash_error("diff du commit", error));
-                }
-            }
-        }
-        self.project_tree_state.diff_scroll_offset = 0;
-        self.project_tree_state.diff_horizontal_offset = 0;
     }
 
     /// Synchronise `status_entries` et la vue staging à partir d'une seule lecture.
@@ -947,5 +856,24 @@ mod tests {
                 .map(|commit| commit.message.as_str()),
             Some("Alpha commit")
         );
+    }
+
+    #[test]
+    fn test_refresh_closes_project_tree_comparison_after_checkout() {
+        let (_temp_dir, mut state) = create_test_state();
+        let base_oid = commit_file(&state.repo.repo, "tracked.txt", "base\n", "Base");
+        let base = state.repo.repo.find_commit(base_oid).unwrap();
+        state.repo.repo.branch("feature", &base, false).unwrap();
+        drop(base);
+        state.initialize_from_repo().unwrap();
+        state
+            .project_tree_state
+            .start_comparison("main".to_string(), "feature".to_string());
+
+        crate::git::branch::checkout_branch(&state.repo.repo, "feature").unwrap();
+        state.refresh_from_repo().unwrap();
+
+        assert_eq!(state.current_branch.as_deref(), Some("feature"));
+        assert!(state.project_tree_state.comparison.is_none());
     }
 }

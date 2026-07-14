@@ -25,15 +25,26 @@ pub(super) fn build_empty_state_line(filter_active: bool) -> Line<'static> {
     ))
 }
 
-pub(super) fn build_title(
-    branch_name: &str,
-    selected_index: usize,
-    visible_count: usize,
-    loaded_count: usize,
-    total_commits: Option<usize>,
-    can_load_more: bool,
-    is_loading_more: bool,
-) -> String {
+pub(super) struct GraphTitleContext<'a> {
+    pub branch_name: &'a str,
+    pub selected_index: usize,
+    pub visible_count: usize,
+    pub loaded_count: usize,
+    pub total_commits: Option<usize>,
+    pub can_load_more: bool,
+    pub is_loading_more: bool,
+}
+
+pub(super) fn build_title(ctx: GraphTitleContext<'_>) -> String {
+    let GraphTitleContext {
+        branch_name,
+        selected_index,
+        visible_count,
+        loaded_count,
+        total_commits,
+        can_load_more,
+        is_loading_more,
+    } = ctx;
     let position = if visible_count == 0 {
         0
     } else {

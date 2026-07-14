@@ -351,6 +351,8 @@ imposer un fond RGB different de celui du terminal :
 | `→` / `l` | Ouvrir le dossier selectionne |
 | `/` | Rechercher rapidement un fichier ou dossier, avec tolerance aux fautes |
 | `Tab` | Parcourir arbre, historique, fichiers touches et diff |
+| `C` | Comparer les commits du chemin avec une autre branche |
+| `Esc` | Fermer la comparaison de chemin active |
 | `v` | Basculer le diff unifie / cote a cote |
 | `r` | Rafraichir l'arborescence courante |
 | `y` | Copier le chemin, le commit, l'etat du fichier au commit ou le diff actif |
@@ -358,7 +360,10 @@ imposer un fond RGB different de celui du terminal :
 La selection d'un chemin affiche les commits qui l'ont touche. La selection
 d'un commit affiche tous ses fichiers modifies, puis le patch du fichier
 selectionne. Dans le panneau « fichiers touches », `y` copie le contenu exact
-du fichier tel qu'il existe dans le commit.
+du fichier tel qu'il existe dans le commit. La comparaison de branches affiche
+uniquement les commits divergents qui ont touche le chemin : `+` indique la
+branche courante et `-` la branche comparee. Le diff reste celui du commit
+selectionne afin de parcourir les modifications une par une.
 
 ---
 

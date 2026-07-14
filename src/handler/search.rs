@@ -71,12 +71,6 @@ fn handle_next_result(state: &mut AppState) -> Result<()> {
         {
             if index < state.graph_view.len() {
                 state.graph_view.select_commit(index);
-                // Rafraîchir les fichiers du commit sélectionné
-                state.refresh_commit_files();
-                // Charger le diff du fichier si disponible
-                if !state.graph_view.commit_files.is_empty() {
-                    crate::handler::navigation::load_commit_file_diff(state);
-                }
             }
         }
     }
@@ -94,12 +88,6 @@ fn handle_previous_result(state: &mut AppState) -> Result<()> {
         {
             if index < state.graph_view.len() {
                 state.graph_view.select_commit(index);
-                // Rafraîchir les fichiers du commit sélectionné
-                state.refresh_commit_files();
-                // Charger le diff du fichier si disponible
-                if !state.graph_view.commit_files.is_empty() {
-                    crate::handler::navigation::load_commit_file_diff(state);
-                }
             }
         }
     }
@@ -131,12 +119,6 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
         if let Some(&index) = state.search_state.results.first() {
             if index < state.graph_view.len() {
                 state.graph_view.select_commit(index);
-                // Rafraîchir les fichiers du commit sélectionné
-                state.refresh_commit_files();
-                // Charger le diff du fichier si disponible
-                if !state.graph_view.commit_files.is_empty() {
-                    crate::handler::navigation::load_commit_file_diff(state);
-                }
             }
         }
         state.set_flash_message(flash_success(format!(

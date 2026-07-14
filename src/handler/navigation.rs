@@ -54,15 +54,15 @@ impl ActionHandler for NavigationHandler {
             NavigationAction::FocusGraph => ctx.state.focus = FocusPanel::Graph,
             NavigationAction::FocusBottomLeft => {
                 ctx.state.focus = FocusPanel::BottomLeft;
-                diff::load_commit_file_diff(ctx.state);
+                graph::refresh_commit_file_data(ctx.state);
             }
             NavigationAction::FocusBottomRight => {
                 ctx.state.focus = FocusPanel::BottomRight;
+                graph::refresh_commit_file_data(ctx.state);
             }
             NavigationAction::SelectCommit(index) => {
                 ctx.state.graph_view.select_commit(index);
                 ctx.state.focus = FocusPanel::Graph;
-                graph::refresh_commit_file_data(ctx.state);
             }
             NavigationAction::SelectFile(index) => {
                 ctx.state.graph_view.select_file(index);
@@ -84,9 +84,9 @@ mod tests {
     use crate::git::diff::DiffStatus;
     use crate::git::graph::{CommitNode, GraphRow};
     use crate::git::repo::GitRepo;
-    use crate::git::tests::test_utils::{commit, commit_file};
+    use crate::git::tests::test_utils::{commit, commit_file, create_test_repo};
     use crate::state::selection::ListSelection;
-    use crate::state::AppState;
+    use crate::state::{AppState, ProjectTreeFocus, ViewMode};
     use git2::Oid;
     use std::path::Path;
 
@@ -108,6 +108,28 @@ mod tests {
                 connection: None,
             })
             .collect()
+    }
+
+    fn project_commit_info(byte: u8) -> crate::git::commit::CommitInfo {
+        crate::git::commit::CommitInfo {
+            oid: Oid::from_bytes(&[byte; 20]).unwrap(),
+            message: format!("commit {byte}"),
+            author: "Test".to_string(),
+            email: "test@example.com".to_string(),
+            timestamp: 0,
+            parents: Vec::new(),
+            changed_paths: None,
+        }
+    }
+
+    fn project_diff_file(path: &str) -> crate::git::diff::DiffFile {
+        crate::git::diff::DiffFile {
+            path: path.to_string(),
+            old_path: None,
+            status: DiffStatus::Modified,
+            additions: 1,
+            deletions: 0,
+        }
     }
 
     fn create_test_state_with_graph(size: usize) -> AppState {
@@ -167,6 +189,7 @@ mod tests {
     #[test]
     fn test_move_down_in_graph_view() {
         let mut state = create_test_state_with_graph(5);
+        state.graph_view.can_load_more = false;
         state.graph_view.rows.select(2);
 
         let mut handler = NavigationHandler;
@@ -177,6 +200,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(state.graph_view.selected_index(), 3);
+        assert!(state.current_flash_message().is_none());
+        assert!(!state.graph_view.commit_details_loaded);
     }
 
     #[test]
@@ -192,6 +217,199 @@ mod tests {
             .unwrap();
 
         assert_eq!(state.graph_view.selected_index(), 4);
+    }
+
+    #[test]
+    fn test_graph_navigation_invalidates_details_without_reading_git() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.can_load_more = false;
+        state.graph_view.rows.select(1);
+        state
+            .graph_view
+            .set_commit_files(vec![crate::git::diff::DiffFile {
+                path: "loaded.txt".to_string(),
+                old_path: None,
+                status: DiffStatus::Modified,
+                additions: 1,
+                deletions: 1,
+            }]);
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
+
+        assert_eq!(state.graph_view.selected_index(), 2);
+        assert!(state.graph_view.commit_files.is_empty());
+        assert!(!state.graph_view.commit_details_loaded);
+        assert!(state.current_flash_message().is_none());
+    }
+
+    #[test]
+    fn test_graph_navigation_at_boundary_keeps_loaded_details() {
+        let mut state = create_test_state_with_graph(5);
+        state.graph_view.can_load_more = false;
+        state.graph_view.rows.select(4);
+        state
+            .graph_view
+            .set_commit_files(vec![crate::git::diff::DiffFile {
+                path: "loaded.txt".to_string(),
+                old_path: None,
+                status: DiffStatus::Modified,
+                additions: 1,
+                deletions: 1,
+            }]);
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
+
+        assert_eq!(state.graph_view.selected_index(), 4);
+        assert_eq!(state.graph_view.commit_files.len(), 1);
+        assert!(state.graph_view.commit_details_loaded);
+    }
+
+    #[test]
+    fn test_project_tree_navigation_invalidates_without_loading_git() {
+        let mut state = create_test_state_with_graph(1);
+        state.view_mode = ViewMode::ProjectTree;
+        state
+            .project_tree_state
+            .set_files(vec!["a.rs".to_string(), "b.rs".to_string()]);
+        state
+            .project_tree_state
+            .set_path_history(vec![project_commit_info(1)]);
+        state
+            .project_tree_state
+            .set_changed_files(vec![project_diff_file("a.rs")]);
+        state.project_tree_state.set_selected_diff(None);
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
+
+        assert_eq!(
+            state.project_tree_state.selected_entry().unwrap().path,
+            "b.rs"
+        );
+        assert!(!state.project_tree_state.history_loaded);
+        assert!(!state.project_tree_state.commit_details_loaded);
+        assert!(!state.project_tree_state.diff_loaded);
+        assert!(state.current_flash_message().is_none());
+    }
+
+    #[test]
+    fn test_project_tree_history_and_file_navigation_are_lazy() {
+        let mut state = create_test_state_with_graph(1);
+        state.view_mode = ViewMode::ProjectTree;
+        state.project_tree_state.set_files(vec!["a.rs".to_string()]);
+        state
+            .project_tree_state
+            .set_path_history(vec![project_commit_info(1), project_commit_info(2)]);
+        state
+            .project_tree_state
+            .set_changed_files(vec![project_diff_file("a.rs"), project_diff_file("b.rs")]);
+        state.project_tree_state.set_selected_diff(None);
+        state.project_tree_state.focus = ProjectTreeFocus::History;
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
+
+        assert_eq!(state.project_tree_state.history.selected_index(), 1);
+        assert!(state.project_tree_state.history_loaded);
+        assert!(!state.project_tree_state.commit_details_loaded);
+        assert!(state.current_flash_message().is_none());
+
+        state
+            .project_tree_state
+            .set_changed_files(vec![project_diff_file("a.rs"), project_diff_file("b.rs")]);
+        state.project_tree_state.set_selected_diff(None);
+        state.project_tree_state.focus = ProjectTreeFocus::ChangedFiles;
+        let mut ctx = HandlerContext { state: &mut state };
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
+
+        assert_eq!(state.project_tree_state.changed_files.selected_index(), 1);
+        assert!(state.project_tree_state.commit_details_loaded);
+        assert!(!state.project_tree_state.diff_loaded);
+        assert!(state.current_flash_message().is_none());
+    }
+
+    #[test]
+    fn test_project_tree_boundary_navigation_keeps_loaded_data() {
+        let mut state = create_test_state_with_graph(1);
+        state.view_mode = ViewMode::ProjectTree;
+        state
+            .project_tree_state
+            .set_files(vec!["a.rs".to_string(), "b.rs".to_string()]);
+        state.project_tree_state.entries.select_last();
+        state
+            .project_tree_state
+            .set_path_history(vec![project_commit_info(1)]);
+
+        let mut handler = NavigationHandler;
+        let mut ctx = HandlerContext { state: &mut state };
+        handler
+            .handle(&mut ctx, NavigationAction::MoveDown)
+            .unwrap();
+
+        assert_eq!(
+            state.project_tree_state.selected_entry().unwrap().path,
+            "b.rs"
+        );
+        assert!(state.project_tree_state.history_loaded);
+    }
+
+    #[test]
+    fn test_project_tree_switch_panel_loads_only_the_focused_panel() {
+        let (temp, repo) = create_test_repo();
+        commit_file(&repo, "src/main.rs", "fn main() {}", "initial tree");
+        let git_repo = GitRepo::open(temp.path().to_string_lossy().as_ref()).unwrap();
+        let mut state = AppState::new(git_repo, temp.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::ProjectTree;
+        state.refresh_project_tree();
+        let mut handler = NavigationHandler;
+
+        handler
+            .handle(
+                &mut HandlerContext { state: &mut state },
+                NavigationAction::SwitchPanel,
+            )
+            .unwrap();
+        assert_eq!(state.project_tree_state.focus, ProjectTreeFocus::History);
+        assert!(state.project_tree_state.history_loaded);
+        assert!(!state.project_tree_state.commit_details_loaded);
+
+        handler
+            .handle(
+                &mut HandlerContext { state: &mut state },
+                NavigationAction::SwitchPanel,
+            )
+            .unwrap();
+        assert_eq!(
+            state.project_tree_state.focus,
+            ProjectTreeFocus::ChangedFiles
+        );
+        assert!(state.project_tree_state.commit_details_loaded);
+        assert!(!state.project_tree_state.diff_loaded);
+
+        handler
+            .handle(
+                &mut HandlerContext { state: &mut state },
+                NavigationAction::SwitchPanel,
+            )
+            .unwrap();
+        assert_eq!(state.project_tree_state.focus, ProjectTreeFocus::Diff);
+        assert!(state.project_tree_state.diff_loaded);
     }
 
     #[test]

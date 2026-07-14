@@ -259,6 +259,7 @@ fn render_graph_files_panel(
         frame,
         files_view::FilesRenderContext {
             commit_files: &state.graph_view.commit_files,
+            commit_details_loaded: state.graph_view.commit_details_loaded,
             status_entries: &state.status_entries,
             selected_commit_hash: snap.selected_hash.as_deref(),
             mode: snap.bottom_left_mode,

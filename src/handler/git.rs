@@ -27,6 +27,8 @@ impl ActionHandler for GitHandler {
             GitAction::StashPrompt => handle_stash_prompt(ctx.state),
             GitAction::MergePrompt => handle_merge_prompt(ctx.state),
             GitAction::RebasePrompt => handle_rebase_prompt(ctx.state),
+            GitAction::ComparePrompt => handle_compare_prompt(ctx.state),
+            GitAction::ClearComparison => handle_clear_comparison(ctx.state),
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
@@ -321,68 +323,125 @@ fn handle_stash_prompt(state: &mut AppState) -> Result<()> {
 }
 
 fn handle_merge_prompt(state: &mut AppState) -> Result<()> {
-    // Charger la liste des branches pour le merge picker
-    match crate::git::branch::list_all_branches(&state.repo.repo) {
-        Ok((local, remote)) => {
-            let current = state.current_branch.clone().unwrap_or_default();
-
-            // Construire la liste des branches (exclure la branche courante)
-            let mut branch_names: Vec<String> = local
-                .iter()
-                .filter(|b| b.name != current)
-                .map(|b| b.name.clone())
-                .collect();
-
-            // Ajouter les branches remote
-            for b in &remote {
-                branch_names.push(b.name.clone());
-            }
-
-            if branch_names.is_empty() {
-                state.set_flash_message(flash_error_message(
-                    "aucune autre branche disponible pour merge",
-                ));
-                return Ok(());
-            }
-
-            state.merge_picker = Some(crate::state::MergePickerState::new(branch_names));
-        }
-        Err(e) => {
-            state.set_flash_message(flash_error("chargement branches", e));
-        }
-    }
+    open_branch_picker(
+        state,
+        crate::state::BranchPickerMode::Merge,
+        "aucune autre branche disponible pour merge",
+    );
     Ok(())
 }
 
 fn handle_rebase_prompt(state: &mut AppState) -> Result<()> {
+    open_branch_picker(
+        state,
+        crate::state::BranchPickerMode::Rebase,
+        "aucune autre branche disponible pour rebase",
+    );
+    Ok(())
+}
+
+fn handle_compare_prompt(state: &mut AppState) -> Result<()> {
+    if state.view_mode != ViewMode::ProjectTree {
+        return Ok(());
+    }
+
+    open_branch_picker(
+        state,
+        crate::state::BranchPickerMode::Compare,
+        "aucune autre branche disponible pour comparaison",
+    );
+    Ok(())
+}
+
+fn open_branch_picker(
+    state: &mut AppState,
+    mode: crate::state::BranchPickerMode,
+    empty_message: &str,
+) {
     match crate::git::branch::list_all_branches(&state.repo.repo) {
         Ok((local, remote)) => {
             let current = state.current_branch.clone().unwrap_or_default();
-
-            let mut branch_names: Vec<String> = local
+            let mut branch_names = local
                 .iter()
-                .filter(|b| b.name != current)
-                .map(|b| b.name.clone())
-                .collect();
-
-            for b in &remote {
-                branch_names.push(b.name.clone());
-            }
+                .filter(|branch| branch.name != current)
+                .map(|branch| branch.name.clone())
+                .collect::<Vec<_>>();
+            branch_names.extend(remote.into_iter().map(|branch| branch.name));
 
             if branch_names.is_empty() {
-                state.set_flash_message(flash_error_message(
-                    "aucune autre branche disponible pour rebase",
-                ));
-                return Ok(());
+                state.set_flash_message(flash_error_message(empty_message));
+                return;
             }
 
-            state.merge_picker = Some(crate::state::MergePickerState::new_rebase(branch_names));
+            state.merge_picker = Some(match mode {
+                crate::state::BranchPickerMode::Merge => {
+                    crate::state::MergePickerState::new(branch_names)
+                }
+                crate::state::BranchPickerMode::Rebase => {
+                    crate::state::MergePickerState::new_rebase(branch_names)
+                }
+                crate::state::BranchPickerMode::Compare => {
+                    crate::state::MergePickerState::new_compare(branch_names)
+                }
+            });
         }
-        Err(e) => {
-            state.set_flash_message(flash_error("chargement branches", e));
+        Err(error) => {
+            state.set_flash_message(flash_error("chargement branches", error));
         }
     }
+}
 
+pub(crate) fn activate_project_tree_comparison(
+    state: &mut AppState,
+    target_branch: &str,
+) -> Result<()> {
+    let base_branch = match state.current_branch.clone() {
+        Some(branch) => branch,
+        None => {
+            state.set_flash_message(flash_error_message(
+                "comparaison impossible depuis une HEAD detachee",
+            ));
+            return Ok(());
+        }
+    };
+    let Some(entry) = state.project_tree_state.selected_entry().cloned() else {
+        state.set_flash_message(flash_error_message("aucun chemin sélectionné"));
+        return Ok(());
+    };
+
+    let comparison = state.repo.compare_path_history(
+        &entry.path,
+        entry.is_directory(),
+        target_branch,
+        crate::state::MAX_TOTAL_COMMITS,
+    )?;
+    let ahead = comparison.ahead;
+    let behind = comparison.behind;
+    state
+        .project_tree_state
+        .start_comparison(base_branch.clone(), target_branch.to_string());
+    state
+        .project_tree_state
+        .set_compared_path_history(comparison);
+    state.project_tree_state.focus = crate::state::ProjectTreeFocus::History;
+    state.set_flash_message(flash_success(format!(
+        "Comparaison de '{}': {} ↔ {} · +{} / -{}",
+        entry.path, base_branch, target_branch, ahead, behind
+    )));
+
+    Ok(())
+}
+
+fn handle_clear_comparison(state: &mut AppState) -> Result<()> {
+    if state.view_mode == ViewMode::ProjectTree {
+        if state.project_tree_state.comparison.is_none() {
+            return Ok(());
+        }
+
+        state.set_flash_message(flash_success("Comparaison du chemin fermee"));
+        state.project_tree_state.clear_comparison();
+        state.ensure_project_tree_focus_loaded();
+    }
     Ok(())
 }
 

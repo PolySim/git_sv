@@ -383,6 +383,69 @@ fn test_ui_flow_graph_to_files_to_diff_via_keyboard() {
 }
 
 #[test]
+fn test_ui_flow_compare_selected_project_path_by_commit() {
+    let mut harness = UiTestHarness::new();
+    harness.commit_file("shared.txt", "base\n", "Common path");
+    let common = harness
+        .state
+        .repo
+        .repo
+        .head()
+        .unwrap()
+        .peel_to_commit()
+        .unwrap();
+    harness
+        .state
+        .repo
+        .repo
+        .branch("feature/path", &common, false)
+        .unwrap();
+    drop(common);
+
+    harness.commit_file("shared.txt", "main\n", "Main path change");
+    crate::git::branch::checkout_branch(&harness.state.repo.repo, "feature/path").unwrap();
+    harness.commit_file("shared.txt", "feature\n", "Feature path change");
+    crate::git::branch::checkout_branch(&harness.state.repo.repo, "main").unwrap();
+    harness.state.view_mode = ViewMode::ProjectTree;
+    harness.state.refresh_project_tree();
+
+    harness.send_char('C');
+    assert_eq!(
+        harness
+            .state
+            .merge_picker
+            .as_ref()
+            .map(|picker| picker.mode),
+        Some(crate::state::BranchPickerMode::Compare)
+    );
+    harness.send_enter();
+
+    let comparison = harness
+        .state
+        .project_tree_state
+        .comparison
+        .as_ref()
+        .unwrap();
+    assert_eq!(comparison.base_branch, "main");
+    assert_eq!(comparison.target_branch, "feature/path");
+    assert_eq!((comparison.ahead, comparison.behind), (Some(1), Some(1)));
+    assert_eq!(harness.state.project_tree_state.history.len(), 2);
+    assert!(harness
+        .state
+        .project_tree_state
+        .history_side(harness.state.project_tree_state.history.items()[0].oid)
+        .is_some());
+
+    harness.send_tab();
+    assert!(harness.state.project_tree_state.commit_details_loaded);
+    assert!(!harness.state.project_tree_state.changed_files.is_empty());
+
+    harness.send_esc();
+    assert!(harness.state.project_tree_state.comparison.is_none());
+    assert!(harness.state.project_tree_state.history_loaded);
+}
+
+#[test]
 fn test_ui_flow_search_then_filter_clears_search_state() {
     let mut harness = UiTestHarness::new();
     harness.commit_file("first.txt", "a\n", "Fix login bug");

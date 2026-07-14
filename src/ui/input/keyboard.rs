@@ -177,6 +177,10 @@ fn map_project_tree_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         }
     }
 
+    if key.code == KeyCode::Esc && state.project_tree_state.comparison.is_some() {
+        return Some(AppAction::Git(GitAction::ClearComparison));
+    }
+
     match key.code {
         KeyCode::Char('q') => Some(AppAction::Quit),
         KeyCode::Char('j') | KeyCode::Down => {
@@ -205,6 +209,7 @@ fn map_project_tree_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
             Some(AppAction::ProjectTree(ProjectTreeAction::ExpandSelected))
         }
         KeyCode::Char('/') => Some(AppAction::ProjectTree(ProjectTreeAction::OpenSearch)),
+        KeyCode::Char('C') => Some(AppAction::Git(GitAction::ComparePrompt)),
         KeyCode::Char('v') if state.project_tree_state.focus == ProjectTreeFocus::Diff => {
             Some(AppAction::ToggleDiffViewMode)
         }

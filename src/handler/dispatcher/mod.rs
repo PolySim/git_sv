@@ -101,10 +101,7 @@ impl ActionDispatcher {
                     ctx.state.focus = FocusPanel::BottomLeft;
                     // Réinitialiser la sélection de fichier pour commencer au début de la liste
                     ctx.state.graph_view.file_selected_index = 0;
-                    // Rafraîchir les fichiers du commit actuel
-                    ctx.state.refresh_commit_files();
-                    // Charger le diff du premier fichier
-                    crate::handler::navigation::load_commit_file_diff(ctx.state);
+                    crate::handler::navigation::refresh_commit_file_data(ctx.state);
                 } else if ctx.state.view_mode == ViewMode::Graph
                     && ctx.state.focus == FocusPanel::BottomLeft
                 {

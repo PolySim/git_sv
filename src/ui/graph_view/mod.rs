@@ -13,7 +13,7 @@ use ratatui::{
 use crate::git::graph::GraphRow;
 use crate::ui::theme::current_theme;
 
-use self::header::{build_empty_state_line, build_title};
+use self::header::{build_empty_state_line, build_title, GraphTitleContext};
 use self::lines::{build_commit_line, build_connection_line};
 
 /// Espacement entre les colonnes (en caractères).
@@ -74,15 +74,15 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
     state.select(selected_visual_index);
 
     let branch_name = current_branch.unwrap_or("???");
-    let title = build_title(
+    let title = build_title(GraphTitleContext {
         branch_name,
         selected_index,
-        graph.len(),
+        visible_count: graph.len(),
         loaded_count,
         total_commits,
         can_load_more,
         is_loading_more,
-    );
+    });
 
     let title = if is_focused {
         format!("▶{}", title)
@@ -304,7 +304,15 @@ mod tests {
 
     #[test]
     fn test_graph_title_shows_selection_position() {
-        let title = build_title("main", 41, 177, 177, Some(177), false, false);
+        let title = build_title(GraphTitleContext {
+            branch_name: "main",
+            selected_index: 41,
+            visible_count: 177,
+            loaded_count: 177,
+            total_commits: Some(177),
+            can_load_more: false,
+            is_loading_more: false,
+        });
 
         assert!(title.contains("42/177"));
         assert!(title.contains("main"));

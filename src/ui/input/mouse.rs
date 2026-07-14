@@ -169,17 +169,24 @@ fn handle_project_tree_mouse_click(
 
     if hit.rect == layout.history_panel {
         let index = state.project_tree_state.history.scroll_offset() + item_y;
-        return (index < state.project_tree_state.history.len()).then_some(AppAction::ProjectTree(
-            ProjectTreeAction::SelectHistoryEntry(index),
+        return Some(AppAction::ProjectTree(
+            if index < state.project_tree_state.history.len() {
+                ProjectTreeAction::SelectHistoryEntry(index)
+            } else {
+                ProjectTreeAction::FocusHistory
+            },
         ));
     }
 
     if hit.rect == layout.changed_files_panel {
-        let index = state
-            .project_tree_state
-            .changed_file_index_at_visual_row(item_y)?;
         return Some(AppAction::ProjectTree(
-            ProjectTreeAction::SelectChangedFile(index),
+            match state
+                .project_tree_state
+                .changed_file_index_at_visual_row(item_y)
+            {
+                Some(index) => ProjectTreeAction::SelectChangedFile(index),
+                None => ProjectTreeAction::FocusChangedFiles,
+            },
         ));
     }
 

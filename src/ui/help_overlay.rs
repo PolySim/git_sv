@@ -157,6 +157,17 @@ fn append_project_tree_help(lines: &mut Vec<Line<'static>>) {
         ),
     ));
     lines.push(key_line(
+        keybindings::project_tree::COMPARE,
+        text(
+            "Comparer les commits du chemin avec une branche",
+            "Compare path commits with a branch",
+        ),
+    ));
+    lines.push(key_line(
+        keybindings::project_tree::CLOSE_COMPARISON,
+        text("Fermer la comparaison de chemin", "Close path comparison"),
+    ));
+    lines.push(key_line(
         keybindings::global::COPY,
         text(
             "Copier le chemin, commit, contenu ou diff actif",

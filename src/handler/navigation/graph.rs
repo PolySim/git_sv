@@ -6,7 +6,6 @@ pub(super) fn handle_move_up(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Graph => {
             state.graph_view.select_previous();
-            refresh_commit_file_data(state);
         }
         ViewMode::Staging => handle_staging_navigation(state, -1),
         ViewMode::Branches => handle_branches_navigation(state, -1),
@@ -20,7 +19,6 @@ pub(super) fn handle_move_down(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Graph if !state.graph_view.is_empty() => {
             state.graph_view.select_next();
-            refresh_commit_file_data(state);
             let _ = crate::handler::dispatcher::maybe_load_more_history(state);
         }
         ViewMode::Staging => handle_staging_navigation(state, 1),
@@ -43,7 +41,6 @@ pub(super) fn handle_page_up(state: &mut AppState) {
         _ => {
             if !state.graph_view.is_empty() {
                 state.graph_view.page_up();
-                refresh_commit_file_data(state);
             }
         }
     }
@@ -61,7 +58,6 @@ pub(super) fn handle_page_down(state: &mut AppState) {
         _ => {
             if !state.graph_view.is_empty() {
                 state.graph_view.page_down();
-                refresh_commit_file_data(state);
                 let _ = crate::handler::dispatcher::maybe_load_more_history(state);
             }
         }
@@ -79,7 +75,6 @@ pub(super) fn handle_go_top(state: &mut AppState) {
         }
         _ => {
             state.graph_view.go_top();
-            refresh_commit_file_data(state);
         }
     }
 }
@@ -97,7 +92,6 @@ pub(super) fn handle_go_bottom(state: &mut AppState) {
             if !state.graph_view.is_empty() {
                 let _ = crate::handler::dispatcher::load_all_history(state);
                 state.graph_view.go_bottom();
-                refresh_commit_file_data(state);
             }
         }
     }
@@ -112,7 +106,7 @@ pub(super) fn handle_switch_panel(state: &mut AppState) {
                 FocusPanel::BottomRight => FocusPanel::BottomLeft,
             };
             if state.focus == FocusPanel::BottomLeft {
-                load_commit_file_diff(state);
+                refresh_commit_file_data(state);
             }
         }
         ViewMode::Staging => {
@@ -130,6 +124,7 @@ pub(super) fn handle_switch_panel(state: &mut AppState) {
                 ProjectTreeFocus::ChangedFiles => ProjectTreeFocus::Diff,
                 ProjectTreeFocus::Diff => ProjectTreeFocus::Tree,
             };
+            state.ensure_project_tree_focus_loaded();
         }
         _ => {}
     }
@@ -146,7 +141,7 @@ enum NavigationMove {
 
 fn handle_project_tree_navigation(state: &mut AppState, movement: NavigationMove) {
     let focus = state.project_tree_state.focus;
-    match focus {
+    let selection_changed = match focus {
         ProjectTreeFocus::Tree => {
             apply_project_tree_movement(&mut state.project_tree_state.entries, movement)
         }
@@ -168,21 +163,25 @@ fn handle_project_tree_navigation(state: &mut AppState, movement: NavigationMove
                     *offset = state.project_tree_state.diff_total_lines.saturating_sub(1)
                 }
             }
+            false
         }
-    }
+    };
 
-    match focus {
-        ProjectTreeFocus::Tree => state.refresh_selected_path_history(),
-        ProjectTreeFocus::History => state.refresh_selected_history_commit_details(),
-        ProjectTreeFocus::ChangedFiles => state.refresh_selected_history_file_diff(),
-        ProjectTreeFocus::Diff => {}
+    if selection_changed {
+        match focus {
+            ProjectTreeFocus::Tree => state.project_tree_state.invalidate_path_history(),
+            ProjectTreeFocus::History => state.project_tree_state.invalidate_commit_details(),
+            ProjectTreeFocus::ChangedFiles => state.project_tree_state.invalidate_diff(),
+            ProjectTreeFocus::Diff => {}
+        }
     }
 }
 
 fn apply_project_tree_movement<T>(
     selection: &mut crate::state::selection::ListSelection<T>,
     movement: NavigationMove,
-) {
+) -> bool {
+    let previous = selection.selected_index();
     match movement {
         NavigationMove::Previous => selection.select_previous(),
         NavigationMove::Next => selection.select_next(),
@@ -191,6 +190,7 @@ fn apply_project_tree_movement<T>(
         NavigationMove::First => selection.select_first(),
         NavigationMove::Last => selection.select_last(),
     }
+    selection.selected_index() != previous
 }
 
 pub(super) fn handle_file_up(state: &mut AppState) {
@@ -210,7 +210,9 @@ pub(super) fn handle_back_to_graph(state: &mut AppState) {
 }
 
 pub fn refresh_commit_file_data(state: &mut AppState) {
-    state.refresh_commit_files();
+    if !state.graph_view.commit_details_loaded {
+        state.refresh_commit_files();
+    }
     if !state.graph_view.commit_files.is_empty() {
         load_commit_file_diff(state);
     } else {

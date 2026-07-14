@@ -17,6 +17,7 @@ use crate::ui::theme::{current_theme, Theme};
 /// Contexte de rendu du panneau de fichiers.
 pub struct FilesRenderContext<'a> {
     pub commit_files: &'a [DiffFile],
+    pub commit_details_loaded: bool,
     pub status_entries: &'a [StatusEntry],
     pub selected_commit_hash: Option<&'a str>,
     pub mode: BottomLeftMode,
@@ -32,6 +33,7 @@ pub struct FilesRenderContext<'a> {
 pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
     let FilesRenderContext {
         commit_files,
+        commit_details_loaded,
         status_entries,
         selected_commit_hash,
         mode,
@@ -49,14 +51,8 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
                 format!(" Fichiers - {} ", hash),
                 format!(" Files - {} ", hash),
             );
-            (
-                items,
-                title,
-                text(
-                    "Aucun fichier modifie par ce commit",
-                    "No files changed by this commit",
-                ),
-            )
+            let empty_message = commit_files_empty_message(commit_details_loaded);
+            (items, title, empty_message)
         }
         BottomLeftMode::Parents => {
             let items = build_status_items(status_entries, theme);
@@ -111,6 +107,20 @@ pub fn render(frame: &mut Frame, ctx: FilesRenderContext<'_>) {
     state.select(Some(file_selected_index));
 
     frame.render_stateful_widget(list, area, &mut state);
+}
+
+fn commit_files_empty_message(details_loaded: bool) -> &'static str {
+    if details_loaded {
+        text(
+            "Aucun fichier modifie par ce commit",
+            "No files changed by this commit",
+        )
+    } else {
+        text(
+            "Enter ou Tab pour charger les details",
+            "Enter or Tab to load details",
+        )
+    }
 }
 
 /// Construit les items pour les fichiers d'un commit.
@@ -174,5 +184,25 @@ fn get_diff_status_color(status: &DiffStatus, theme: &Theme) -> ratatui::style::
         DiffStatus::Modified => theme.warning,
         DiffStatus::Deleted => theme.error,
         DiffStatus::Renamed => theme.primary,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::{with_language, Language};
+
+    #[test]
+    fn test_unloaded_commit_details_have_lazy_loading_hint() {
+        with_language(Language::Fr, || {
+            assert_eq!(
+                commit_files_empty_message(false),
+                "Enter ou Tab pour charger les details"
+            );
+            assert_eq!(
+                commit_files_empty_message(true),
+                "Aucun fichier modifie par ce commit"
+            );
+        });
     }
 }

@@ -28,6 +28,8 @@ pub struct GraphViewState {
     pub file_selected_index: usize,
     /// Fichiers du commit sélectionné.
     pub commit_files: Vec<DiffFile>,
+    /// Indique si les détails du commit sélectionné ont été chargés.
+    pub commit_details_loaded: bool,
     /// Diff du fichier sélectionné.
     pub selected_file_diff: Option<FileDiff>,
     /// Offset de scroll vertical dans le diff.
@@ -60,6 +62,7 @@ impl Default for GraphViewState {
             list_state,
             file_selected_index: 0,
             commit_files: Vec::new(),
+            commit_details_loaded: false,
             selected_file_diff: None,
             diff_scroll_offset: 0,
             diff_horizontal_offset: 0,
@@ -139,6 +142,7 @@ impl GraphViewState {
 
         // Synchroniser l'état ratatui
         self.sync_list_state();
+        self.invalidate_details_if_selection_changed(current_oid);
     }
 
     /// Sélectionne un commit par son index.
@@ -147,49 +151,59 @@ impl GraphViewState {
     /// Panique si l'index est hors des bornes (en mode debug).
     pub fn select_commit(&mut self, index: usize) {
         if index < self.rows.len() {
+            let previous_oid = self.selected_commit().map(|node| node.oid);
             self.rows.select(index);
             self.sync_list_state();
-            // Réinitialiser la sélection de fichier
-            self.file_selected_index = 0;
+            self.invalidate_details_if_selection_changed(previous_oid);
         }
     }
 
     /// Sélectionne le commit précédent.
     pub fn select_previous(&mut self) {
+        let previous_oid = self.selected_commit().map(|node| node.oid);
         self.rows.select_previous();
         self.sync_list_state();
-        self.file_selected_index = 0;
+        self.invalidate_details_if_selection_changed(previous_oid);
     }
 
     /// Sélectionne le commit suivant.
     pub fn select_next(&mut self) {
+        let previous_oid = self.selected_commit().map(|node| node.oid);
         self.rows.select_next();
         self.sync_list_state();
-        self.file_selected_index = 0;
+        self.invalidate_details_if_selection_changed(previous_oid);
     }
 
     /// Remonte d'une page.
     pub fn page_up(&mut self) {
+        let previous_oid = self.selected_commit().map(|node| node.oid);
         self.rows.page_up();
         self.sync_list_state();
+        self.invalidate_details_if_selection_changed(previous_oid);
     }
 
     /// Descend d'une page.
     pub fn page_down(&mut self) {
+        let previous_oid = self.selected_commit().map(|node| node.oid);
         self.rows.page_down();
         self.sync_list_state();
+        self.invalidate_details_if_selection_changed(previous_oid);
     }
 
     /// Va au premier commit.
     pub fn go_top(&mut self) {
+        let previous_oid = self.selected_commit().map(|node| node.oid);
         self.rows.select_first();
         self.sync_list_state();
+        self.invalidate_details_if_selection_changed(previous_oid);
     }
 
     /// Va au dernier commit.
     pub fn go_bottom(&mut self) {
+        let previous_oid = self.selected_commit().map(|node| node.oid);
         self.rows.select_last();
         self.sync_list_state();
+        self.invalidate_details_if_selection_changed(previous_oid);
     }
 
     /// Sélectionne un fichier par son index.
@@ -216,6 +230,7 @@ impl GraphViewState {
     /// Définit les fichiers du commit sélectionné et ajuste la sélection de fichier.
     pub fn set_commit_files(&mut self, files: Vec<DiffFile>) {
         self.commit_files = files;
+        self.commit_details_loaded = true;
         // S'assurer que l'index du fichier est dans les bornes
         if self.file_selected_index >= self.commit_files.len() && !self.commit_files.is_empty() {
             self.file_selected_index = self.commit_files.len() - 1;
@@ -239,6 +254,14 @@ impl GraphViewState {
         self.diff_scroll_offset = 0;
         self.diff_horizontal_offset = 0;
         self.diff_total_lines = 0;
+    }
+
+    /// Invalide les données coûteuses associées au commit sélectionné.
+    pub fn invalidate_commit_details(&mut self) {
+        self.commit_files.clear();
+        self.file_selected_index = 0;
+        self.commit_details_loaded = false;
+        self.clear_file_diff();
     }
 
     /// Scroll le diff vers le haut.
@@ -318,6 +341,13 @@ impl GraphViewState {
             self.rows.select(0);
         } else if self.rows.selected_index() >= self.rows.len() {
             self.rows.select(self.rows.len() - 1);
+        }
+    }
+
+    fn invalidate_details_if_selection_changed(&mut self, previous_oid: Option<git2::Oid>) {
+        let selected_oid = self.selected_commit().map(|node| node.oid);
+        if selected_oid != previous_oid {
+            self.invalidate_commit_details();
         }
     }
 
@@ -519,5 +549,25 @@ mod tests {
 
         // L'index devrait être ajusté
         assert_eq!(state.file_selected_index, 1);
+        assert!(state.commit_details_loaded);
+    }
+
+    #[test]
+    fn test_selection_change_invalidates_commit_details() {
+        let mut state = GraphViewState::new();
+        state.rows = ListSelection::with_items(create_test_graph(3));
+        state.set_commit_files(vec![DiffFile {
+            path: "file.txt".to_string(),
+            old_path: None,
+            status: crate::git::diff::DiffStatus::Modified,
+            additions: 1,
+            deletions: 1,
+        }]);
+
+        state.select_next();
+
+        assert!(state.commit_files.is_empty());
+        assert!(!state.commit_details_loaded);
+        assert!(state.selected_file_diff.is_none());
     }
 }

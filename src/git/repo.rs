@@ -317,6 +317,23 @@ impl GitRepo {
         super::project_tree::path_history(&self.repo, path, is_directory, max_count)
     }
 
+    /// Compare l'historique d'un chemin entre HEAD et une branche.
+    pub fn compare_path_history(
+        &self,
+        path: &str,
+        is_directory: bool,
+        target_branch: &str,
+        max_count: usize,
+    ) -> Result<super::project_tree::PathHistoryComparison> {
+        super::project_tree::compare_path_history(
+            &self.repo,
+            path,
+            is_directory,
+            target_branch,
+            max_count,
+        )
+    }
+
     /// Lit le contenu texte d'un fichier tel qu'il existe dans un commit.
     pub fn file_content_at_commit(&self, oid: git2::Oid, path: &str) -> Result<Option<String>> {
         super::project_tree::file_content_at_commit(&self.repo, oid, path)

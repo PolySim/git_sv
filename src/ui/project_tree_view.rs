@@ -8,6 +8,7 @@ use ratatui::{
 };
 
 use crate::git::diff::DiffStatus;
+use crate::git::project_tree::PathHistorySide;
 use crate::i18n::{text, text_owned};
 use crate::state::{selection_range, AppState, ProjectEntryKind, ProjectTreeFocus, ViewMode};
 use crate::ui::common::help_bar::KeyHint;
@@ -67,14 +68,23 @@ pub fn render(frame: &mut Frame, state: &mut AppState, unresolved_conflicts: usi
     render_changed_files(frame, state, layout.changed_files_panel);
     render_diff(frame, state, layout.diff_panel);
 
-    let hints = [
+    let mut hints = vec![
         KeyHint::new("j/k", text("naviguer", "navigate")),
+        KeyHint::new("C", text("comparer", "compare")),
+    ];
+    if state.project_tree_state.comparison.is_some() {
+        hints.push(KeyHint::new(
+            "Esc",
+            text("fermer comparaison", "close comparison"),
+        ));
+    }
+    hints.extend([
+        KeyHint::new("Tab", text("changer panneau", "switch panel")),
         KeyHint::new("←/→", text("fermer/ouvrir", "collapse/expand")),
         KeyHint::new("/", text("rechercher", "search")),
-        KeyHint::new("Tab", text("changer panneau", "switch panel")),
         KeyHint::new("y", text("copier", "copy")),
         KeyHint::new("?", text("aide", "help")),
-    ];
+    ]);
     let trailing = state
         .project_tree_state
         .selected_entry()
@@ -219,7 +229,14 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
         .visible_items()
         .map(|(_, commit)| {
             let hash = commit.oid.to_string();
+            let (side_marker, side_style) = match state.project_tree_state.history_side(commit.oid)
+            {
+                Some(PathHistorySide::Current) => ("+ ", Style::default().fg(theme.success)),
+                Some(PathHistorySide::Target) => ("- ", Style::default().fg(theme.error)),
+                None => ("  ", Style::default().fg(theme.text_secondary)),
+            };
             ListItem::new(Line::from(vec![
+                Span::styled(side_marker, side_style.add_modifier(Modifier::BOLD)),
                 Span::styled(
                     hash[..7].to_string(),
                     Style::default().fg(theme.commit_hash),
@@ -241,7 +258,30 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
         .selected_entry()
         .map(|entry| entry.path.as_str())
         .unwrap_or(text("aucune selection", "no selection"));
-    let title = if focused {
+    let title = if let Some(comparison) = state.project_tree_state.comparison.as_ref() {
+        let counts = match (comparison.ahead, comparison.behind) {
+            (Some(ahead), Some(behind)) => format!("+{ahead} / -{behind}"),
+            _ => "…".to_string(),
+        };
+        text_owned(
+            format!(
+                "{}Historique · {} ↔ {} · {} — {} ",
+                if focused { "▶ " } else { " " },
+                comparison.base_branch,
+                comparison.target_branch,
+                counts,
+                selected_path
+            ),
+            format!(
+                "{}History · {} ↔ {} · {} — {} ",
+                if focused { "▶ " } else { " " },
+                comparison.base_branch,
+                comparison.target_branch,
+                counts,
+                selected_path
+            ),
+        )
+    } else if focused {
         text_owned(
             format!("▶ Historique — {} ", selected_path),
             format!("▶ History — {} ", selected_path),
@@ -253,10 +293,25 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
         )
     };
     let list = List::new(if items.is_empty() {
-        vec![ListItem::new(text(
-            "  Aucun commit pour ce chemin",
-            "  No commits for this path",
-        ))]
+        let empty_message = if state.project_tree_state.history_loaded
+            && state.project_tree_state.comparison.is_some()
+        {
+            text(
+                "  Aucun commit divergent pour ce chemin",
+                "  No divergent commit for this path",
+            )
+        } else if state.project_tree_state.history_loaded {
+            text(
+                "  Aucun commit pour ce chemin",
+                "  No commits for this path",
+            )
+        } else {
+            text(
+                "  Tab ou clic pour charger l'historique",
+                "  Tab or click to load history",
+            )
+        };
+        vec![ListItem::new(empty_message)]
     } else {
         items
     })
@@ -321,7 +376,15 @@ fn render_changed_files(frame: &mut Frame, state: &AppState, area: ratatui::layo
         text(" Fichiers touchés ", " Changed files ")
     };
     let list = List::new(if items.is_empty() {
-        vec![ListItem::new(text("  Aucun fichier", "  No files"))]
+        let empty_message = if state.project_tree_state.commit_details_loaded {
+            text("  Aucun fichier", "  No files")
+        } else {
+            text(
+                "  Tab ou clic pour charger les fichiers",
+                "  Tab or click to load files",
+            )
+        };
+        vec![ListItem::new(empty_message)]
     } else {
         items
     })
@@ -358,6 +421,30 @@ fn render_changed_files(frame: &mut Frame, state: &AppState, area: ratatui::layo
 
 fn render_diff(frame: &mut Frame, state: &mut AppState, area: ratatui::layout::Rect) {
     let project = &state.project_tree_state;
+    if !project.diff_loaded {
+        let focused = project.focus == ProjectTreeFocus::Diff;
+        let theme = current_theme();
+        frame.render_widget(
+            Paragraph::new(text(
+                "Tab ou clic pour charger le diff",
+                "Tab or click to load diff",
+            ))
+            .block(
+                Block::default()
+                    .title(if focused { "▶ Diff " } else { " Diff " })
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(if focused {
+                        theme.border_active
+                    } else {
+                        theme.border_inactive
+                    })),
+            ),
+            area,
+        );
+        state.project_tree_state.diff_total_lines = 1;
+        return;
+    }
+
     let total_lines = super::diff_view::render(
         frame,
         super::diff_view::DiffRenderContext {
@@ -399,6 +486,9 @@ mod tests {
         let mut state = AppState::new(git_repo, temp.path().display().to_string()).unwrap();
         state.view_mode = ViewMode::ProjectTree;
         state.refresh_project_tree();
+        state.refresh_selected_path_history();
+        state.refresh_selected_history_commit_details();
+        state.refresh_selected_history_file_diff();
 
         let backend = TestBackend::new(100, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -413,6 +503,81 @@ mod tests {
         assert!(output.contains("Fichiers") || output.contains("Changed files"));
         assert!(output.contains("main.rs"));
         assert!(output.contains("fn main"));
+    }
+
+    #[test]
+    fn view_explains_that_project_history_is_loaded_on_demand() {
+        let (temp, repo) = create_test_repo();
+        commit_file(&repo, "src/main.rs", "fn main() {}", "initial tree");
+        let git_repo = GitRepo::open(temp.path().to_string_lossy().as_ref()).unwrap();
+        let mut state = AppState::new(git_repo, temp.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::ProjectTree;
+        state.refresh_project_tree();
+
+        let backend = TestBackend::new(100, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| crate::ui::render(frame, &mut state))
+            .unwrap();
+
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("Tab"));
+        assert!(!output.contains("initial tree"));
+    }
+
+    #[test]
+    fn view_renders_compared_path_history_with_branch_sides() {
+        let (temp, repo) = create_test_repo();
+        commit_file(&repo, "shared.txt", "base", "common path");
+        let common = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &common, false).unwrap();
+        drop(common);
+        commit_file(&repo, "shared.txt", "main", "main path");
+        crate::git::branch::checkout_branch(&repo, "feature").unwrap();
+        commit_file(&repo, "shared.txt", "feature", "feature path");
+        crate::git::branch::checkout_branch(&repo, "main").unwrap();
+
+        let git_repo = GitRepo::open(temp.path().to_string_lossy().as_ref()).unwrap();
+        let mut state = AppState::new(git_repo, temp.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::ProjectTree;
+        state.refresh_project_tree();
+        let comparison = state
+            .repo
+            .compare_path_history("shared.txt", false, "feature", 100)
+            .unwrap();
+        state
+            .project_tree_state
+            .start_comparison("main".to_string(), "feature".to_string());
+        state
+            .project_tree_state
+            .set_compared_path_history(comparison);
+        state.project_tree_state.focus = ProjectTreeFocus::History;
+
+        let backend = TestBackend::new(120, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| crate::ui::render(frame, &mut state))
+            .unwrap();
+
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("main ↔ feature"));
+        assert!(output.contains("+1 / -1"));
+        assert!(output.contains("+ "));
+        assert!(output.contains("- "));
+        assert!(output.contains("main path"));
+        assert!(output.contains("feature path"));
     }
 
     #[test]

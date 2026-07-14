@@ -1,6 +1,6 @@
 ---
 source: src/ui/tests/snapshots.rs
-assertion_line: 44
+assertion_line: 45
 expression: output
 ---
 ────────────────────────────────────────────────────────────────────────────────────────────────────

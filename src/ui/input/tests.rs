@@ -88,6 +88,32 @@ fn test_graph_question_mark_opens_help() {
 }
 
 #[test]
+fn test_project_tree_c_opens_branch_comparison_picker() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::ProjectTree;
+
+    let action = map_key(
+        KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE),
+        &state,
+    );
+
+    assert_eq!(action, Some(AppAction::Git(GitAction::ComparePrompt)));
+}
+
+#[test]
+fn test_project_tree_escape_closes_active_branch_comparison() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::ProjectTree;
+    state
+        .project_tree_state
+        .start_comparison("main".to_string(), "feature".to_string());
+
+    let action = map_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
+
+    assert_eq!(action, Some(AppAction::Git(GitAction::ClearComparison)));
+}
+
+#[test]
 fn test_ctrl_p_triggers_force_push() {
     let state = create_test_state();
 

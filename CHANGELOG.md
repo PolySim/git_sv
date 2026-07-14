@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-07-14
+
+### Added
+
+- comparaison, commit par commit, de l'historique d'un fichier ou dossier avec une autre branche depuis la vue Arborescence
+- indication `+` / `-` de la branche d'origine pour chaque commit divergent
+
+### Changed
+
+- chargement paresseux de l'historique, des fichiers touches et des diffs dans la vue Arborescence
+- suivi des renommages independant sur chaque branche lors d'une comparaison de chemin
+- navigation du graphe et de l'arborescence optimisee pour les grands repositories
+
+### Fixed
+
+- latence importante lors de la navigation dans les grands projets
+- rechargement incomplet des panneaux Arborescence au clavier, a la souris ou apres rafraichissement
+- comparaison devenue obsolete apres un changement de branche
+
 ## 0.4.0 - 2026-07-13
 
 ### Added
