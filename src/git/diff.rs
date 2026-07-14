@@ -17,6 +17,7 @@ const MAX_UNTRACKED_DIFF_BYTES: u64 = 1_048_576;
 const MAX_IMAGE_PREVIEW_BYTES: usize = 20 * 1_048_576;
 
 /// Format d'une image prévisualisable dans le terminal.
+#[cfg_attr(not(feature = "image-preview"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
     Raster,
@@ -24,6 +25,7 @@ pub enum ImageFormat {
 }
 
 /// Contenu brut d'une image, partagé entre le diff et son cache LRU.
+#[cfg_attr(not(feature = "image-preview"), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct ImagePreview {
     pub bytes: Arc<[u8]>,
@@ -494,6 +496,7 @@ fn image_preview(file_path: &str, bytes: Vec<u8>) -> Option<ImagePreview> {
     })
 }
 
+#[cfg(feature = "image-preview")]
 fn image_format(file_path: &str) -> Option<ImageFormat> {
     let extension = Path::new(file_path)
         .extension()
@@ -504,6 +507,11 @@ fn image_format(file_path: &str) -> Option<ImageFormat> {
         "gif" | "jpg" | "jpeg" | "png" | "webp" => ImageFormat::Raster,
         _ => return None,
     })
+}
+
+#[cfg(not(feature = "image-preview"))]
+fn image_format(_file_path: &str) -> Option<ImageFormat> {
+    None
 }
 
 fn read_tree_file(repo: &Repository, tree: &git2::Tree<'_>, file_path: &str) -> Option<Vec<u8>> {

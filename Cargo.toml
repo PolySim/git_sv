@@ -15,13 +15,14 @@ name = "git_sv"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["image-preview"]
+image-preview = ["dep:image", "dep:ratatui-image", "dep:resvg"]
 vendored-ssl = ["git2/vendored-openssl"]
 profiling = []
 
 [dependencies]
 ratatui = "0.29"
-ratatui-image = "5"
+ratatui-image = { version = "5", default-features = false, features = ["crossterm"], optional = true }
 crossterm = "0.28"
 git2 = { version = "0.19", default-features = false, features = ["https", "ssh"] }
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage"] }
@@ -33,8 +34,8 @@ arboard = { version = "3", default-features = false }
 lru = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
-resvg = { version = "0.45", default-features = false, features = ["text"] }
+image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"], optional = true }
+resvg = { version = "0.45", default-features = false, features = ["text"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -47,6 +48,8 @@ output-dir = "coverage"
 exclude-files = ["tests/*", "src/main.rs"]
 
 [profile.release]
+lto = "thin"
+codegen-units = 1
 strip = true
 
 [lints.clippy]

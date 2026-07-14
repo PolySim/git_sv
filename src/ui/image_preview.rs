@@ -1,28 +1,41 @@
 //! Décodage et état de rendu des prévisualisations d'images.
 
+#[cfg(feature = "image-preview")]
 use image::{DynamicImage, RgbaImage};
 use ratatui::{layout::Rect, Frame};
+#[cfg(feature = "image-preview")]
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol, Resize, StatefulImage};
+#[cfg(feature = "image-preview")]
 use std::io::Cursor;
 
-use crate::git::diff::{ImageFormat, ImagePreview};
+#[cfg(feature = "image-preview")]
+use crate::git::diff::ImageFormat;
+use crate::git::diff::ImagePreview;
 
+#[cfg(feature = "image-preview")]
 const MAX_RASTER_DIMENSION: u32 = 8_192;
+#[cfg(feature = "image-preview")]
 const MAX_RASTER_ALLOCATION: u64 = 128 * 1_048_576;
+#[cfg(feature = "image-preview")]
 const MAX_SVG_DIMENSION: f32 = 2_048.0;
 
 /// Cache le protocole encodé pour éviter de décoder l'image à chaque frame.
 #[derive(Default)]
 pub struct ImagePreviewState {
+    #[cfg(feature = "image-preview")]
     picker: Option<Picker>,
+    #[cfg(feature = "image-preview")]
     current_key: Option<(usize, usize)>,
+    #[cfg(feature = "image-preview")]
     protocol: Option<StatefulProtocol>,
+    #[cfg(feature = "image-preview")]
     error: Option<String>,
 }
 
 impl ImagePreviewState {
     /// Détecte le meilleur protocole pris en charge par le terminal.
     pub fn initialize(&mut self) {
+        #[cfg(feature = "image-preview")]
         match Picker::from_query_stdio() {
             Ok(picker) => self.picker = Some(picker),
             Err(_) => self.picker = Some(Picker::from_fontsize((10, 20))),
@@ -30,6 +43,7 @@ impl ImagePreviewState {
     }
 
     /// Rend l'image dans la zone fournie ou retourne la raison du repli texte.
+    #[cfg(feature = "image-preview")]
     pub fn render(
         &mut self,
         frame: &mut Frame,
@@ -53,6 +67,18 @@ impl ImagePreviewState {
             .unwrap_or("protocole d'image indisponible"))
     }
 
+    /// Indique que le support a été retiré de cette build minimale.
+    #[cfg(not(feature = "image-preview"))]
+    pub fn render(
+        &mut self,
+        _frame: &mut Frame,
+        _area: Rect,
+        _preview: &ImagePreview,
+    ) -> Result<(), &str> {
+        Err("prévisualisation d'image désactivée à la compilation")
+    }
+
+    #[cfg(feature = "image-preview")]
     fn prepare(&mut self, preview: &ImagePreview) {
         let key = (preview.bytes.as_ptr() as usize, preview.bytes.len());
         if self.current_key == Some(key) {
@@ -75,6 +101,7 @@ impl ImagePreviewState {
     }
 }
 
+#[cfg(feature = "image-preview")]
 fn decode(preview: &ImagePreview) -> Result<DynamicImage, String> {
     match preview.format {
         ImageFormat::Raster => decode_raster(&preview.bytes),
@@ -82,6 +109,7 @@ fn decode(preview: &ImagePreview) -> Result<DynamicImage, String> {
     }
 }
 
+#[cfg(feature = "image-preview")]
 fn decode_raster(bytes: &[u8]) -> Result<DynamicImage, String> {
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_RASTER_DIMENSION);
@@ -97,6 +125,7 @@ fn decode_raster(bytes: &[u8]) -> Result<DynamicImage, String> {
         .map_err(|error| format!("image invalide: {error}"))
 }
 
+#[cfg(feature = "image-preview")]
 fn decode_svg(bytes: &[u8]) -> Result<DynamicImage, String> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_data(bytes, &options)
@@ -126,7 +155,7 @@ fn decode_svg(bytes: &[u8]) -> Result<DynamicImage, String> {
     Ok(DynamicImage::ImageRgba8(image))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "image-preview"))]
 mod tests {
     use super::*;
     use image::ImageFormat as RasterFormat;
