@@ -17,8 +17,10 @@ use git2::{Repository, StatusOptions};
 
 use crate::error::Result;
 
-/// Intervalle de vérification des changements (2 secondes).
-const CHECK_INTERVAL: Duration = Duration::from_secs(2);
+/// Intervalle de vérification des métadonnées Git (2 secondes).
+const GIT_CHECK_INTERVAL: Duration = Duration::from_secs(2);
+/// Intervalle du scan plus coûteux du working tree (5 secondes).
+const WORKTREE_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 /// Délai de debounce après un changement détecté (500ms).
 const DEBOUNCE_DELAY: Duration = Duration::from_millis(500);
 
@@ -30,8 +32,10 @@ const DEBOUNCE_DELAY: Duration = Duration::from_millis(500);
 pub struct GitWatcher {
     /// Chemin vers le répertoire `.git/`.
     git_dir: PathBuf,
-    /// Timestamp de dernière vérification.
-    last_check: Instant,
+    /// Timestamp de dernière vérification des métadonnées Git.
+    last_git_check: Instant,
+    /// Timestamp du dernier scan du working tree.
+    last_worktree_check: Instant,
     /// Timestamp de dernière modification détectée (pour debounce).
     last_change_detected: Option<Instant>,
     /// Timestamp du fichier HEAD.
@@ -75,7 +79,8 @@ impl GitWatcher {
 
         let mut watcher = Self {
             git_dir,
-            last_check: Instant::now(),
+            last_git_check: Instant::now(),
+            last_worktree_check: Instant::now(),
             last_change_detected: None,
             head_mtime: None,
             index_mtime: None,
@@ -92,7 +97,7 @@ impl GitWatcher {
     }
 
     /// Met à jour les timestamps des fichiers surveillés.
-    fn update_timestamps(&mut self) -> Result<()> {
+    fn update_git_timestamps(&mut self) {
         self.head_mtime = get_mtime(&self.git_dir.join("HEAD"));
         self.index_mtime = get_mtime(&self.git_dir.join("index"));
 
@@ -100,12 +105,18 @@ impl GitWatcher {
         let refs_heads = self.git_dir.join("refs").join("heads");
         self.refs_mtime = get_mtime(&refs_heads);
         self.packed_refs_mtime = get_mtime(&self.git_dir.join("packed-refs"));
+    }
 
+    fn update_worktree_snapshot(&mut self) {
         // Une erreur Git transitoire ne doit jamais arrêter la boucle TUI.
         if let Ok(snapshot) = collect_worktree_snapshot(&self.worktree_dir) {
             self.worktree_snapshot = snapshot;
         }
+    }
 
+    fn update_timestamps(&mut self) -> Result<()> {
+        self.update_git_timestamps();
+        self.update_worktree_snapshot();
         Ok(())
     }
 
@@ -130,32 +141,36 @@ impl GitWatcher {
             return Ok(true);
         }
 
-        // Vérifier l'intervalle de polling
-        if self.last_check.elapsed() < CHECK_INTERVAL {
+        let should_check_git = self.last_git_check.elapsed() >= GIT_CHECK_INTERVAL;
+        let should_check_worktree = self.last_worktree_check.elapsed() >= WORKTREE_CHECK_INTERVAL;
+        if !should_check_git && !should_check_worktree {
             return Ok(false);
         }
 
-        self.last_check = Instant::now();
+        let mut changed = false;
+        if should_check_git {
+            self.last_git_check = Instant::now();
+            let old_head = self.head_mtime;
+            let old_index = self.index_mtime;
+            let old_refs = self.refs_mtime;
+            let old_packed_refs = self.packed_refs_mtime;
 
-        // Stocker les anciennes valeurs
-        let old_head = self.head_mtime;
-        let old_index = self.index_mtime;
-        let old_refs = self.refs_mtime;
-        let old_packed_refs = self.packed_refs_mtime;
-        let old_worktree = self.worktree_snapshot.clone();
+            self.update_git_timestamps();
+            changed |= self.head_mtime != old_head
+                || self.index_mtime != old_index
+                || self.refs_mtime != old_refs
+                || self.packed_refs_mtime != old_packed_refs;
+        }
 
-        // Mettre à jour les timestamps
-        self.update_timestamps()?;
+        if should_check_worktree {
+            self.last_worktree_check = Instant::now();
+            if let Ok(snapshot) = collect_worktree_snapshot(&self.worktree_dir) {
+                changed |= snapshot != self.worktree_snapshot;
+                self.worktree_snapshot = snapshot;
+            }
+        }
 
-        // Détecter les changements
-        let head_changed = self.head_mtime != old_head;
-        let index_changed = self.index_mtime != old_index;
-        let refs_changed = self.refs_mtime != old_refs;
-        let packed_refs_changed = self.packed_refs_mtime != old_packed_refs;
-        let worktree_changed = self.worktree_snapshot != old_worktree;
-
-        if head_changed || index_changed || refs_changed || packed_refs_changed || worktree_changed
-        {
+        if changed {
             // Conserver la première détection pour éviter qu'une rafale repousse le refresh.
             self.last_change_detected.get_or_insert_with(Instant::now);
         }
@@ -168,9 +183,22 @@ impl GitWatcher {
     /// Utile lors d'un rafraîchissement manuel pour réinitialiser
     /// les timestamps de référence.
     pub fn reset(&mut self) -> Result<()> {
-        self.last_check = Instant::now();
+        self.last_git_check = Instant::now();
+        self.last_worktree_check = Instant::now();
         self.last_change_detected = None;
         self.update_timestamps()
+    }
+
+    /// Retourne le délai avant la prochaine vérification nécessaire.
+    pub fn next_check_in(&self) -> Duration {
+        if let Some(change_time) = self.last_change_detected {
+            return DEBOUNCE_DELAY.saturating_sub(change_time.elapsed());
+        }
+
+        let git_delay = GIT_CHECK_INTERVAL.saturating_sub(self.last_git_check.elapsed());
+        let worktree_delay =
+            WORKTREE_CHECK_INTERVAL.saturating_sub(self.last_worktree_check.elapsed());
+        git_delay.min(worktree_delay)
     }
 }
 
@@ -277,7 +305,9 @@ mod tests {
     }
 
     fn force_poll(watcher: &mut GitWatcher) {
-        watcher.last_check = Instant::now() - CHECK_INTERVAL - Duration::from_millis(1);
+        watcher.last_git_check = Instant::now() - GIT_CHECK_INTERVAL - Duration::from_millis(1);
+        watcher.last_worktree_check =
+            Instant::now() - WORKTREE_CHECK_INTERVAL - Duration::from_millis(1);
     }
 
     #[test]
@@ -309,7 +339,7 @@ mod tests {
         let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
 
         // Force check immédiate (pas d'intervalle)
-        watcher.last_check = Instant::now() - CHECK_INTERVAL - Duration::from_millis(1);
+        force_poll(&mut watcher);
 
         // Pas de changement attendu
         assert!(!watcher.check_changed().unwrap());
@@ -368,5 +398,31 @@ mod tests {
         force_poll(&mut watcher);
 
         assert!(watcher.check_changed().unwrap());
+    }
+
+    #[test]
+    fn test_worktree_scan_uses_its_own_slower_interval() {
+        let temp_dir = create_repository();
+        let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
+        fs::write(temp_dir.path().join("tracked.txt"), "modified content\n").unwrap();
+
+        watcher.last_git_check = Instant::now() - GIT_CHECK_INTERVAL - Duration::from_millis(1);
+        watcher.last_worktree_check = Instant::now();
+        assert!(!watcher.check_changed().unwrap());
+        assert!(watcher.last_change_detected.is_none());
+
+        watcher.last_worktree_check =
+            Instant::now() - WORKTREE_CHECK_INTERVAL - Duration::from_millis(1);
+        assert!(!watcher.check_changed().unwrap());
+        assert!(watcher.last_change_detected.is_some());
+    }
+
+    #[test]
+    fn test_next_check_honors_pending_debounce() {
+        let temp_dir = create_repository();
+        let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
+        watcher.last_change_detected = Some(Instant::now() - Duration::from_millis(400));
+
+        assert!(watcher.next_check_in() <= Duration::from_millis(100));
     }
 }

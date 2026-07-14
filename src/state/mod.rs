@@ -91,12 +91,22 @@ impl UiTransientState {
     }
 
     /// Vérifie si le message flash a expiré et le supprime le cas échéant.
-    pub fn check_flash_expired(&mut self) {
-        if let Some((_, timestamp)) = &self.flash_message {
-            if timestamp.elapsed() > Duration::from_secs(3) {
-                self.flash_message = None;
-            }
+    pub fn check_flash_expired(&mut self) -> bool {
+        let expired = self
+            .flash_message
+            .as_ref()
+            .is_some_and(|(_, timestamp)| timestamp.elapsed() > Duration::from_secs(3));
+        if expired {
+            self.flash_message = None;
         }
+        expired
+    }
+
+    /// Retourne le délai restant avant l'expiration du message flash.
+    pub fn flash_expiry_in(&self) -> Option<Duration> {
+        self.flash_message
+            .as_ref()
+            .map(|(_, timestamp)| Duration::from_secs(3).saturating_sub(timestamp.elapsed()))
     }
 
     /// Retourne le message flash actuel s'il n'a pas expiré.
@@ -357,8 +367,8 @@ impl AppState {
     }
 
     /// Vérifie si le message flash a expiré et le supprime le cas échéant.
-    pub fn check_flash_expired(&mut self) {
-        self.ui.check_flash_expired();
+    pub fn check_flash_expired(&mut self) -> bool {
+        self.ui.check_flash_expired()
     }
 
     /// Retourne le message flash actuel s'il n'a pas expiré.

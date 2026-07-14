@@ -22,6 +22,7 @@ pub use dispatcher::ActionDispatcher;
 
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::Stdout;
+use std::time::Duration;
 
 use crate::error::Result;
 use crate::state::AppState;
@@ -59,41 +60,24 @@ impl EventHandler {
             self.refresh()?;
         }
 
+        let mut needs_redraw = true;
         loop {
-            // Rendu (avec spinner si une opération est en cours)
-            terminal.draw(|frame| {
-                ui::render(frame, &mut self.state);
-                // Si un spinner est actif, le rendre en overlay
-                if let Some(spinner) = &mut self.state.ui.loading_spinner {
-                    crate::ui::loading::render_overlay(frame, spinner, frame.area());
-                }
-            })?;
-
-            // Vérifier les résultats d'opérations en arrière-plan
-            if let Some(result) = self.background.try_recv() {
-                self.handle_background_result(result)?;
+            if needs_redraw {
+                terminal.draw(|frame| {
+                    ui::render(frame, &mut self.state);
+                    if let Some(spinner) = &mut self.state.ui.loading_spinner {
+                        crate::ui::loading::render_overlay(frame, spinner, frame.area());
+                    }
+                })?;
+                needs_redraw = false;
             }
 
-            // Vérifier les changements dans le repository git (auto-refresh)
-            if self.watcher.check_changed()? {
-                self.state.mark_dirty();
-            }
-
-            // Input avec timeout adaptatif
-            // Timeout court (80ms) quand le spinner est actif pour une animation fluide
-            let timeout_ms = if self.state.ui.loading_spinner.is_some() {
-                80
-            } else if self.state.ui.flash_message.is_some() {
-                100
-            } else {
-                250
-            };
-
-            let action = handle_input_with_timeout(&self.state, timeout_ms)?;
+            let input = handle_input_with_timeout(&self.state, self.next_wake_in())?;
+            needs_redraw |= input.event_received;
 
             // Pendant le loading, ignorer les actions sauf Quit
             if self.state.ui.loading_spinner.is_some() {
-                match action {
+                match input.action {
                     Some(crate::state::AppAction::Quit) => {
                         self.state.request_quit();
                     }
@@ -101,7 +85,7 @@ impl EventHandler {
                         // Ignorer les autres inputs pendant le chargement
                     }
                 }
-            } else if let Some(action) = action {
+            } else if let Some(action) = input.action {
                 // Passer le background runner aux handlers qui en ont besoin
                 self.dispatch_with_background(action)?;
             }
@@ -110,15 +94,42 @@ impl EventHandler {
                 break;
             }
 
+            // Vérifier les résultats d'opérations en arrière-plan
+            if let Some(result) = self.background.try_recv() {
+                self.handle_background_result(result)?;
+                needs_redraw = true;
+            }
+
+            // Vérifier les changements dans le repository git (auto-refresh)
+            if self.watcher.check_changed()? {
+                self.state.mark_dirty();
+            }
+
             // Vérifier si le message flash a expiré
-            self.state.check_flash_expired();
+            needs_redraw |= self.state.check_flash_expired();
 
             // Rafraîchissement conditionnel
             if self.state.dirty {
                 self.refresh()?;
+                needs_redraw = true;
             }
+
+            // Le spinner est le seul élément nécessitant une animation continue.
+            needs_redraw |= self.state.ui.loading_spinner.is_some();
         }
         Ok(())
+    }
+
+    fn next_wake_in(&self) -> Duration {
+        if self.state.ui.loading_spinner.is_some() {
+            return Duration::from_millis(80);
+        }
+
+        let mut timeout = self.watcher.next_check_in();
+        if let Some(flash_delay) = self.state.ui.flash_expiry_in() {
+            timeout = timeout.min(flash_delay);
+        }
+        timeout.max(Duration::from_millis(1))
     }
 
     /// Dispatche une action avec accès au background runner si nécessaire.
