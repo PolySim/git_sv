@@ -207,6 +207,10 @@ git_sv --format json branches
 git_sv status
 git_sv --format plain status
 
+# Diagnostic local (signature de HEAD, hooks et sous-modules)
+git_sv inspect
+git_sv --format json inspect
+
 # Recherche
 git_sv search "fix bug"
 
@@ -313,6 +317,7 @@ imposer un fond RGB different de celui du terminal :
 | `C` | Comparer le commit sélectionné à `HEAD` (commits et statistiques du diff) |
 | `X` | Démarrer un bisect avec le commit sélectionné comme commit connu bon |
 | `[` / `]` / `\` | Pendant un bisect : marquer bon / mauvais / terminer |
+| `i` | Inspecter la signature du commit, les hooks et les sous-modules |
 
 ### Vue Staging
 

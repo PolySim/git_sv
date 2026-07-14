@@ -275,6 +275,13 @@ fn append_graph_help(lines: &mut Vec<Line<'static>>) {
         text("Demarrer un bisect", "Start bisect"),
     ));
     lines.push(key_line(
+        keybindings::git_actions::REPOSITORY_INSIGHTS,
+        text(
+            "Diagnostic hooks, signature et sous-modules",
+            "Hooks, signature and submodule diagnostics",
+        ),
+    ));
+    lines.push(key_line(
         "[ / ] / \\",
         text(
             "Bisect : bon / mauvais / terminer",

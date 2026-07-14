@@ -23,6 +23,7 @@ pub mod merge_picker;
 pub mod nav_bar;
 pub mod project_tree_layout;
 pub mod project_tree_view;
+pub mod repository_insights;
 pub mod reset_picker;
 pub mod search_bar;
 pub mod staging_layout;
@@ -143,6 +144,18 @@ fn render_conflicts_help_overlay(frame: &mut Frame) {
 }
 
 fn render_global_overlays(frame: &mut Frame, state: &AppState) {
+    if let Some(ref insights) = state.ui.repository_insights {
+        repository_insights::render(
+            frame,
+            repository_insights::RepositoryInsightsRenderContext {
+                insights,
+                scroll: state.ui.repository_insights_scroll,
+                area: frame.area(),
+            },
+        );
+        return;
+    }
+
     if state.branches_view_state.focus == crate::state::BranchesFocus::Input {
         branches_view::render_input_overlay(frame, &state.branches_view_state, frame.area());
     }

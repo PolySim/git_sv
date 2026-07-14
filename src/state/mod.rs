@@ -52,6 +52,12 @@ pub struct UiTransientState {
 
     /// Commit de départ d'un rebase interactif à lancer hors de la TUI.
     pub pending_interactive_rebase: Option<git2::Oid>,
+
+    /// Diagnostic du dépôt affiché dans un overlay.
+    pub repository_insights: Option<crate::git::insights::RepositoryInsights>,
+
+    /// Défilement vertical de l'overlay de diagnostic.
+    pub repository_insights_scroll: u16,
 }
 
 impl UiTransientState {
@@ -65,6 +71,8 @@ impl UiTransientState {
             is_bisecting: false,
             should_quit: false,
             pending_interactive_rebase: None,
+            repository_insights: None,
+            repository_insights_scroll: 0,
         }
     }
 

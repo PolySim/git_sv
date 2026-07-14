@@ -48,6 +48,7 @@ fn has_blocking_modal(state: &AppState) -> bool {
             .reset_picker
             .as_ref()
             .is_some_and(|picker| picker.is_active)
+        || state.ui.repository_insights.is_some()
         || state.ui.pending_confirmation.is_some()
 }
 
@@ -66,6 +67,21 @@ fn has_blocking_text_input(state: &AppState) -> bool {
 }
 
 fn map_modal_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    if state.ui.repository_insights.is_some() {
+        return match key.code {
+            KeyCode::Esc | KeyCode::Char('i') => {
+                Some(AppAction::Git(GitAction::RepositoryInsights))
+            }
+            KeyCode::Char('j') | KeyCode::Down | KeyCode::PageDown => {
+                Some(AppAction::Git(GitAction::RepositoryInsightsDown))
+            }
+            KeyCode::Char('k') | KeyCode::Up | KeyCode::PageUp => {
+                Some(AppAction::Git(GitAction::RepositoryInsightsUp))
+            }
+            _ => None,
+        };
+    }
+
     if state
         .merge_picker
         .as_ref()
@@ -518,6 +534,7 @@ fn map_graph_root_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         KeyCode::Char('T') => Some(AppAction::Git(GitAction::DeleteTag)),
         KeyCode::Char('C') => Some(AppAction::Git(GitAction::CompareSelectedWithHead)),
         KeyCode::Char('X') => Some(AppAction::Git(GitAction::BisectStart)),
+        KeyCode::Char('i') => Some(AppAction::Git(GitAction::RepositoryInsights)),
         KeyCode::Char('[') if state.ui.is_bisecting => Some(AppAction::Git(GitAction::BisectGood)),
         KeyCode::Char(']') if state.ui.is_bisecting => Some(AppAction::Git(GitAction::BisectBad)),
         KeyCode::Char('\\') if state.ui.is_bisecting => {

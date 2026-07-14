@@ -38,6 +38,17 @@ impl ActionHandler for GitHandler {
             GitAction::BisectGood => handle_bisect_good(ctx.state),
             GitAction::BisectBad => handle_bisect_bad(ctx.state),
             GitAction::BisectReset => handle_bisect_reset(ctx.state),
+            GitAction::RepositoryInsights => handle_repository_insights(ctx.state),
+            GitAction::RepositoryInsightsUp => {
+                ctx.state.ui.repository_insights_scroll =
+                    ctx.state.ui.repository_insights_scroll.saturating_sub(1);
+                Ok(())
+            }
+            GitAction::RepositoryInsightsDown => {
+                ctx.state.ui.repository_insights_scroll =
+                    ctx.state.ui.repository_insights_scroll.saturating_add(1);
+                Ok(())
+            }
             GitAction::ResetPrompt => handle_reset_prompt(ctx.state),
             GitAction::AbortMerge => handle_abort_merge(ctx.state),
         }
@@ -540,6 +551,28 @@ fn handle_bisect_reset(state: &mut AppState) -> Result<()> {
             state.mark_dirty();
         }
         Err(error) => state.set_flash_message(flash_error("arrêt bisect", error)),
+    }
+    Ok(())
+}
+
+fn handle_repository_insights(state: &mut AppState) -> Result<()> {
+    if state.ui.repository_insights.is_some() {
+        state.ui.repository_insights = None;
+        state.ui.repository_insights_scroll = 0;
+        return Ok(());
+    }
+
+    let commit = state
+        .selected_commit()
+        .map(|commit| commit.oid)
+        .map(Ok)
+        .unwrap_or_else(|| crate::git::insights::head_commit(&state.repo.repo))?;
+    match crate::git::insights::collect(&state.repo.repo, commit) {
+        Ok(insights) => {
+            state.ui.repository_insights = Some(insights);
+            state.ui.repository_insights_scroll = 0;
+        }
+        Err(error) => state.set_flash_message(flash_error("diagnostic dépôt", error)),
     }
     Ok(())
 }

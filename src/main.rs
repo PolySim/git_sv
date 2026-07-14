@@ -78,6 +78,9 @@ enum Commands {
     /// Affiche le status du working directory
     Status,
 
+    /// Inspecte les hooks, la signature de HEAD et les sous-modules
+    Inspect,
+
     /// Recherche des commits
     Search {
         /// Terme de recherche
@@ -160,6 +163,9 @@ fn main() -> anyhow::Result<()> {
         Some(Commands::Status) => {
             cli::status(&repo, &options)?;
         }
+        Some(Commands::Inspect) => {
+            cli::inspect(&repo, &options)?;
+        }
         Some(Commands::Search { query, max_count }) => {
             cli::search(&repo, &query, max_count, &options)?;
         }
@@ -207,5 +213,12 @@ mod tests {
         let cli = Cli::try_parse_from(["git_sv", "themes"]).unwrap();
 
         assert!(matches!(cli.command, Some(Commands::Theme { theme: None })));
+    }
+
+    #[test]
+    fn test_parse_inspect_command() {
+        let cli = Cli::try_parse_from(["git_sv", "inspect"]).unwrap();
+
+        assert!(matches!(cli.command, Some(Commands::Inspect)));
     }
 }

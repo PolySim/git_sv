@@ -112,6 +112,8 @@ pub mod git_actions {
     pub const BISECT_BAD: &str = "]";
     /// Terminer le bisect.
     pub const BISECT_RESET: &str = "\\";
+    /// Afficher le diagnostic hooks, signature et sous-modules.
+    pub const REPOSITORY_INSIGHTS: &str = "i";
 }
 
 /// Recherche et filtres.

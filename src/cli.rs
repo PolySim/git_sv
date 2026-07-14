@@ -95,6 +95,47 @@ pub fn status(repo: &GitRepo, options: &CliOptions) -> Result<()> {
     Ok(())
 }
 
+/// Affiche les hooks, la signature de HEAD et les sous-modules.
+pub fn inspect(repo: &GitRepo, options: &CliOptions) -> Result<()> {
+    let commit = crate::git::insights::head_commit(&repo.repo)?;
+    let insights = crate::git::insights::collect(&repo.repo, commit)?;
+
+    if options.format == OutputFormat::Json {
+        println!("{}", serde_json::to_string_pretty(&insights)?);
+        return Ok(());
+    }
+
+    let mut output = std::io::stdout().lock();
+    writeln!(output, "Commit: {}", insights.commit)?;
+    writeln!(output, "Signature: {}", insights.signature.summary())?;
+    writeln!(
+        output,
+        "Hooks: {} actif(s) / {} configuré(s)",
+        insights.enabled_hook_count(),
+        insights.hooks.len()
+    )?;
+    for hook in &insights.hooks {
+        let marker = if hook.enabled { "✓" } else { "○" };
+        writeln!(output, "  {marker} {}", hook.name)?;
+    }
+    writeln!(
+        output,
+        "Sous-modules: {} · {} à vérifier",
+        insights.submodules.len(),
+        insights.dirty_submodule_count()
+    )?;
+    for submodule in &insights.submodules {
+        writeln!(
+            output,
+            "  {} · {} · {}",
+            submodule.path,
+            submodule.revision.as_deref().unwrap_or("-------"),
+            submodule.state.label()
+        )?;
+    }
+    Ok(())
+}
+
 /// Recherche des commits.
 pub fn search(repo: &GitRepo, query: &str, max_count: usize, options: &CliOptions) -> Result<()> {
     let commits = repo.search_commits(query, max_count)?;

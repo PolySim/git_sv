@@ -50,6 +50,12 @@ pub enum GitAction {
     BisectBad,
     /// Terminer le bisect et restaurer la branche initiale.
     BisectReset,
+    /// Ouvrir ou fermer le diagnostic du dépôt.
+    RepositoryInsights,
+    /// Faire défiler le diagnostic vers le haut.
+    RepositoryInsightsUp,
+    /// Faire défiler le diagnostic vers le bas.
+    RepositoryInsightsDown,
     /// Ouvrir le dialogue de reset
     ResetPrompt,
     /// Annuler le merge en cours

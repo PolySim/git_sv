@@ -193,6 +193,36 @@ fn test_graph_bisect_shortcuts_are_active_during_bisect() {
 }
 
 #[test]
+fn test_graph_i_opens_and_closes_repository_insights() {
+    let mut state = create_test_state();
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::RepositoryInsights))
+    );
+
+    state.ui.repository_insights = Some(crate::git::insights::RepositoryInsights {
+        commit: git2::Oid::zero().to_string(),
+        signature: crate::git::insights::CommitSignatureStatus::Unsigned,
+        hooks: Vec::new(),
+        submodules: Vec::new(),
+    });
+    assert_eq!(
+        map_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state),
+        Some(AppAction::Git(GitAction::RepositoryInsights))
+    );
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Git(GitAction::RepositoryInsightsDown))
+    );
+}
+
+#[test]
 fn test_project_tree_escape_closes_active_branch_comparison() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::ProjectTree;
