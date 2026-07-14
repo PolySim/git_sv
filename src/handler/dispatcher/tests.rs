@@ -263,6 +263,20 @@ fn test_load_all_history_noop_when_no_more_history() {
 }
 
 #[test]
+fn test_load_all_history_loads_repository_in_one_pass() {
+    let (dir, repo) = setup_test_repo();
+    let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
+    state.view_mode = ViewMode::Graph;
+    state.graph_view.reset_pagination();
+
+    let loaded = super::load_all_history(&mut state).unwrap();
+
+    assert!(loaded);
+    assert_eq!(state.graph_view.loaded_count, 1);
+    assert!(!state.graph_view.can_load_more);
+}
+
+#[test]
 fn test_ui_flow_branch_creation_from_keyboard_input() {
     let mut harness = UiTestHarness::new();
 

@@ -426,9 +426,17 @@ impl GraphViewState {
         crate::state::COMMIT_BATCH_SIZE
     }
 
-    /// Retourne le nombre total de commits à charger (actuel + prochain lot).
+    /// Retourne la prochaine cible de chargement.
+    ///
+    /// La cible croît géométriquement après le premier lot afin que le coût
+    /// cumulé des reconstructions du graphe reste proche d'un parcours linéaire.
     pub fn target_count_for_next_load(&self) -> usize {
-        (self.loaded_count + self.next_batch_size()).min(crate::state::MAX_TOTAL_COMMITS)
+        let minimum_target = self.loaded_count.saturating_add(self.next_batch_size());
+        let doubled_target = self.loaded_count.saturating_mul(2);
+
+        minimum_target
+            .max(doubled_target)
+            .min(crate::state::MAX_TOTAL_COMMITS)
     }
 }
 
@@ -570,5 +578,47 @@ mod tests {
         assert!(state.commit_files.is_empty());
         assert!(!state.commit_details_loaded);
         assert!(state.selected_file_diff.is_none());
+    }
+
+    #[test]
+    fn test_history_target_grows_geometrically() {
+        let mut state = GraphViewState::new();
+
+        assert_eq!(state.target_count_for_next_load(), 200);
+
+        state.loaded_count = 200;
+        assert_eq!(state.target_count_for_next_load(), 400);
+
+        state.loaded_count = 400;
+        assert_eq!(state.target_count_for_next_load(), 800);
+    }
+
+    #[test]
+    fn test_history_target_is_capped_at_global_limit() {
+        let mut state = GraphViewState::new();
+        state.loaded_count = 6_400;
+
+        assert_eq!(
+            state.target_count_for_next_load(),
+            crate::state::MAX_TOTAL_COMMITS
+        );
+    }
+
+    #[test]
+    fn test_paginated_rebuild_budget_stays_near_linear() {
+        let mut state = GraphViewState::new();
+        state.loaded_count = state.next_batch_size();
+
+        let mut rebuilt_commits = 0;
+        let mut rebuild_count = 0;
+        while state.loaded_count < crate::state::MAX_TOTAL_COMMITS {
+            let target = state.target_count_for_next_load();
+            rebuilt_commits += target;
+            rebuild_count += 1;
+            state.loaded_count = target;
+        }
+
+        assert!(rebuild_count <= 6);
+        assert!(rebuilt_commits <= 23_000);
     }
 }

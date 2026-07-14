@@ -130,8 +130,6 @@ fn confirm_branch_integration(ctx: &mut HandlerContext, branch_name: &str, mode:
 
 /// Gère le chargement progressif de l'historique.
 pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
-    use crate::state::MAX_TOTAL_COMMITS;
-
     // Vérifier si on peut charger plus
     if !ctx.state.graph_view.can_load_more {
         ctx.state
@@ -144,23 +142,22 @@ pub(super) fn handle_load_more_history(ctx: &mut HandlerContext) -> Result<()> {
         return Ok(());
     }
 
-    // Marquer le début du chargement
-    ctx.state.graph_view.start_loading_more();
-
     // Calculer combien de commits charger
+    let target_count = ctx.state.graph_view.target_count_for_next_load();
+
+    load_history_to(ctx, target_count)
+}
+
+fn load_history_to(ctx: &mut HandlerContext, target_count: usize) -> Result<()> {
     let current_count = ctx.state.graph_view.loaded_count;
-    let target_count = ctx
-        .state
-        .graph_view
-        .target_count_for_next_load()
-        .min(MAX_TOTAL_COMMITS);
 
     if target_count <= current_count {
-        ctx.state.graph_view.finish_loading_more();
         ctx.state
             .set_flash_message("Limite d'historique atteinte".to_string());
         return Ok(());
     }
+
+    ctx.state.graph_view.start_loading_more();
 
     let load_result = if ctx.state.filters.graph_filter.is_active() {
         load_more_filtered_history(ctx, target_count)
@@ -190,7 +187,11 @@ fn load_more_unfiltered_history(ctx: &mut HandlerContext, target_count: usize) -
             } else {
                 ctx.state.replace_graph(graph);
 
-                let total = ctx.state.repo.estimate_total_commits();
+                let total = ctx
+                    .state
+                    .graph_view
+                    .total_commits
+                    .or_else(|| ctx.state.repo.estimate_total_commits());
                 ctx.state
                     .graph_view
                     .update_pagination_state(graph_len, total, has_more);
@@ -270,22 +271,16 @@ pub fn maybe_load_more_history(state: &mut crate::state::AppState) -> Result<boo
 
 /// Charge tout l'historique restant jusqu'à la fin.
 pub fn load_all_history(state: &mut crate::state::AppState) -> Result<bool> {
-    if !matches!(state.view_mode, ViewMode::Graph) || state.graph_view.is_loading_more {
+    if !matches!(state.view_mode, ViewMode::Graph)
+        || state.graph_view.is_loading_more
+        || !state.graph_view.can_load_more
+    {
         return Ok(false);
     }
 
-    let mut loaded_any = false;
-    while state.graph_view.can_load_more {
-        let previous_loaded = state.graph_view.loaded_count;
-        let mut ctx = HandlerContext { state };
-        handle_load_more_history(&mut ctx)?;
+    let previous_loaded = state.graph_view.loaded_count;
+    let mut ctx = HandlerContext { state };
+    load_history_to(&mut ctx, crate::state::MAX_TOTAL_COMMITS)?;
 
-        if ctx.state.graph_view.loaded_count == previous_loaded {
-            break;
-        }
-
-        loaded_any = true;
-    }
-
-    Ok(loaded_any)
+    Ok(ctx.state.graph_view.loaded_count > previous_loaded)
 }
