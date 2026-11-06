@@ -34,6 +34,13 @@ fn interactive_rebase_from_with_editor(
 ) -> Result<InteractiveRebaseResult> {
     let repo = Repository::discover(repo_path)?;
     let first_commit = repo.find_commit(first_commit_oid)?;
+    let head = repo.head()?.peel_to_commit()?;
+    if head.id() != first_commit_oid && !repo.graph_descendant_of(head.id(), first_commit_oid)? {
+        return Err(git2::Error::from_str(
+            "Le commit sélectionné ne fait pas partie de la branche courante",
+        )
+        .into());
+    }
     let mut command = Command::new("git");
     command.arg("rebase").arg("--interactive");
     if let Some(editor) = sequence_editor {
@@ -73,25 +80,31 @@ pub fn rebase_branch_with_result(repo: &Repository, branch_name: &str) -> Result
         .workdir()
         .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
 
-    let output = Command::new("git")
-        .args(["rebase", branch_name])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| git2::Error::from_str(&format!("Erreur exécuter git rebase: {}", e)))?;
+    let previous_head = repo.head()?.target();
+    let mut command = Command::new("git");
+    command
+        .args(["rebase", "--", branch_name])
+        .current_dir(repo_path);
+    let output = super::helpers::run_command_with_timeout(
+        command,
+        "git rebase",
+        std::time::Duration::from_secs(300),
+    )?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let combined = format!("{}\n{}", stdout, stderr).to_lowercase();
+    repo.index()?.read(true)?;
 
     if output.status.success() {
-        if combined.contains("up to date") || combined.contains("à jour") {
+        if repo.head()?.target() == previous_head {
             Ok(MergeResult::UpToDate)
         } else {
             Ok(MergeResult::Success)
         }
-    } else if combined.contains("conflict") || combined.contains("conflit") {
-        Ok(MergeResult::Conflicts(list_conflict_files(repo)?))
     } else {
+        let conflicts = list_conflict_files(repo)?;
+        if !conflicts.is_empty() {
+            return Ok(MergeResult::Conflicts(conflicts));
+        }
         Err(git2::Error::from_str(&format!("Erreur git rebase: {}", stderr)).into())
     }
 }
@@ -130,7 +143,7 @@ mod tests {
 
         let head = repo.head().unwrap().peel_to_commit().unwrap();
         let parent = head.parent(0).unwrap();
-        assert_eq!(parent.summary().unwrap_or(""), "main");
+        assert_eq!(parent.summary().unwrap().unwrap_or(""), "main");
     }
 
     #[test]
@@ -180,7 +193,12 @@ mod tests {
 
         assert_eq!(result, InteractiveRebaseResult::Completed);
         assert_eq!(
-            repo.head().unwrap().peel_to_commit().unwrap().summary(),
+            repo.head()
+                .unwrap()
+                .peel_to_commit()
+                .unwrap()
+                .summary()
+                .unwrap(),
             Some("changed")
         );
     }

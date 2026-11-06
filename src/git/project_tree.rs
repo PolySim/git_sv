@@ -9,6 +9,9 @@ use crate::error::Result;
 
 use super::commit::CommitInfo;
 
+/// Taille maximale d'un contenu destiné au presse-papier.
+const MAX_FILE_CONTENT_BYTES: usize = 20 * 1_048_576;
+
 /// Côté auquel appartient un commit divergent d'historique de chemin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathHistorySide {
@@ -56,7 +59,7 @@ pub fn current_project_files(repo: &Repository) -> Result<Vec<String>> {
         .include_ignored(false);
 
     for entry in repo.statuses(Some(&mut options))?.iter() {
-        let Some(path) = entry.path() else {
+        let Ok(path) = entry.path() else {
             continue;
         };
         if entry.status().intersects(
@@ -87,7 +90,11 @@ pub fn path_history(
         return Ok(Vec::new());
     }
 
-    let head = repo.head()?.peel_to_commit()?;
+    let head = match repo.head() {
+        Ok(head) => head.peel_to_commit()?,
+        Err(error) if error.code() == ErrorCode::UnbornBranch => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
     path_history_from(repo, head.id(), None, path, is_directory, max_count)
 }
 
@@ -305,26 +312,38 @@ fn path_at_descendant(
 }
 
 fn ancestry_chain(repo: &Repository, descendant: Oid, ancestor: Oid) -> Result<Vec<Oid>> {
-    let mut chain = vec![descendant];
-    let mut current = descendant;
+    let mut pending = vec![(descendant, None)];
+    let mut towards_descendant = HashMap::new();
 
-    while current != ancestor {
-        let commit = repo.find_commit(current)?;
-        let mut next = None;
-        for parent in commit.parents() {
-            if parent.id() == ancestor || repo.graph_descendant_of(parent.id(), ancestor)? {
-                next = Some(parent.id());
-                break;
-            }
+    // Un parcours unique évite une nouvelle recherche d'ascendance à chaque commit.
+    while let Some((current, child)) = pending.pop() {
+        if towards_descendant.contains_key(&current) {
+            continue;
         }
-        let Some(parent) = next else {
-            return Err(git2::Error::from_str("ancetre inaccessible depuis le commit").into());
-        };
-        chain.push(parent);
-        current = parent;
+        towards_descendant.insert(current, child);
+        if current == ancestor {
+            let mut chain = vec![current];
+            let mut cursor = current;
+            while let Some(child) = towards_descendant[&cursor] {
+                chain.push(child);
+                cursor = child;
+            }
+            chain.reverse();
+            return Ok(chain);
+        }
+
+        let commit = repo.find_commit(current)?;
+        // L'ordre inverse dans la pile conserve la préférence du premier parent.
+        let parents: Vec<_> = commit.parent_ids().collect();
+        pending.extend(
+            parents
+                .into_iter()
+                .rev()
+                .map(|parent| (parent, Some(current))),
+        );
     }
 
-    Ok(chain)
+    Err(git2::Error::from_str("ancetre inaccessible depuis le commit").into())
 }
 
 fn previous_path(
@@ -424,10 +443,20 @@ pub fn file_content_at_commit(
         Err(error) if error.code() == git2::ErrorCode::NotFound => return Ok(None),
         Err(error) => return Err(error.into()),
     };
+    if repo.odb()?.read_header(entry.id())?.0 > MAX_FILE_CONTENT_BYTES {
+        return Err(crate::error::GitSvError::Other(format!(
+            "Le fichier '{path}' est trop volumineux pour le presse-papier (limite : 20 MiB)"
+        )));
+    }
     let object = entry.to_object(repo)?;
     let blob = object.as_blob().ok_or_else(|| {
         crate::error::GitSvError::Other(format!("Le chemin '{path}' n'est pas un fichier"))
     })?;
+    if blob.is_binary() {
+        return Err(crate::error::GitSvError::Other(format!(
+            "Le fichier '{path}' est binaire"
+        )));
+    }
     let content = std::str::from_utf8(blob.content())
         .map_err(|_| crate::error::GitSvError::Other(format!("Le fichier '{path}' est binaire")))?;
     Ok(Some(content.to_string()))
@@ -649,5 +678,69 @@ mod tests {
             file_content_at_commit(&repo, first, "src/main.rs").unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn audit_unborn_repository_has_empty_path_history() {
+        let (_temp, repo) = create_test_repo();
+        create_file(&repo, "new.txt", "new");
+
+        assert!(path_history(&repo, "new.txt", false, 100)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn audit_ancestry_chain_handles_second_parent_and_unrelated_roots() {
+        let (_temp, repo) = create_test_repo();
+        let ancestor_id = commit_file(&repo, "file.txt", "content", "ancestor");
+        let ancestor = repo.find_commit(ancestor_id).unwrap();
+        let tree = ancestor.tree().unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let other_id = repo
+            .commit(None, &sig, &sig, "other root", &tree, &[])
+            .unwrap();
+        let other = repo.find_commit(other_id).unwrap();
+        let merged = repo
+            .commit(None, &sig, &sig, "merge", &tree, &[&other, &ancestor])
+            .unwrap();
+
+        assert_eq!(
+            ancestry_chain(&repo, merged, ancestor_id).unwrap(),
+            vec![merged, ancestor_id]
+        );
+        assert!(ancestry_chain(&repo, other_id, ancestor_id).is_err());
+    }
+
+    #[test]
+    fn audit_ancestry_chain_prefers_first_parent_even_if_second_is_shorter() {
+        let (_temp, repo) = create_test_repo();
+        let ancestor_id = commit_file(&repo, "file.txt", "content", "ancestor");
+        let ancestor = repo.find_commit(ancestor_id).unwrap();
+        let tree = ancestor.tree().unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let first_id = repo
+            .commit(None, &sig, &sig, "first", &tree, &[&ancestor])
+            .unwrap();
+        let first = repo.find_commit(first_id).unwrap();
+        let merged = repo
+            .commit(None, &sig, &sig, "merge", &tree, &[&first, &ancestor])
+            .unwrap();
+
+        assert_eq!(
+            ancestry_chain(&repo, merged, ancestor_id).unwrap(),
+            vec![merged, first_id, ancestor_id]
+        );
+    }
+
+    #[test]
+    fn audit_clipboard_rejects_nul_containing_binary() {
+        let (_temp, repo) = create_test_repo();
+        let oid = commit_file(&repo, "binary.dat", "valid utf8\0binary", "binary");
+
+        assert!(file_content_at_commit(&repo, oid, "binary.dat")
+            .unwrap_err()
+            .to_string()
+            .contains("binaire"));
     }
 }

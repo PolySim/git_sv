@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn test_commit_diff_arguments_are_path_safe() {
         let request = ExternalDiffRequest::Commit {
-            commit: Oid::zero(),
+            commit: Oid::ZERO_SHA1,
             path: "folder/file with spaces.rs".to_string(),
         };
         assert_eq!(

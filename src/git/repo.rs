@@ -73,31 +73,36 @@ impl GitRepo {
         skip: usize,
         max_count: usize,
     ) -> Result<Vec<CommitInfo>> {
-        let mut revwalk = self.repo.revwalk()?;
+        self.all_commits_revwalk()?
+            .skip(skip)
+            .take(max_count)
+            .map(|oid| {
+                let commit = self.repo.find_commit(oid?)?;
+                Ok(CommitInfo::from_git2_commit(&commit))
+            })
+            .collect()
+    }
 
-        // Pousser toutes les refs locales (branches, tags)
+    /// Inclut HEAD détachée et les tags annotés pointant vers des commits.
+    fn all_commits_revwalk(&self) -> Result<git2::Revwalk<'_>> {
+        let mut revwalk = self.repo.revwalk()?;
+        match revwalk.push_head() {
+            Ok(()) => {}
+            Err(error)
+                if matches!(
+                    error.code(),
+                    git2::ErrorCode::UnbornBranch | git2::ErrorCode::NotFound
+                ) => {}
+            Err(error) => return Err(error.into()),
+        }
         for reference in self.repo.references()? {
             let reference = reference?;
-            if let Some(oid) = reference.target() {
-                revwalk.push(oid).ok();
+            if let Ok(commit) = reference.peel_to_commit() {
+                revwalk.push(commit.id())?;
             }
         }
-
         revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)?;
-
-        let mut commits = Vec::new();
-        for (i, oid) in revwalk.enumerate() {
-            if i < skip {
-                continue;
-            }
-            if i >= skip + max_count {
-                break;
-            }
-            let oid = oid?;
-            let commit = self.repo.find_commit(oid)?;
-            commits.push(CommitInfo::from_git2_commit(&commit));
-        }
-        Ok(commits)
+        Ok(revwalk)
     }
 
     /// Construit le graphe de commits pour l'affichage.
@@ -138,25 +143,12 @@ impl GitRepo {
     ///
     /// Retourne None si l'estimation échoue.
     pub fn estimate_total_commits(&self) -> Option<usize> {
-        // Utiliser une limite élevée pour obtenir une estimation
-        let mut revwalk = self.repo.revwalk().ok()?;
-
-        // Pousser toutes les refs
-        for reference in self.repo.references().ok()?.flatten() {
-            if let Some(oid) = reference.target() {
-                revwalk.push(oid).ok()?;
-            }
-        }
-
-        revwalk
-            .set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)
-            .ok()?;
-
-        // Compter les commits (avec une limite de sécurité)
-        let max_to_count = crate::state::MAX_TOTAL_COMMITS;
-        let count = revwalk.take(max_to_count).count();
-
-        Some(count)
+        self.all_commits_revwalk()
+            .ok()?
+            .take(crate::state::MAX_TOTAL_COMMITS)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .ok()
+            .map(|commits| commits.len())
     }
 
     /// Construit le graphe de commits avec filtrage.
@@ -197,68 +189,44 @@ impl GitRepo {
         max_count: usize,
         filter: &crate::state::GraphFilter,
     ) -> Result<(Vec<CommitInfo>, bool)> {
-        let chunk_size = max_count.max(crate::state::COMMIT_BATCH_SIZE).max(1);
-        let mut skip = 0;
-        let mut results = Vec::with_capacity(max_count.saturating_add(1));
-        let mut has_more = false;
-
-        loop {
-            let mut commits = self.log_all_branches_offset(skip, chunk_size)?;
-
-            if commits.is_empty() {
-                break;
-            }
-
+        let mut results = Vec::new();
+        for oid in self.all_commits_revwalk()? {
+            let raw_commit = self.repo.find_commit(oid?)?;
+            let mut commit = CommitInfo::from_git2_commit(&raw_commit);
             if filter.path.is_some() {
-                for commit in &mut commits {
-                    if commit.changed_paths.is_none() {
-                        if let Err(e) = commit.load_changed_paths(&self.repo) {
-                            eprintln!("Erreur chargement chemins pour {}: {}", commit.oid, e);
-                        }
-                    }
-                }
+                commit.load_changed_paths(&self.repo)?;
             }
-
-            for commit in filter.filter_commits(&commits) {
+            if filter.matches(&commit) {
+                if results.len() == max_count {
+                    return Ok((results, true));
+                }
                 results.push(commit);
-                if results.len() > max_count {
-                    has_more = true;
-                    results.truncate(max_count);
-                    break;
-                }
-            }
-
-            if has_more {
-                break;
-            }
-
-            let fetched_len = commits.len();
-            skip += fetched_len;
-
-            if fetched_len < chunk_size {
-                break;
             }
         }
-
-        Ok((results, has_more))
+        Ok((results, false))
     }
 
     /// Recherche des commits par message ou auteur.
     pub fn search_commits(&self, query: &str, max_count: usize) -> Result<Vec<CommitInfo>> {
+        if max_count == 0 {
+            return Ok(Vec::new());
+        }
         let query_lower = query.to_lowercase();
-        let commits = self.log_all_branches(max_count * 3)?;
-
-        let filtered: Vec<CommitInfo> = commits
-            .into_iter()
-            .filter(|c| {
-                c.message.to_lowercase().contains(&query_lower)
-                    || c.author.to_lowercase().contains(&query_lower)
-                    || c.oid.to_string().to_lowercase().starts_with(&query_lower)
-            })
-            .take(max_count)
-            .collect();
-
-        Ok(filtered)
+        let mut results = Vec::new();
+        for oid in self.all_commits_revwalk()? {
+            let raw_commit = self.repo.find_commit(oid?)?;
+            let commit = CommitInfo::from_git2_commit(&raw_commit);
+            if commit.message.to_lowercase().contains(&query_lower)
+                || commit.author.to_lowercase().contains(&query_lower)
+                || commit.oid.to_string().starts_with(&query_lower)
+            {
+                results.push(commit);
+                if results.len() == max_count {
+                    break;
+                }
+            }
+        }
+        Ok(results)
     }
 
     /// Retourne le status du working directory.
@@ -441,7 +409,8 @@ impl StatusEntry {
             git2::Status::INDEX_NEW
                 | git2::Status::INDEX_MODIFIED
                 | git2::Status::INDEX_DELETED
-                | git2::Status::INDEX_RENAMED,
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::INDEX_TYPECHANGE,
         )
     }
 
@@ -451,7 +420,8 @@ impl StatusEntry {
             git2::Status::WT_MODIFIED
                 | git2::Status::WT_DELETED
                 | git2::Status::WT_NEW
-                | git2::Status::WT_RENAMED,
+                | git2::Status::WT_RENAMED
+                | git2::Status::WT_TYPECHANGE,
         )
     }
 }
@@ -657,5 +627,60 @@ mod tests {
 
         // Devrait avoir 2 branches: main et feature
         assert_eq!(branches.len(), 2);
+    }
+
+    #[test]
+    fn history_includes_detached_head_without_a_reference() {
+        let (_temp, repo) = create_test_repo();
+        commit_file(&repo, "file", "base", "base");
+        let branch = repo.head().unwrap().name().unwrap().to_string();
+        let tip = commit_file(&repo, "file", "tip", "detached");
+        repo.set_head_detached(tip).unwrap();
+        repo.find_reference(&branch).unwrap().delete().unwrap();
+        let wrapper = GitRepo { repo };
+        assert_eq!(wrapper.log_all_branches(10).unwrap()[0].oid, tip);
+    }
+
+    #[test]
+    fn search_finds_old_commits_beyond_three_times_the_requested_count() {
+        let (_temp, repo) = create_test_repo();
+        let expected = commit_file(&repo, "file", "0", "needle");
+        for index in 1..8 {
+            commit_file(&repo, "file", &index.to_string(), "unrelated");
+        }
+        let wrapper = GitRepo { repo };
+        assert_eq!(
+            wrapper.search_commits("needle", 1).unwrap()[0].oid,
+            expected
+        );
+    }
+
+    #[test]
+    fn large_limits_do_not_preallocate_or_overflow() {
+        let (_temp, repo) = create_test_repo();
+        commit_file(&repo, "file", "base", "base");
+        let wrapper = GitRepo { repo };
+        assert_eq!(
+            wrapper
+                .log_filtered(usize::MAX, &Default::default())
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(wrapper.search_commits("base", usize::MAX).unwrap().len(), 1);
+        assert!(wrapper
+            .log_all_branches_offset(usize::MAX, 10)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn type_changes_are_visible_in_staging_lists() {
+        let entry = StatusEntry {
+            path: "file".to_string(),
+            status: git2::Status::INDEX_TYPECHANGE | git2::Status::WT_TYPECHANGE,
+        };
+        assert!(entry.is_staged());
+        assert!(entry.is_unstaged());
     }
 }

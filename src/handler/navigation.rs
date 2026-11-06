@@ -96,7 +96,7 @@ mod tests {
         (0..size)
             .map(|i| GraphRow {
                 node: CommitNode {
-                    oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::zero()),
+                    oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::ZERO_SHA1),
                     message: format!("Commit {} message", i),
                     author: "Test Author".to_string(),
                     timestamp: i as i64 * 1000,

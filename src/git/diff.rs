@@ -2,19 +2,27 @@
 //!
 //! Supporte le mode unifié et le mode side-by-side.
 
-use git2::{Oid, Repository};
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
+
+use git2::{Oid, Repository};
 
 use crate::error::Result;
 
 /// Nombre maximum de lignes de diff matérialisées en mémoire.
 const MAX_DIFF_LINES: usize = 20_000;
+/// Budget de texte rendu, y compris l'expansion des tabulations et l'UTF-8 invalide.
+const MAX_DIFF_CONTENT_BYTES: usize = 4 * 1_048_576;
+/// Taille maximale d'un fichier traité comme texte par libgit2.
+const MAX_DIFF_INPUT_BYTES: i64 = 20 * 1_048_576;
 /// Taille maximum affichée pour un fichier non suivi.
 const MAX_UNTRACKED_DIFF_BYTES: u64 = 1_048_576;
 /// Taille maximale d'une image conservée pour la prévisualisation.
 const MAX_IMAGE_PREVIEW_BYTES: usize = 20 * 1_048_576;
+/// Marqueur réservé, distinct du contenu utilisateur par son type et ses coordonnées.
+const DIFF_TRUNCATION_MESSAGE: &str = "Diff tronqué pour protéger la mémoire";
 
 /// Format d'une image prévisualisable dans le terminal.
 #[cfg_attr(not(feature = "image-preview"), allow(dead_code))]
@@ -124,6 +132,16 @@ pub struct FileDiff {
 }
 
 impl FileDiff {
+    /// Indique que l'affichage ne contient pas toutes les modifications du fichier.
+    pub fn is_truncated(&self) -> bool {
+        self.lines.last().is_some_and(|line| {
+            line.line_type == DiffLineType::HunkHeader
+                && line.old_lineno.is_none()
+                && line.new_lineno.is_none()
+                && line.content == DIFF_TRUNCATION_MESSAGE
+        })
+    }
+
     /// Estime la mémoire allouée sur le tas par ce diff et son image éventuelle.
     pub fn estimated_memory_bytes(&self) -> usize {
         let lines = self.lines.capacity() * std::mem::size_of::<DiffLine>()
@@ -145,6 +163,13 @@ impl FileDiff {
         let mut current_hunk = None;
         for (line_index, line) in self.lines.iter().enumerate() {
             if line.line_type == DiffLineType::HunkHeader {
+                // Les notices de limite ou de fichier binaire ne sont pas des hunks Git.
+                if !line.content.starts_with("@@ ") {
+                    if line_index == selected_line {
+                        return None;
+                    }
+                    continue;
+                }
                 current_hunk = Some(current_hunk.map_or(0, |index| index + 1));
             }
             if line_index == selected_line {
@@ -233,7 +258,9 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
     };
 
     // Calculer le diff.
-    let mut diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)?;
+    let mut options = bounded_diff_options();
+    let mut diff =
+        repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut options))?;
     diff.find_similar(None)?;
 
     let mut files = Vec::new();
@@ -289,8 +316,8 @@ fn count_patch_lines(patch: &git2::Patch) -> (usize, usize) {
 /// Cette fonction factorise la logique commune entre get_file_diff() et working_dir_file_diff().
 fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
     let mut lines = Vec::new();
-    let mut additions = 0;
-    let mut deletions = 0;
+    let (additions, deletions) = count_patch_lines(patch);
+    let mut content_bytes = 0;
     let mut truncated = false;
 
     for hunk_idx in 0..patch.num_hunks() {
@@ -335,23 +362,22 @@ fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
                 _ => continue,
             };
 
-            match line_type {
-                DiffLineType::Addition => additions += 1,
-                DiffLineType::Deletion => deletions += 1,
-                _ => {}
-            }
-
             if lines.len() >= MAX_DIFF_LINES {
                 truncated = true;
                 break;
             }
 
+            let Some(content) = rendered_line_content(
+                line.content(),
+                MAX_DIFF_CONTENT_BYTES.saturating_sub(content_bytes),
+            ) else {
+                truncated = true;
+                break;
+            };
+            content_bytes += content.len();
             lines.push(DiffLine {
                 line_type,
-                content: String::from_utf8_lossy(line.content())
-                    .trim_end()
-                    .replace('\t', "    ")
-                    .to_string(),
+                content,
                 old_lineno: line.old_lineno(),
                 new_lineno: line.new_lineno(),
             });
@@ -363,13 +389,45 @@ fn extract_diff_lines(patch: &git2::Patch) -> (Vec<DiffLine>, usize, usize) {
     }
 
     if truncated {
-        lines.push(limit_message_line(format!(
-            "Diff tronque apres {} lignes pour proteger la memoire",
-            MAX_DIFF_LINES
-        )));
+        lines.push(limit_message_line(DIFF_TRUNCATION_MESSAGE));
     }
 
     (lines, additions, deletions)
+}
+
+fn bounded_diff_options() -> git2::DiffOptions {
+    let mut options = git2::DiffOptions::new();
+    options
+        .max_size(MAX_DIFF_INPUT_BYTES)
+        .disable_pathspec_match(true);
+    options
+}
+
+fn rendered_line_content(bytes: &[u8], max_bytes: usize) -> Option<String> {
+    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
+    if bytes.len() > max_bytes {
+        return None;
+    }
+
+    let content = String::from_utf8_lossy(bytes);
+    let mut rendered = String::with_capacity(content.len().min(max_bytes));
+    for character in content.chars() {
+        let width = if character == '\t' {
+            4
+        } else {
+            character.len_utf8()
+        };
+        if width > max_bytes.saturating_sub(rendered.len()) {
+            return None;
+        }
+        if character == '\t' {
+            rendered.push_str("    ");
+        } else {
+            rendered.push(character);
+        }
+    }
+    Some(rendered)
 }
 
 /// Récupère le diff détaillé d'un fichier spécifique dans un commit.
@@ -386,7 +444,10 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
     };
 
     // Calculer le diff.
-    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)?;
+    let mut options = bounded_diff_options();
+    let mut diff =
+        repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut options))?;
+    diff.find_similar(None)?;
 
     // Trouver le delta correspondant au fichier.
     let mut file_diff =
@@ -397,7 +458,7 @@ pub fn get_file_diff(repo: &Repository, oid: Oid, file_path: &str) -> Result<Fil
         Some(&commit_tree)
     };
     file_diff.image_preview =
-        source_tree.and_then(|tree| tree_image_preview(repo, tree, file_path));
+        source_tree.and_then(|tree| tree_image_preview(repo, tree, &file_diff.path));
     Ok(file_diff)
 }
 
@@ -408,7 +469,7 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         return build_untracked_file_diff(repo, file_path);
     }
 
-    let mut options = git2::DiffOptions::new();
+    let mut options = bounded_diff_options();
     options
         .include_untracked(true)
         .recurse_untracked_dirs(true)
@@ -428,11 +489,14 @@ pub fn working_dir_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
 
 /// Récupère le diff d'un fichier déjà présent dans l'index.
 pub fn staged_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
-    let head = repo.head()?;
-    let head_tree = head.peel_to_tree()?;
-    let mut options = git2::DiffOptions::new();
+    let head_tree = match repo.head() {
+        Ok(head) => Some(head.peel_to_tree()?),
+        Err(error) if error.code() == git2::ErrorCode::UnbornBranch => None,
+        Err(error) => return Err(error.into()),
+    };
+    let mut options = bounded_diff_options();
     options.pathspec(file_path);
-    let diff = repo.diff_tree_to_index(Some(&head_tree), None, Some(&mut options))?;
+    let diff = repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut options))?;
     let mut file_diff =
         find_and_extract_file_diff(&diff, file_path, "Fichier non trouvé dans l'index")?;
     file_diff.image_preview = index_image_preview(repo, file_path);
@@ -499,9 +563,13 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         .workdir()
         .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
     let full_path = workdir.join(file_path);
-    let metadata = fs::metadata(&full_path)?;
+    let metadata = fs::symlink_metadata(&full_path)?;
 
-    let format = image_format(file_path);
+    let format = if metadata.is_symlink() {
+        None
+    } else {
+        image_format(file_path)
+    };
     let max_size = if format.is_some() {
         MAX_IMAGE_PREVIEW_BYTES as u64
     } else {
@@ -518,7 +586,20 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
         ));
     }
 
-    let bytes = fs::read(&full_path)?;
+    let bytes = if metadata.is_symlink() {
+        fs::read_link(&full_path)?
+            .to_string_lossy()
+            .as_bytes()
+            .to_vec()
+    } else if let Some(bytes) = read_bounded_file(&full_path, max_size)? {
+        bytes
+    } else {
+        return Ok(limited_file_diff(
+            file_path,
+            DiffStatus::Added,
+            "Fichier non suivi trop volumineux ou non régulier pour prévisualisation",
+        ));
+    };
     if let Some(format) = format {
         return Ok(FileDiff {
             path: file_path.to_string(),
@@ -559,15 +640,12 @@ fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileD
             new_lineno: Some((index + 1) as u32),
         })
         .collect();
-    let truncated = content.lines().count() > MAX_DIFF_LINES;
+    let truncated = content.lines().nth(MAX_DIFF_LINES).is_some();
     let additions = lines.len();
     let mut lines = lines;
 
     if truncated {
-        lines.push(limit_message_line(format!(
-            "Diff tronque apres {} lignes pour proteger la memoire",
-            MAX_DIFF_LINES
-        )));
+        lines.push(limit_message_line(DIFF_TRUNCATION_MESSAGE));
     }
 
     Ok(FileDiff {
@@ -627,38 +705,50 @@ fn tree_image_preview(
 ) -> Option<ImagePreview> {
     let format = image_format(file_path)?;
     let entry = tree.get_path(Path::new(file_path)).ok()?;
-    let blob = repo.find_blob(entry.id()).ok()?;
-    if blob.size() > MAX_IMAGE_PREVIEW_BYTES {
-        return None;
-    }
-    build_image_preview(format, blob.content().to_vec())
+    blob_image_preview(repo, entry.id(), format)
 }
 
 fn working_tree_image_preview(repo: &Repository, file_path: &str) -> Option<ImagePreview> {
     let format = image_format(file_path)?;
-    if let Some(full_path) = repo.workdir().map(|workdir| workdir.join(file_path)) {
-        if let Ok(metadata) = fs::metadata(&full_path) {
-            if metadata.len() > MAX_IMAGE_PREVIEW_BYTES as u64 {
-                return None;
-            }
-            return fs::read(full_path)
-                .ok()
-                .and_then(|bytes| build_image_preview(format, bytes));
-        }
+    let full_path = repo.workdir()?.join(file_path);
+    let bytes = read_bounded_file(&full_path, MAX_IMAGE_PREVIEW_BYTES as u64).ok()??;
+    build_image_preview(format, bytes)
+}
+
+fn read_bounded_file(path: &Path, max_bytes: u64) -> std::io::Result<Option<Vec<u8>>> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_file() || metadata.len() > max_bytes {
+        return Ok(None);
     }
 
-    None
+    // La taille peut augmenter entre le stat et la lecture : borner aussi le flux.
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(max_bytes + 1)
+        .read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= max_bytes).then_some(bytes))
 }
 
 fn index_image_preview(repo: &Repository, file_path: &str) -> Option<ImagePreview> {
     let format = image_format(file_path)?;
     let index = repo.index().ok()?;
     let entry = index.get_path(Path::new(file_path), 0)?;
-    let blob = repo.find_blob(entry.id).ok()?;
+    blob_image_preview(repo, entry.id, format)
+}
+
+fn blob_image_preview(repo: &Repository, oid: Oid, format: ImageFormat) -> Option<ImagePreview> {
+    if repo.odb().ok()?.read_header(oid).ok()?.0 > MAX_IMAGE_PREVIEW_BYTES {
+        return None;
+    }
+    let blob = repo.find_blob(oid).ok()?;
     if blob.size() > MAX_IMAGE_PREVIEW_BYTES {
         return None;
     }
-    build_image_preview(format, blob.content().to_vec())
+    // Copier directement dans l'Arc évite un Vec temporaire de la taille de l'image.
+    Some(ImagePreview {
+        bytes: Arc::from(blob.content()),
+        format,
+    })
 }
 
 fn limit_message_line(message: impl Into<String>) -> DiffLine {
@@ -818,6 +908,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "image-preview")]
     fn test_get_file_diff_exposes_svg_preview() {
         let (_temp_dir, repo) = create_test_repo();
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><rect width="12" height="8"/></svg>"#;
@@ -864,6 +955,139 @@ mod tests {
         assert!(staged.lines.iter().any(|line| line.content == "staged"));
         assert!(!staged.lines.iter().any(|line| line.content == "unstaged"));
         assert!(unstaged.lines.iter().any(|line| line.content == "unstaged"));
+    }
+
+    #[test]
+    fn audit_staged_diff_before_initial_commit() {
+        let (_temp_dir, repo) = create_test_repo();
+        create_file(&repo, "new.txt", "first line\n");
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("new.txt")).unwrap();
+        index.write().unwrap();
+
+        let diff = staged_file_diff(&repo, "new.txt").unwrap();
+
+        assert_eq!(diff.status, DiffStatus::Added);
+        assert_eq!(diff.additions, 1);
+        assert!(diff.lines.iter().any(|line| line.content == "first line"));
+    }
+
+    #[test]
+    fn audit_diff_preserves_trailing_whitespace() {
+        let (_temp_dir, repo) = create_test_repo();
+        let oid = commit_file(&repo, "spaces.txt", "content  \n", "Add spaces");
+
+        let diff = get_file_diff(&repo, oid, "spaces.txt").unwrap();
+
+        assert!(diff.lines.iter().any(|line| line.content == "content  "));
+    }
+
+    #[test]
+    fn audit_diff_limits_single_large_line() {
+        let (_temp_dir, repo) = create_test_repo();
+        let content = "x".repeat(4 * 1_048_576 + 1);
+        let oid = commit_file(&repo, "large.txt", &content, "Add large line");
+
+        let diff = get_file_diff(&repo, oid, "large.txt").unwrap();
+
+        assert!(diff
+            .lines
+            .iter()
+            .any(|line| line.content.contains("tronqu")));
+        assert!(diff.estimated_memory_bytes() < 4 * 1_048_576);
+    }
+
+    #[test]
+    fn audit_diff_counts_all_lines_when_display_is_truncated() {
+        let (_temp_dir, repo) = create_test_repo();
+        let content = "line\n".repeat(MAX_DIFF_LINES + 5);
+        let oid = commit_file(&repo, "many.txt", &content, "Many lines");
+
+        let diff = get_file_diff(&repo, oid, "many.txt").unwrap();
+
+        assert_eq!(diff.additions, MAX_DIFF_LINES + 5);
+        assert_eq!(diff.lines.len(), MAX_DIFF_LINES + 1);
+        assert!(diff.is_truncated());
+    }
+
+    #[test]
+    fn audit_truncation_marker_is_not_confused_with_file_content() {
+        let (_temp_dir, repo) = create_test_repo();
+        let oid = commit_file(&repo, "message.txt", DIFF_TRUNCATION_MESSAGE, "Message");
+        let diff = get_file_diff(&repo, oid, "message.txt").unwrap();
+
+        assert!(!diff.is_truncated());
+
+        create_file(&repo, "untracked.txt", &"line\n".repeat(MAX_DIFF_LINES + 1));
+        assert!(working_dir_file_diff(&repo, "untracked.txt")
+            .unwrap()
+            .is_truncated());
+    }
+
+    #[test]
+    fn audit_limitation_notice_cannot_be_selected_as_a_hunk() {
+        let diff = limited_file_diff("large.txt", DiffStatus::Added, "Fichier trop volumineux");
+
+        assert_eq!(diff.hunk_at_line(0), None);
+        assert_eq!(diff.change_at_line(0), None);
+    }
+
+    #[test]
+    fn audit_rendered_line_budget_includes_tab_and_invalid_utf8_expansion() {
+        assert_eq!(rendered_line_content(b"\t", 3), None);
+        assert_eq!(rendered_line_content(b"\t", 4).as_deref(), Some("    "));
+        assert_eq!(rendered_line_content(&[0xff], 2), None);
+        assert_eq!(
+            rendered_line_content(&[0xff], 3).as_deref(),
+            Some("\u{fffd}")
+        );
+    }
+
+    #[test]
+    fn audit_commit_diff_follows_rename_instead_of_showing_new_file() {
+        let (_temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "before.txt", "unchanged\n", "Initial");
+        std::fs::rename(
+            repo.workdir().unwrap().join("before.txt"),
+            repo.workdir().unwrap().join("after.txt"),
+        )
+        .unwrap();
+        let mut index = repo.index().unwrap();
+        index.remove_path(Path::new("before.txt")).unwrap();
+        index.add_path(Path::new("after.txt")).unwrap();
+        index.write().unwrap();
+        let oid = commit(&repo, "Rename");
+
+        for path in ["before.txt", "after.txt"] {
+            let diff = get_file_diff(&repo, oid, path).unwrap();
+            assert_eq!(diff.status, DiffStatus::Renamed);
+            assert_eq!((diff.additions, diff.deletions), (0, 0));
+            assert_eq!(diff.path, "after.txt");
+        }
+    }
+
+    #[test]
+    fn audit_diff_treats_metacharacters_in_paths_literally() {
+        let (_temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "[a].txt", "old\n", "Initial");
+        create_file(&repo, "[a].txt", "changed\n");
+
+        let diff = working_dir_file_diff(&repo, "[a].txt").unwrap();
+
+        assert!(diff.lines.iter().any(|line| line.content == "changed"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn audit_untracked_symlink_diff_contains_target_not_target_contents() {
+        let (_temp_dir, repo) = create_test_repo();
+        commit_file(&repo, "target.txt", "target contents\n", "Initial");
+        std::os::unix::fs::symlink("target.txt", repo.workdir().unwrap().join("link.txt")).unwrap();
+
+        let diff = working_dir_file_diff(&repo, "link.txt").unwrap();
+
+        assert_eq!(diff.lines.len(), 1);
+        assert_eq!(diff.lines[0].content, "target.txt");
     }
 
     #[test]
@@ -936,6 +1160,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "image-preview")]
     fn test_untracked_png_exposes_image_preview() {
         let (_temp_dir, repo) = create_test_repo();
         commit_file(&repo, "tracked.txt", "content", "Initial commit");

@@ -1,9 +1,8 @@
 //! Diagnostic local du dépôt : hooks, signatures et sous-modules.
 
 use std::fs;
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 
 use git2::{ErrorCode, Oid, Repository, SubmoduleIgnore};
 use serde::Serialize;
@@ -140,29 +139,13 @@ fn verify_commit(repo: &Repository, commit: Oid, kind: String) -> CommitSignatur
     command
         .args(["verify-commit", "--raw", commit.as_str()])
         .current_dir(directory)
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .env("GIT_OPTIONAL_LOCKS", "0");
 
-    let Ok(mut child) = command.spawn() else {
-        return CommitSignatureStatus::Present { kind };
-    };
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if start.elapsed() < SIGNATURE_CHECK_TIMEOUT => {
-                thread::sleep(Duration::from_millis(20));
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return CommitSignatureStatus::Present { kind };
-            }
-        }
-    }
-
-    let Ok(output) = child.wait_with_output() else {
+    let Ok(output) = super::helpers::run_command_with_timeout(
+        command,
+        "git verify-commit",
+        SIGNATURE_CHECK_TIMEOUT,
+    ) else {
         return CommitSignatureStatus::Present { kind };
     };
     if output.status.success() {
@@ -191,7 +174,20 @@ fn verify_commit(repo: &Repository, commit: Oid, kind: String) -> CommitSignatur
 
 /// Liste les hooks configurés en ignorant les exemples fournis par Git.
 pub fn list_hooks(repo: &Repository) -> Result<Vec<HookInfo>> {
-    let hooks_directory = repo.path().join("hooks");
+    let hooks_directory = match repo.config()?.get_path("core.hooksPath") {
+        Ok(path) => repo.workdir().unwrap_or(repo.path()).join(path),
+        Err(error) if error.code() == ErrorCode::NotFound => {
+            // Les hooks sont communs aux worktrees, contrairement à HEAD et à l'index.
+            match fs::read_to_string(repo.path().join("commondir")) {
+                Ok(common) => repo.path().join(common.trim()).join("hooks"),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    repo.path().join("hooks")
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Err(error) => return Err(error.into()),
+    };
     let entries = match fs::read_dir(&hooks_directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -200,7 +196,7 @@ pub fn list_hooks(repo: &Repository) -> Result<Vec<HookInfo>> {
     let mut hooks = Vec::new();
     for entry in entries {
         let entry = entry?;
-        let metadata = entry.metadata()?;
+        let metadata = fs::metadata(entry.path())?;
         let name = entry.file_name().to_string_lossy().to_string();
         if !metadata.is_file() || name.ends_with(".sample") || name.starts_with('.') {
             continue;
@@ -232,7 +228,7 @@ pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleInfo>> {
         let name = submodule
             .name()
             .map(str::to_string)
-            .unwrap_or_else(|| submodule.path().display().to_string());
+            .unwrap_or_else(|_| submodule.path().display().to_string());
         let status = repo.submodule_status(&name, SubmoduleIgnore::None)?;
         let state = if status.is_wd_uninitialized() || !status.is_in_wd() {
             SubmoduleState::Uninitialized
@@ -252,7 +248,7 @@ pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleInfo>> {
         result.push(SubmoduleInfo {
             name,
             path: submodule.path().display().to_string(),
-            url: submodule.url().map(str::to_string),
+            url: submodule.url()?.map(str::to_string),
             revision: submodule
                 .workdir_id()
                 .or_else(|| submodule.index_id())
@@ -324,5 +320,36 @@ mod tests {
         assert_eq!(signature_kind("-----BEGIN PGP SIGNATURE-----"), "OpenPGP");
         assert_eq!(signature_kind("-----BEGIN SSH SIGNATURE-----"), "SSH");
         assert_eq!(signature_kind("unknown"), "inconnue");
+    }
+
+    #[test]
+    fn hooks_respect_configured_relative_path() {
+        let (_temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        let hooks = repo.workdir().unwrap().join("custom-hooks");
+        fs::create_dir(&hooks).unwrap();
+        fs::write(hooks.join("pre-commit"), "hook").unwrap();
+        repo.config()
+            .unwrap()
+            .set_str("core.hooksPath", "custom-hooks")
+            .unwrap();
+        let listed = list_hooks(&repo).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "pre-commit");
+    }
+
+    #[test]
+    fn hooks_are_shared_with_linked_worktrees() {
+        let (temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo, "file", "base", "base");
+        let hooks = repo.path().join("hooks");
+        fs::create_dir_all(&hooks).unwrap();
+        fs::write(hooks.join("pre-commit"), "hook").unwrap();
+        let linked = temp.path().join("linked");
+        repo.worktree("linked", &linked, None).unwrap();
+        let worktree_repo = Repository::open(&linked).unwrap();
+        assert_eq!(
+            list_hooks(&repo).unwrap(),
+            list_hooks(&worktree_repo).unwrap()
+        );
     }
 }

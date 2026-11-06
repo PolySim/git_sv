@@ -98,7 +98,18 @@ pub(super) fn handle_confirm_action(ctx: &mut HandlerContext) -> Result<()> {
                     ctx.state.mark_dirty();
                 }
             }
-            ConfirmAction::StashDrop(index) => {
+            ConfirmAction::StashDrop { index, oid } => {
+                let matches = ctx
+                    .state
+                    .repo
+                    .repo
+                    .revparse_single(&format!("stash@{{{index}}}"))
+                    .is_ok_and(|stash| stash.id() == oid);
+                if !matches {
+                    ctx.state.set_flash_message("La liste des stashes a changé ; sélectionnez à nouveau le stash à supprimer");
+                    ctx.state.mark_dirty();
+                    return Ok(());
+                }
                 if let Err(e) = crate::git::stash::drop_stash(&mut ctx.state.repo.repo, index) {
                     ctx.state
                         .set_flash_message(flash_error("suppression stash", e));

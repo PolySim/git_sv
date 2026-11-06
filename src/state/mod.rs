@@ -276,6 +276,13 @@ impl AppState {
     /// Crée un nouvel état d'application.
     pub fn new(repo: GitRepo, repo_path: String) -> crate::error::Result<Self> {
         let current_branch = repo.current_branch().ok();
+        let repo_path = repo
+            .repo
+            .workdir()
+            .unwrap_or_else(|| repo.repo.path())
+            .canonicalize()
+            .map(|path| path.display().to_string())
+            .unwrap_or(repo_path);
 
         let state = Self {
             repo,
@@ -421,7 +428,15 @@ impl AppState {
     ///
     /// Cette méthode garantit que tous les états restent synchronisés.
     pub fn replace_graph(&mut self, new_graph: Vec<crate::git::graph::GraphRow>) {
+        let search_commit = self
+            .search_state
+            .results
+            .get(self.search_state.current_result)
+            .and_then(|&index| self.graph_view.rows.get(index))
+            .map(|row| row.node.oid);
         self.graph_view.replace_graph(new_graph);
+        self.search_state
+            .refresh_results(self.graph_view.rows.items(), search_commit);
     }
 
     /// Rafraîchit les fichiers du commit sélectionné.
@@ -482,6 +497,7 @@ impl AppState {
         self.reset_picker = None;
         self.filters = FilterState::new();
         self.diff_cache = DiffCache::new(DIFF_CACHE_CAPACITY);
+        self.image_preview.clear();
 
         self.initialize_from_repo()
     }
@@ -613,8 +629,7 @@ impl AppState {
     fn refresh_branches_view_data(&mut self) {
         match crate::git::branch::list_all_branches(&self.repo.repo) {
             Ok((local, remote)) => {
-                self.branches_view_state.local_branches.set_items(local);
-                self.branches_view_state.remote_branches.set_items(remote);
+                self.branches_view_state.replace_branches(local, remote);
             }
             Err(e) => {
                 self.set_flash_message(format!("Erreur chargement branches: {}", e));
@@ -622,19 +637,16 @@ impl AppState {
         }
 
         if let Ok(worktrees) = crate::git::worktree::list_worktrees(&self.repo.repo) {
-            self.branches_view_state.worktrees.set_items(worktrees);
-            if let Some(index) = self
-                .branches_view_state
-                .worktrees
-                .iter()
-                .position(|worktree| worktree.is_current)
-            {
-                self.branches_view_state.set_worktree_selected(index);
-            }
+            self.branches_view_state.replace_worktrees(worktrees);
         }
 
         if let Ok(stashes) = crate::git::stash::list_stashes(&mut self.repo.repo) {
-            self.branches_view_state.stashes.set_items(stashes);
+            self.branches_view_state.replace_stashes(stashes);
+            if self.branches_view_state.section == BranchesSection::Stashes
+                && self.branches_view_state.stash_file_diff.is_none()
+            {
+                let _ = crate::handler::branch::load_stash_file_diff(self);
+            }
         }
     }
 }
@@ -653,7 +665,7 @@ mod tests {
         (0..size)
             .map(|i| GraphRow {
                 node: CommitNode {
-                    oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::zero()),
+                    oid: Oid::from_bytes(&[i as u8; 20]).unwrap_or(Oid::ZERO_SHA1),
                     message: format!("Commit {}", i),
                     author: "Test".to_string(),
                     timestamp: i as i64 * 1000,
@@ -691,6 +703,121 @@ mod tests {
         let git_repo = GitRepo::open(temp_dir.path().to_str().unwrap()).unwrap();
         let state = AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
         (temp_dir, state)
+    }
+
+    #[test]
+    fn test_branch_refresh_preserves_name_after_external_insertion() {
+        let (_temp, mut state) = create_test_state();
+        {
+            let head = state.repo.repo.head().unwrap().peel_to_commit().unwrap();
+            state.repo.repo.branch("zebra", &head, false).unwrap();
+        }
+        state.view_mode = ViewMode::Branches;
+        state.refresh_from_repo().unwrap();
+        let selected = state
+            .branches_view_state
+            .local_branches
+            .iter()
+            .position(|branch| branch.name == "zebra")
+            .unwrap();
+        state.branches_view_state.selected_branch = Some(SelectedBranch::Local(selected));
+        {
+            let head = state.repo.repo.head().unwrap().peel_to_commit().unwrap();
+            state.repo.repo.branch("alpha", &head, false).unwrap();
+        }
+        state.refresh_from_repo().unwrap();
+        assert_eq!(
+            state.branches_view_state.selected_branch().unwrap().name,
+            "zebra"
+        );
+    }
+
+    #[test]
+    fn test_stash_refresh_preserves_oid_and_mouse_selection_reloads_diff() {
+        let (temp, mut state) = create_test_state();
+        commit_file(&state.repo.repo, "tracked.txt", "base\n", "Tracked file");
+        std::fs::write(temp.path().join("tracked.txt"), "first stash\n").unwrap();
+        crate::git::stash::save_stash(&mut state.repo.repo, Some("first")).unwrap();
+        state.view_mode = ViewMode::Branches;
+        state.branches_view_state.section = BranchesSection::Stashes;
+        state.refresh_from_repo().unwrap();
+        let first_oid = state
+            .branches_view_state
+            .stashes
+            .selected_item()
+            .unwrap()
+            .oid;
+        assert!(state
+            .branches_view_state
+            .stash_file_diff
+            .as_ref()
+            .unwrap()
+            .join("\n")
+            .contains("first stash"));
+
+        std::fs::write(temp.path().join("tracked.txt"), "second stash\n").unwrap();
+        crate::git::stash::save_stash(&mut state.repo.repo, Some("second")).unwrap();
+        state.refresh_from_repo().unwrap();
+        assert_eq!(state.branches_view_state.stash_selected(), 1);
+        assert_eq!(
+            state
+                .branches_view_state
+                .stashes
+                .selected_item()
+                .unwrap()
+                .oid,
+            first_oid
+        );
+
+        crate::handler::dispatcher::ActionDispatcher::new()
+            .dispatch(
+                &mut state,
+                AppAction::Branch(crate::state::action::BranchAction::SelectStash(0)),
+            )
+            .unwrap();
+        let displayed = state
+            .branches_view_state
+            .stash_file_diff
+            .as_ref()
+            .unwrap()
+            .join("\n");
+        assert!(displayed.contains("second stash"));
+        assert!(!displayed.contains("first stash"));
+        assert_eq!(state.branches_view_state.stash_file_selected, 0);
+        assert_eq!(state.branches_view_state.stash_diff_scroll, 0);
+    }
+
+    #[test]
+    fn test_repository_path_is_root_when_opened_from_subdirectory() {
+        let (temp, _) = create_test_state();
+        let nested = temp.path().join("nested/deeper");
+        std::fs::create_dir_all(&nested).unwrap();
+        let repo = GitRepo::open(nested.to_str().unwrap()).unwrap();
+        let state = AppState::new(repo, nested.display().to_string()).unwrap();
+        assert_eq!(
+            std::path::PathBuf::from(state.repo_path),
+            temp.path().canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_search_results_follow_commits_when_graph_changes() {
+        let (_temp, mut state) = create_test_state();
+        state.replace_graph(create_test_graph(3));
+        state.search_state.query = "Commit".to_string();
+        state
+            .search_state
+            .refresh_results(state.graph_view.rows.items(), None);
+        state.search_state.current_result = 1;
+        let selected_oid = state.graph_view.rows[1].node.oid;
+
+        let mut reordered = create_test_graph(4);
+        reordered.reverse();
+        state.replace_graph(reordered);
+
+        assert_eq!(state.search_state.results.len(), 4);
+        let result = state.search_state.results[state.search_state.current_result];
+        assert_eq!(state.graph_view.rows[result].node.oid, selected_oid);
     }
 
     #[test]

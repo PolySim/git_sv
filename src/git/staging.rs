@@ -16,10 +16,13 @@ pub fn stage_hunk(repo: &Repository, path: &str, hunk_index: usize) -> Result<()
 
 /// Retire de l'index un hunk du diff entre HEAD et l'index.
 pub fn unstage_hunk(repo: &Repository, path: &str, hunk_index: usize) -> Result<()> {
-    let head_tree = repo.head()?.peel_to_tree()?;
+    let head_tree = head_tree(repo)?;
     let mut options = DiffOptions::new();
-    options.pathspec(path).reverse(true);
-    let diff = repo.diff_tree_to_index(Some(&head_tree), None, Some(&mut options))?;
+    options
+        .pathspec(path)
+        .disable_pathspec_match(true)
+        .reverse(true);
+    let diff = repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut options))?;
     apply_hunk(repo, &diff, hunk_index)
 }
 
@@ -32,10 +35,10 @@ pub fn stage_line(repo: &Repository, path: &str, selection: DiffLineSelection) -
 
 /// Retire de l'index une seule ligne ajoutée ou supprimée.
 pub fn unstage_line(repo: &Repository, path: &str, selection: DiffLineSelection) -> Result<()> {
-    let head_tree = repo.head()?.peel_to_tree()?;
+    let head_tree = head_tree(repo)?;
     let mut options = DiffOptions::new();
-    options.pathspec(path);
-    let diff = repo.diff_tree_to_index(Some(&head_tree), None, Some(&mut options))?;
+    options.pathspec(path).disable_pathspec_match(true);
+    let diff = repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut options))?;
     apply_line(repo, &diff, path, selection, true)
 }
 
@@ -43,28 +46,46 @@ fn unstaged_diff_options(path: &str) -> DiffOptions {
     let mut options = DiffOptions::new();
     options
         .pathspec(path)
+        .disable_pathspec_match(true)
         .include_untracked(true)
         .recurse_untracked_dirs(true)
         .show_untracked_content(true);
     options
 }
 
+fn head_tree(repo: &Repository) -> Result<Option<git2::Tree<'_>>> {
+    match repo.head() {
+        Ok(head) => Ok(Some(head.peel_to_tree()?)),
+        Err(error)
+            if matches!(
+                error.code(),
+                git2::ErrorCode::UnbornBranch | git2::ErrorCode::NotFound
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 fn apply_hunk(repo: &Repository, diff: &Diff<'_>, target_hunk: usize) -> Result<()> {
+    let mut hunk_count = 0;
+    for index in 0..diff.deltas().len() {
+        if let Some(patch) = Patch::from_diff(diff, index)? {
+            hunk_count += patch.num_hunks();
+        }
+    }
+    if target_hunk >= hunk_count {
+        return Err(GitSvError::Other("Hunk sélectionné introuvable".into()));
+    }
     let mut current_hunk = 0;
-    let mut found = false;
     let mut options = ApplyOptions::new();
     options.hunk_callback(|_| {
         let selected = current_hunk == target_hunk;
-        found |= selected;
         current_hunk += 1;
         selected
     });
     repo.apply(diff, ApplyLocation::Index, Some(&mut options))?;
-    drop(options);
-
-    if !found {
-        return Err(GitSvError::Other("Hunk sélectionné introuvable".into()));
-    }
     Ok(())
 }
 
@@ -107,12 +128,6 @@ fn build_line_patch(
     selection: DiffLineSelection,
     reverse: bool,
 ) -> Result<Vec<u8>> {
-    if path.contains(['\n', '\r']) {
-        return Err(GitSvError::Other(
-            "Chemin de fichier non pris en charge".into(),
-        ));
-    }
-
     let (hunk, _) = patch.hunk(selection.hunk_index)?;
     let line_count = patch.num_lines_in_hunk(selection.hunk_index)?;
     let mut selected_found = false;
@@ -162,24 +177,49 @@ fn build_line_patch(
 
     let old_lines = lines.iter().filter(|(origin, _)| *origin != '+').count();
     let new_lines = lines.iter().filter(|(origin, _)| *origin != '-').count();
-    let (old_start, new_start) = if reverse {
-        (hunk.new_start(), hunk.old_start())
+    let old_start = if reverse {
+        hunk.new_start()
     } else {
-        (hunk.old_start(), hunk.new_start())
+        hunk.old_start()
     };
+    let new_start = if new_lines == 0 {
+        old_start.saturating_sub(1)
+    } else if old_lines == 0 {
+        old_start + 1
+    } else {
+        old_start
+    };
+    let old_path = quote_patch_path(&format!("a/{path}"));
+    let new_path = quote_patch_path(&format!("b/{path}"));
 
     let mut buffer = format!(
-        "diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -{old_start},{old_lines} +{new_start},{new_lines} @@\n"
+        "diff --git {old_path} {new_path}\n--- {old_path}\n+++ {new_path}\n@@ -{old_start},{old_lines} +{new_start},{new_lines} @@\n"
     )
     .into_bytes();
     for (origin, content) in lines {
         buffer.push(origin as u8);
         buffer.extend_from_slice(&content);
         if !content.ends_with(b"\n") {
-            buffer.push(b'\n');
+            buffer.extend_from_slice(b"\n\\ No newline at end of file\n");
         }
     }
     Ok(buffer)
+}
+
+fn quote_patch_path(path: &str) -> String {
+    let mut quoted = String::from("\"");
+    for character in path.chars() {
+        match character {
+            '\\' => quoted.push_str("\\\\"),
+            '"' => quoted.push_str("\\\""),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 #[cfg(test)]
@@ -188,6 +228,137 @@ mod tests {
     use crate::git::diff::{staged_file_diff, working_dir_file_diff};
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn invalid_hunk_does_not_remove_a_staged_file() {
+        let (directory, repo) = repository_with_file("base\n");
+        fs::write(directory.path().join("new.txt"), "new\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("new.txt")).unwrap();
+        index.write().unwrap();
+        let before = index.write_tree().unwrap();
+        assert!(unstage_hunk(&repo, "new.txt", 1).is_err());
+        assert_eq!(repo.index().unwrap().write_tree().unwrap(), before);
+    }
+
+    #[test]
+    fn stage_line_after_an_unselected_hunk_uses_index_line_numbers() {
+        let original = (0..30)
+            .map(|line| format!("line {line}\n"))
+            .collect::<String>();
+        let (directory, repo) = repository_with_file(&original);
+        let modified = original
+            .replace("line 1\n", "first addition\nline 1\n")
+            .replace("line 25\n", "later addition\nline 25\n");
+        fs::write(directory.path().join("file.txt"), modified).unwrap();
+        stage_line(
+            &repo,
+            "file.txt",
+            DiffLineSelection {
+                hunk_index: 1,
+                change_index: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            index_content(&repo),
+            original.replace("line 25\n", "later addition\nline 25\n")
+        );
+    }
+
+    #[test]
+    fn stage_line_quotes_paths_containing_spaces() {
+        let (directory, repo) = repository_with_file("base\n");
+        crate::git::tests::test_utils::commit_file(
+            &repo,
+            "with space.txt",
+            "alpha\nomega\n",
+            "spaces",
+        );
+        fs::write(
+            directory.path().join("with space.txt"),
+            "alpha\nbeta\nomega\n",
+        )
+        .unwrap();
+        stage_line(
+            &repo,
+            "with space.txt",
+            DiffLineSelection {
+                hunk_index: 0,
+                change_index: 0,
+            },
+        )
+        .unwrap();
+        let entry = repo
+            .index()
+            .unwrap()
+            .get_path(Path::new("with space.txt"), 0)
+            .unwrap();
+        assert_eq!(
+            repo.find_blob(entry.id).unwrap().content(),
+            b"alpha\nbeta\nomega\n"
+        );
+    }
+
+    #[test]
+    fn stage_line_preserves_missing_final_newline() {
+        let (directory, repo) = repository_with_file("alpha\nomega");
+        fs::write(directory.path().join("file.txt"), "alpha\nbeta\nomega").unwrap();
+        stage_line(
+            &repo,
+            "file.txt",
+            DiffLineSelection {
+                hunk_index: 0,
+                change_index: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(index_content(&repo), "alpha\nbeta\nomega");
+        unstage_line(
+            &repo,
+            "file.txt",
+            DiffLineSelection {
+                hunk_index: 0,
+                change_index: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(index_content(&repo), "alpha\nomega");
+    }
+
+    #[test]
+    fn unstage_hunk_works_before_first_commit() {
+        let directory = TempDir::new().unwrap();
+        let repo = Repository::init(directory.path()).unwrap();
+        fs::write(directory.path().join("file.txt"), "new\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+        unstage_hunk(&repo, "file.txt", 0).unwrap();
+        assert!(repo.index().unwrap().is_empty());
+        assert_eq!(
+            fs::read_to_string(directory.path().join("file.txt")).unwrap(),
+            "new\n"
+        );
+    }
+
+    #[test]
+    fn stage_hunk_uses_literal_path() {
+        let (directory, repo) = repository_with_file("base\n");
+        crate::git::tests::test_utils::commit_file(&repo, "[a].txt", "base\n", "literal");
+        crate::git::tests::test_utils::commit_file(&repo, "a.txt", "other\n", "other");
+        fs::write(directory.path().join("[a].txt"), "selected\n").unwrap();
+        fs::write(directory.path().join("a.txt"), "unselected\n").unwrap();
+        stage_hunk(&repo, "[a].txt", 0).unwrap();
+        let index = repo.index().unwrap();
+        let selected = index.get_path(Path::new("[a].txt"), 0).unwrap();
+        let other = index.get_path(Path::new("a.txt"), 0).unwrap();
+        assert_eq!(
+            repo.find_blob(selected.id).unwrap().content(),
+            b"selected\n"
+        );
+        assert_eq!(repo.find_blob(other.id).unwrap().content(), b"other\n");
+    }
 
     fn repository_with_file(content: &str) -> (TempDir, Repository) {
         let directory = TempDir::new().unwrap();

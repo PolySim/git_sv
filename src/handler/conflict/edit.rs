@@ -3,10 +3,7 @@ use crate::state::AppState;
 use crate::utils::{flash_error, flash_success};
 
 pub(super) fn handle_start_edit(state: &mut AppState) -> Result<()> {
-    if let Some(ref mut conflicts) = state.conflicts_state {
-        conflicts.is_editing = true;
-    }
-    Ok(())
+    super::modes::handle_start_editing(state)
 }
 
 pub(super) fn handle_confirm_edit(state: &mut AppState) -> Result<()> {
@@ -28,9 +25,16 @@ pub(super) fn handle_confirm_edit(state: &mut AppState) -> Result<()> {
         (Some(p), Some(c)) => (p, c),
         _ => return Ok(()),
     };
+    let absolute_path = match crate::git::conflict::worktree_path(&state.repo.repo, &file_path) {
+        Ok(path) => path,
+        Err(error) => {
+            state.set_flash_message(flash_error("chemin du fichier", error));
+            return Ok(());
+        }
+    };
 
     // Écrire le contenu du buffer dans le fichier
-    match std::fs::File::create(&file_path) {
+    match std::fs::File::create(&absolute_path) {
         Ok(mut file_handle) => {
             if let Err(e) = file_handle.write_all(content.as_bytes()) {
                 state.set_flash_message(flash_error("écriture fichier", e));

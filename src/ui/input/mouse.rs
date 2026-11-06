@@ -1,4 +1,4 @@
-use crossterm::event::{MouseEvent, MouseEventKind};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 use crate::state::action::{BranchAction, NavigationAction, StagingAction};
 use crate::state::{AppAction, AppState, FocusPanel, ProjectTreeAction, ViewMode};
@@ -11,9 +11,15 @@ pub(crate) fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction
 
     // Détecter la zone cliquée
     let hit_result = hit_test(state, x, y)?;
+    if hit_result.zone == crate::ui::hit_test::ClickableZone::Modal {
+        return match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => handle_modal_click(state, &hit_result),
+            _ => None,
+        };
+    }
 
     match mouse.kind {
-        MouseEventKind::Down(_) => {
+        MouseEventKind::Down(MouseButton::Left) => {
             // Gérer le clic selon la zone
             handle_mouse_click(state, hit_result)
         }
@@ -34,9 +40,7 @@ fn handle_mouse_click(
     state: &AppState,
     hit: crate::ui::hit_test::HitTestResult,
 ) -> Option<AppAction> {
-    use crate::ui::hit_test::{
-        calculate_commit_index, calculate_file_index, calculate_nav_tab, ClickableZone,
-    };
+    use crate::ui::hit_test::{calculate_commit_index, calculate_nav_tab, ClickableZone};
 
     if state.view_mode == ViewMode::Staging {
         return handle_staging_mouse_click(state, &hit);
@@ -69,7 +73,6 @@ fn handle_mouse_click(
         }
         ClickableZone::Graph => {
             // Clic dans le graphe: sélectionner un commit et mettre le focus sur Graph
-            let graph_height = state.graph_view.len();
             let selected_index = state.graph_view.selected_index();
 
             // Calculer l'offset de scroll visible (approximation)
@@ -77,9 +80,14 @@ fn handle_mouse_click(
             let visible_commits = (visible_height / 2).max(1);
             let scroll_offset = selected_index.saturating_sub(visible_commits / 2);
 
-            if let Some(commit_index) =
-                calculate_commit_index(graph_height, scroll_offset, hit.relative_y)
-            {
+            if let Some(commit_index) = hit.relative_y.checked_sub(1).and_then(|row| {
+                (row < hit.rect.height.saturating_sub(2))
+                    .then(|| {
+                        calculate_commit_index(state.graph_view.rows.items(), scroll_offset, row)
+                            .filter(|&index| index < scroll_offset + visible_commits)
+                    })
+                    .flatten()
+            }) {
                 // Sélectionner le commit cliqué directement par son index
                 Some(AppAction::Navigation(
                     crate::state::action::NavigationAction::SelectCommit(commit_index),
@@ -95,8 +103,8 @@ fn handle_mouse_click(
             // Clic dans le panneau fichiers: sélectionner un fichier
             let file_count = state.graph_view.commit_files.len();
 
-            if let Some(file_index) =
-                calculate_file_index(file_count, hit.relative_y.saturating_sub(1))
+            if let Some(file_index) = visible_list_index(&hit, state.graph_view.file_selected_index)
+                .filter(|&index| index < file_count)
             {
                 // Sélectionner le fichier cliqué directement par son index
                 Some(AppAction::Navigation(
@@ -205,21 +213,13 @@ fn handle_modal_click(
     state: &AppState,
     hit: &crate::ui::hit_test::HitTestResult,
 ) -> Option<AppAction> {
-    use crate::ui::common::centered_rect;
-
     if state.ui.pending_confirmation.is_some() {
-        let popup = centered_rect(60, 30, state.screen_area);
-        if hit.relative_x >= popup.x && hit.relative_x < popup.x + popup.width {
-            // Ligne des boutons approximative en bas du popup.
-            let button_row = popup.y + popup.height.saturating_sub(2);
-            if hit.relative_y == button_row {
-                let rel_x = hit.relative_x.saturating_sub(popup.x);
-                return if rel_x < popup.width / 3 {
-                    Some(AppAction::ConfirmAction)
-                } else {
-                    Some(AppAction::CancelAction)
-                };
-            }
+        if crate::ui::confirm_dialog::confirm_button_contains(
+            state.screen_area,
+            hit.relative_x,
+            hit.relative_y,
+        ) {
+            return Some(AppAction::ConfirmAction);
         }
 
         return Some(AppAction::CancelAction);
@@ -242,7 +242,7 @@ fn handle_staging_mouse_click(
     }
 
     if hit.rect == layout.unstaged_panel {
-        let item_y = hit.relative_y.saturating_sub(1) as usize;
+        let item_y = visible_list_index(hit, state.staging_state.unstaged_selected())?;
         if item_y < state.staging_state.unstaged_files().len() {
             return Some(AppAction::Staging(StagingAction::SelectUnstaged(item_y)));
         }
@@ -253,7 +253,7 @@ fn handle_staging_mouse_click(
     }
 
     if hit.rect == layout.staged_panel {
-        let item_y = hit.relative_y.saturating_sub(1) as usize;
+        let item_y = visible_list_index(hit, state.staging_state.staged_selected())?;
         if item_y < state.staging_state.staged_files().len() {
             return Some(AppAction::Staging(StagingAction::SelectStaged(item_y)));
         }
@@ -299,7 +299,7 @@ fn handle_branches_mouse_click(
             (BranchesSection::Worktrees, 0) => Some(AppAction::Branch(BranchAction::PrevSection)),
             (BranchesSection::Worktrees, 1) => None,
             (BranchesSection::Worktrees, 2) => Some(AppAction::Branch(BranchAction::NextSection)),
-            (BranchesSection::Stashes, 0) => Some(AppAction::Branch(BranchAction::PrevSection)),
+            (BranchesSection::Stashes, 0) => Some(AppAction::Branch(BranchAction::NextSection)),
             (BranchesSection::Stashes, 1) => Some(AppAction::Branch(BranchAction::PrevSection)),
             (BranchesSection::Stashes, 2) => None,
             _ => None,
@@ -307,7 +307,18 @@ fn handle_branches_mouse_click(
     }
 
     if hit.rect == layout.list_panel {
-        let item_y = hit.relative_y.saturating_sub(1) as usize;
+        let selected = match state.branches_view_state.section {
+            BranchesSection::Branches => match state.branches_view_state.selected_branch {
+                Some(crate::state::SelectedBranch::Local(index)) => index + 1,
+                Some(crate::state::SelectedBranch::Remote(index)) => {
+                    state.branches_view_state.local_branches.len() + index + 3
+                }
+                None => 0,
+            },
+            BranchesSection::Worktrees => state.branches_view_state.worktree_selected(),
+            BranchesSection::Stashes => state.branches_view_state.stash_selected(),
+        };
+        let item_y = visible_list_index(hit, selected)?;
 
         return match state.branches_view_state.section {
             BranchesSection::Branches => {
@@ -357,6 +368,16 @@ fn handle_branches_mouse_click(
     }
 
     None
+}
+
+/// Retrouve une ligne dans les listes rendues depuis un ListState initialement vide.
+fn visible_list_index(hit: &crate::ui::hit_test::HitTestResult, selected: usize) -> Option<usize> {
+    let row = hit.relative_y.checked_sub(1)? as usize;
+    let height = hit.rect.height.saturating_sub(2) as usize;
+    if row >= height {
+        return None;
+    }
+    Some(selected.saturating_sub(height.saturating_sub(1)) + row)
 }
 
 fn calculate_global_nav_action(state: &AppState, relative_x: u16) -> Option<AppAction> {
@@ -493,11 +514,24 @@ fn handle_staging_mouse_scroll(
     let layout = build_staging_layout(state.screen_area);
 
     if hit.rect == layout.unstaged_panel || hit.rect == layout.staged_panel {
-        return Some(if is_up {
-            AppAction::Navigation(NavigationAction::MoveUp)
+        let (selection, unstaged) = if hit.rect == layout.unstaged_panel {
+            (&state.staging_state.unstaged, true)
         } else {
-            AppAction::Navigation(NavigationAction::MoveDown)
-        });
+            (&state.staging_state.staged, false)
+        };
+        let index = if is_up {
+            selection.selected_index().saturating_sub(1)
+        } else {
+            selection
+                .selected_index()
+                .saturating_add(1)
+                .min(selection.len().saturating_sub(1))
+        };
+        return Some(AppAction::Staging(if unstaged {
+            StagingAction::SelectUnstaged(index)
+        } else {
+            StagingAction::SelectStaged(index)
+        }));
     }
 
     if hit.rect == layout.diff_panel {

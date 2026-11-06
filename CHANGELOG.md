@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## 0.5.2 - 2026-11-06
+
+### Fixed
+
+- préservation du staging et des changements locaux lors des discard, merges, stashes et annulations
+- résolution des conflits sans perte de contexte, de CRLF ni de saut de ligne final ; reprise correcte des rebases
+- staging partiel avant le premier commit, chemins littéraux et hunks suivants ; refus des actions partielles sur les diffs tronqués
+- ciblage des worktrees, de la branche upstream et du stash confirmé ; index relu après les commandes Git externes
+- sélection souris des listes défilées, protection des modales et confirmation destructive limitée au bouton visible
+- recherches recalculées après édition et refresh ; recherche CLI dans tout l'historique, y compris HEAD détachée
+- rafraîchissement des références existantes, distantes et partagées entre worktrees
+- erreurs Git affichées sans fermer la TUI ; restauration du terminal même si son initialisation échoue
+- bornes de dates CLI inclusives, validation des arguments et sorties JSON compatibles avec les pipes fermés
+- version du paquet alignée avec le tag de publication et vérifiée dans le workflow release
+
+### Changed
+
+- parcours filtré de l'historique en un seul passage ; recherche floue et calcul d'ascendance optimisés
+- budgets mémoire en octets pour les diffs, sorties des processus et historiques d'édition
+- prévisualisations SVG isolées des fichiers externes ; cache d'image attaché à son contenu réel
+- drainage concurrent des sorties Git/GitHub avec délai et nettoyage des processus descendants
+- mises à jour git2 0.21, lru 0.18, anyhow, libz-sys et clipboard-win pour leurs correctifs de sûreté
+- vérification CI sans prévisualisation d'images et Clippy étendu aux tests
+
+## 0.5.1 - 2026-07-14
+
+### Added
+
+- staging par hunk ou ligne, rebase interactif et annulation via reflog
+- tags, comparaison de branches et bisect
+- diagnostic des hooks, signatures et sous-modules ; statut des pull requests GitHub
+- outils de diff externes, raccourcis et commandes personnalisées
+
+### Changed
+
+- cache de diffs partagé et borné, graphe compact et chargement géométrique de l'historique
+- rendu à la demande et réduction des codecs et du poids du binaire
+
 ## 0.5.0 - 2026-07-14
 
 ### Added

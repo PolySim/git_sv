@@ -17,6 +17,14 @@ pub fn last_undo_target(repo: &Repository) -> Result<UndoTarget> {
     let entry = reflog
         .get(0)
         .ok_or_else(|| GitSvError::Other("Reflog HEAD vide".into()))?;
+    if entry
+        .message()?
+        .is_some_and(|message| message.starts_with("checkout:"))
+    {
+        return Err(GitSvError::Other(
+            "Le dernier changement est un checkout : revenez à la branche précédente".into(),
+        ));
+    }
     let oid = entry.id_old();
     if oid.is_zero() || repo.find_commit(oid).is_err() {
         return Err(GitSvError::Other(
@@ -27,7 +35,7 @@ pub fn last_undo_target(repo: &Repository) -> Result<UndoTarget> {
     Ok(UndoTarget {
         oid,
         description: entry
-            .message()
+            .message()?
             .unwrap_or("dernière opération Git")
             .to_string(),
     })
@@ -44,6 +52,18 @@ pub fn undo_to(repo: &Repository, oid: Oid) -> Result<()> {
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::{commit_file, create_test_repo};
+
+    #[test]
+    fn undo_does_not_reset_another_branch_after_checkout() {
+        let (_directory, repo) = create_test_repo();
+        let base = commit_file(&repo, "file.txt", "base\n", "base");
+        repo.branch("feature", &repo.find_commit(base).unwrap(), false)
+            .unwrap();
+        commit_file(&repo, "file.txt", "main\n", "main");
+        crate::git::branch::checkout_branch(&repo, "feature").unwrap();
+        assert!(last_undo_target(&repo).is_err());
+        assert_eq!(repo.head().unwrap().target(), Some(base));
+    }
 
     #[test]
     fn test_reflog_undo_restores_head_and_preserves_changes() {

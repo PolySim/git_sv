@@ -46,7 +46,10 @@ pub(super) fn handle_stash_drop(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
         let selected = state.branches_view_state.stash_selected();
         if let Some(stash) = state.branches_view_state.stashes.get(selected) {
-            state.open_confirmation(ConfirmAction::StashDrop(stash.index));
+            state.open_confirmation(ConfirmAction::StashDrop {
+                index: stash.index,
+                oid: stash.oid,
+            });
         }
     }
     Ok(())
@@ -80,6 +83,8 @@ pub(super) fn handle_stash_file_prev(state: &mut AppState) -> Result<()> {
 }
 
 pub fn load_stash_file_diff(state: &mut AppState) -> Result<()> {
+    state.branches_view_state.stash_file_diff = None;
+    state.branches_view_state.stash_diff_scroll = 0;
     if let Some(stash) = state.branches_view_state.stashes.selected_item() {
         let idx = state.branches_view_state.stash_file_selected;
         if let Some(file) = stash.files.get(idx) {

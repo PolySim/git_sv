@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn test_reset_picker_navigation_covers_mixed() {
-        let oid = Oid::zero();
+        let oid = Oid::ZERO_SHA1;
         let mut state = ResetPickerState::new(oid, "abc1234".to_string(), "Test".to_string());
 
         assert!(state.is_soft_selected());

@@ -123,6 +123,9 @@ pub(super) fn handle_line_down(state: &mut AppState) -> Result<()> {
     use crate::state::ConflictPanelFocus;
 
     if let Some(conflicts) = &mut state.conflicts_state {
+        if conflicts.all_files.get(conflicts.file_selected).is_none() {
+            return Ok(());
+        }
         let max_lines = if let Some(file) = conflicts.all_files.get(conflicts.file_selected) {
             if let Some(conflict) = file.conflicts.get(conflicts.section_selected) {
                 match conflicts.panel_focus {
@@ -200,8 +203,15 @@ pub(super) fn handle_line_up(state: &mut AppState) -> Result<()> {
         } else if conflicts.section_selected > 0 {
             // En début de block, passer au block précédent
             conflicts.section_selected -= 1;
-            let file = &conflicts.all_files[conflicts.file_selected];
-            let prev_section = &file.conflicts[conflicts.section_selected];
+            let Some(prev_section) = conflicts
+                .all_files
+                .get(conflicts.file_selected)
+                .and_then(|file| file.conflicts.get(conflicts.section_selected))
+            else {
+                conflicts.section_selected = 0;
+                conflicts.line_selected = 0;
+                return Ok(());
+            };
             let max_lines = match conflicts.panel_focus {
                 ConflictPanelFocus::OursPanel => prev_section.ours.len(),
                 ConflictPanelFocus::TheirsPanel => prev_section.theirs.len(),
@@ -271,13 +281,15 @@ pub(super) fn handle_start_editing(state: &mut AppState) -> Result<()> {
 
             // Convertir les ResolvedLine en String
             conflicts.edit_buffer = resolved.into_iter().map(|line| line.content).collect();
+            if conflicts.edit_buffer.is_empty() {
+                conflicts.edit_buffer.push(String::new());
+            }
 
             // Positionner le curseur au début
             conflicts.edit_cursor_line = 0;
             conflicts.edit_cursor_col = 0;
+            conflicts.is_editing = true;
         }
-
-        conflicts.is_editing = true;
     }
     Ok(())
 }

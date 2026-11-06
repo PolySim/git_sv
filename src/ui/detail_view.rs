@@ -199,7 +199,7 @@ mod tests {
         vec![
             GraphRow {
                 node: CommitNode {
-                    oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
+                    oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::ZERO_SHA1),
                     message: "First commit\nWith multiple lines".to_string(),
                     author: "Alice".to_string(),
                     timestamp: 1609459200,
@@ -220,13 +220,13 @@ mod tests {
             },
             GraphRow {
                 node: CommitNode {
-                    oid: Oid::from_bytes(&[2; 20]).unwrap_or(Oid::zero()),
+                    oid: Oid::from_bytes(&[2; 20]).unwrap_or(Oid::ZERO_SHA1),
                     message: "Merge commit".to_string(),
                     author: "Bob".to_string(),
                     timestamp: 1609545600,
                     parents: vec![
-                        Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
-                        Oid::from_bytes(&[3; 20]).unwrap_or(Oid::zero()),
+                        Oid::from_bytes(&[1; 20]).unwrap_or(Oid::ZERO_SHA1),
+                        Oid::from_bytes(&[3; 20]).unwrap_or(Oid::ZERO_SHA1),
                     ],
                     refs: vec![],
                     branch_name: None,
@@ -264,7 +264,7 @@ mod tests {
                 .unwrap();
 
             let buffer = terminal.backend().buffer();
-            assert!(buffer.content.len() > 0);
+            assert!(!buffer.content.is_empty());
 
             let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
             assert!(content.contains("Détail"));

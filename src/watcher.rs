@@ -42,14 +42,21 @@ pub struct GitWatcher {
     head_mtime: Option<SystemTime>,
     /// Timestamp du fichier index.
     index_mtime: Option<SystemTime>,
-    /// Timestamp du répertoire refs/heads.
-    refs_mtime: Option<SystemTime>,
+    /// Valeurs des références, y compris celles partagées entre worktrees.
+    references: Vec<ReferenceSnapshot>,
     /// Timestamp du fichier packed-refs.
     packed_refs_mtime: Option<SystemTime>,
     /// Chemin du working tree surveillé.
     worktree_dir: PathBuf,
     /// État observable des fichiers modifiés dans le working tree.
     worktree_snapshot: Vec<WorktreeEntrySnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ReferenceSnapshot {
+    name: Vec<u8>,
+    target: Option<git2::Oid>,
+    symbolic_target: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,9 +80,10 @@ impl GitWatcher {
     pub fn new(repo_path: impl AsRef<Path>) -> Result<Self> {
         let repo_path = repo_path.as_ref();
 
-        // Trouver le répertoire .git/ (peut être directement ou dans un parent)
-        let git_dir = find_git_dir(repo_path)?;
-        let worktree_dir = find_worktree_dir(repo_path).unwrap_or_else(|| repo_path.to_path_buf());
+        // libgit2 respecte les fichiers .git des worktrees et sous-modules.
+        let repo = Repository::discover(repo_path)?;
+        let git_dir = repo.path().to_path_buf();
+        let worktree_dir = repo.workdir().unwrap_or(repo.path()).to_path_buf();
 
         let mut watcher = Self {
             git_dir,
@@ -84,7 +92,7 @@ impl GitWatcher {
             last_change_detected: None,
             head_mtime: None,
             index_mtime: None,
-            refs_mtime: None,
+            references: Vec::new(),
             packed_refs_mtime: None,
             worktree_dir,
             worktree_snapshot: Vec::new(),
@@ -97,14 +105,18 @@ impl GitWatcher {
     }
 
     /// Met à jour les timestamps des fichiers surveillés.
-    fn update_git_timestamps(&mut self) {
+    fn update_git_timestamps(&mut self) -> bool {
         self.head_mtime = get_mtime(&self.git_dir.join("HEAD"));
         self.index_mtime = get_mtime(&self.git_dir.join("index"));
 
-        // Le répertoire refs/heads contient les références des branches
-        let refs_heads = self.git_dir.join("refs").join("heads");
-        self.refs_mtime = get_mtime(&refs_heads);
+        // Le mtime du dossier ne change pas lorsqu'une référence existante avance.
+        let mut refs_changed = false;
+        if let Ok(references) = collect_reference_snapshot(&self.worktree_dir) {
+            refs_changed = self.references != references;
+            self.references = references;
+        }
         self.packed_refs_mtime = get_mtime(&self.git_dir.join("packed-refs"));
+        refs_changed
     }
 
     fn update_worktree_snapshot(&mut self) {
@@ -152,13 +164,12 @@ impl GitWatcher {
             self.last_git_check = Instant::now();
             let old_head = self.head_mtime;
             let old_index = self.index_mtime;
-            let old_refs = self.refs_mtime;
             let old_packed_refs = self.packed_refs_mtime;
 
-            self.update_git_timestamps();
+            let refs_changed = self.update_git_timestamps();
             changed |= self.head_mtime != old_head
                 || self.index_mtime != old_index
-                || self.refs_mtime != old_refs
+                || refs_changed
                 || self.packed_refs_mtime != old_packed_refs;
         }
 
@@ -202,56 +213,24 @@ impl GitWatcher {
     }
 }
 
-/// Trouve le répertoire `.git/` à partir d'un chemin donné.
-///
-/// Cherche dans le chemin donné puis dans ses parents.
-fn find_git_dir(start_path: &Path) -> Result<PathBuf> {
-    let mut current = start_path;
-
-    loop {
-        let git_dir = current.join(".git");
-        if git_dir.is_dir() {
-            return Ok(git_dir);
-        }
-
-        // Remonter vers le parent
-        match current.parent() {
-            Some(parent) => current = parent,
-            None => break,
-        }
+fn collect_reference_snapshot(repo_path: &Path) -> Result<Vec<ReferenceSnapshot>> {
+    let repo = Repository::discover(repo_path)?;
+    let mut snapshot = Vec::new();
+    for reference in repo.references()? {
+        let reference = reference?;
+        snapshot.push(ReferenceSnapshot {
+            name: reference.name_bytes().to_vec(),
+            target: reference.target(),
+            symbolic_target: reference.symbolic_target_bytes().map(<[u8]>::to_vec),
+        });
     }
-
-    // Si on arrive ici, on n'a pas trouvé de .git/
-    // Essayer avec la commande git pour les worktrees
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--absolute-git-dir"])
-        .current_dir(start_path)
-        .output();
-
-    if let Ok(output) = output {
-        if output.status.success() {
-            let git_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !git_dir.is_empty() {
-                return Ok(PathBuf::from(git_dir));
-            }
-        }
-    }
-
-    Err(crate::error::GitSvError::Git(git2::Error::from_str(
-        "Répertoire .git/ non trouvé",
-    )))
+    snapshot.sort_unstable();
+    Ok(snapshot)
 }
 
 /// Récupère le timestamp de dernière modification d'un fichier ou répertoire.
 fn get_mtime(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
-}
-
-fn find_worktree_dir(start_path: &Path) -> Option<PathBuf> {
-    Repository::discover(start_path)
-        .ok()?
-        .workdir()
-        .map(Path::to_path_buf)
 }
 
 fn collect_worktree_snapshot(worktree_dir: &Path) -> Result<Vec<WorktreeEntrySnapshot>> {
@@ -312,37 +291,17 @@ mod tests {
 
     #[test]
     fn test_watcher_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let git_dir = temp_dir.path().join(".git");
-        fs::create_dir(&git_dir).unwrap();
-
-        // Créer les fichiers nécessaires
-        File::create(git_dir.join("HEAD")).unwrap();
-        File::create(git_dir.join("index")).unwrap();
-        fs::create_dir(git_dir.join("refs")).unwrap();
-        fs::create_dir(git_dir.join("refs/heads")).unwrap();
-
-        let watcher = GitWatcher::new(temp_dir.path());
-        assert!(watcher.is_ok());
+        let temp_dir = create_repository();
+        assert!(GitWatcher::new(temp_dir.path()).is_ok());
     }
 
     #[test]
     fn test_watcher_detects_no_changes_initially() {
-        let temp_dir = TempDir::new().unwrap();
-        let git_dir = temp_dir.path().join(".git");
-        fs::create_dir(&git_dir).unwrap();
-
-        File::create(git_dir.join("HEAD")).unwrap();
-        File::create(git_dir.join("index")).unwrap();
-        fs::create_dir_all(git_dir.join("refs/heads")).unwrap();
-
+        let temp_dir = create_repository();
         let mut watcher = GitWatcher::new(temp_dir.path()).unwrap();
-
-        // Force check immédiate (pas d'intervalle)
         force_poll(&mut watcher);
-
-        // Pas de changement attendu
         assert!(!watcher.check_changed().unwrap());
+        assert!(watcher.last_change_detected.is_none());
     }
 
     #[test]
@@ -424,5 +383,42 @@ mod tests {
         watcher.last_change_detected = Some(Instant::now() - Duration::from_millis(400));
 
         assert!(watcher.next_check_in() <= Duration::from_millis(100));
+    }
+
+    #[test]
+    fn detects_existing_nested_and_remote_reference_updates() {
+        let temp = create_repository();
+        let repo = Repository::open(temp.path()).unwrap();
+        let old = repo.head().unwrap().target().unwrap();
+        let new = crate::git::tests::test_utils::commit_file(&repo, "next.txt", "next", "next");
+        for name in [
+            "refs/heads/feature/nested",
+            "refs/remotes/origin/main",
+            "refs/tags/test",
+        ] {
+            repo.reference(name, old, true, "test").unwrap();
+            let mut watcher = GitWatcher::new(temp.path()).unwrap();
+            repo.reference(name, new, true, "test").unwrap();
+            force_poll(&mut watcher);
+            assert!(!watcher.check_changed().unwrap());
+            assert!(watcher.last_change_detected.is_some(), "{name}");
+        }
+    }
+
+    #[test]
+    fn linked_worktree_uses_own_head_and_shared_references() {
+        let temp = create_repository();
+        let repo = Repository::open(temp.path()).unwrap();
+        let linked = temp.path().join("linked");
+        repo.worktree("linked", &linked, None).unwrap();
+        let linked_repo = Repository::open(&linked).unwrap();
+        let mut watcher = GitWatcher::new(&linked).unwrap();
+        assert_eq!(watcher.git_dir, linked_repo.path());
+        let head = repo.head().unwrap().target().unwrap();
+        repo.reference("refs/heads/shared", head, true, "test")
+            .unwrap();
+        force_poll(&mut watcher);
+        assert!(!watcher.check_changed().unwrap());
+        assert!(watcher.last_change_detected.is_some());
     }
 }

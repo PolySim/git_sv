@@ -81,7 +81,7 @@ impl StagingState {
 
     /// Définit les fichiers stagés (compatibilité).
     pub fn set_staged_files(&mut self, files: Vec<StatusEntry>) {
-        self.staged.set_items(files);
+        replace_files(&mut self.staged, files);
     }
 
     /// Accès aux fichiers non stagés (compatibilité).
@@ -97,7 +97,7 @@ impl StagingState {
 
     /// Définit les fichiers non stagés (compatibilité).
     pub fn set_unstaged_files(&mut self, files: Vec<StatusEntry>) {
-        self.unstaged.set_items(files);
+        replace_files(&mut self.unstaged, files);
     }
 
     /// Index sélectionné dans unstaged (compatibilité).
@@ -118,5 +118,15 @@ impl StagingState {
     /// Définit l'index sélectionné dans staged (compatibilité).
     pub fn set_staged_selected(&mut self, index: usize) {
         self.staged.select(index);
+    }
+}
+
+fn replace_files(selection: &mut ListSelection<StatusEntry>, files: Vec<StatusEntry>) {
+    let selected_path = selection.selected_item().map(|entry| entry.path.clone());
+    selection.set_items(files);
+    if let Some(index) =
+        selected_path.and_then(|path| selection.iter().position(|entry| entry.path == path))
+    {
+        selection.select(index);
     }
 }

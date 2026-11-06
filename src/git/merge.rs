@@ -1,6 +1,6 @@
 //! Opérations de merge entre branches.
 
-use git2::{build::CheckoutBuilder, Repository, Signature};
+use git2::{Repository, Signature};
 
 use crate::error::{GitSvError, Result};
 use crate::git::conflict::{list_conflict_files, MergeResult};
@@ -19,36 +19,8 @@ pub fn merge_branch_with_result(repo: &Repository, branch_name: &str) -> Result<
         return Ok(MergeResult::UpToDate);
     }
 
-    if analysis.is_fast_forward() {
-        // --no-ff : même si un fast-forward est possible, on crée un vrai commit de merge.
-        let mut index = repo.merge_commits(&head_commit, &source_commit, None)?;
-        if index.has_conflicts() {
-            return Err(GitSvError::Other(
-                "Conflits détectés. Résolution manuelle requise.".into(),
-            ));
-        }
-
-        let signature = repo
-            .signature()
-            .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
-        let tree_oid = index.write_tree_to(repo)?;
-        let tree = repo.find_tree(tree_oid)?;
-
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            &format!("Merge branch '{}'", branch_name),
-            &tree,
-            &[&head_commit, &source_commit],
-        )?;
-
-        repo.checkout_head(Some(CheckoutBuilder::default().force()))?;
-        return Ok(MergeResult::Success);
-    }
-
-    if analysis.is_normal() {
-        // Merge normal : on laisse git2 faire le merge dans l'index.
+    if analysis.is_fast_forward() || analysis.is_normal() {
+        // Le checkout sûr de libgit2 protège les changements locaux avant toute mutation de HEAD.
         repo.merge(&[&annotated], None, None)?;
 
         // Vérifier s'il y a des conflits.
@@ -75,7 +47,6 @@ pub fn merge_branch_with_result(repo: &Repository, branch_name: &str) -> Result<
         )?;
 
         repo.cleanup_state()?;
-        repo.checkout_head(Some(CheckoutBuilder::default().force()))?;
 
         return Ok(MergeResult::Success);
     }
@@ -87,6 +58,53 @@ pub fn merge_branch_with_result(repo: &Repository, branch_name: &str) -> Result<
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::commit_file;
+    use git2::build::CheckoutBuilder;
+
+    #[test]
+    fn fast_forward_merge_refuses_to_overwrite_local_changes() {
+        let (directory, repo) = crate::git::tests::test_utils::create_test_repo();
+        let base = commit_file(&repo, "file.txt", "base\n", "base");
+        repo.branch("feature", &repo.find_commit(base).unwrap(), false)
+            .unwrap();
+        repo.set_head("refs/heads/feature").unwrap();
+        commit_file(&repo, "file.txt", "feature\n", "feature");
+        repo.set_head("refs/heads/main").unwrap();
+        repo.checkout_head(Some(CheckoutBuilder::default().force()))
+            .unwrap();
+        std::fs::write(directory.path().join("file.txt"), "local work\n").unwrap();
+
+        assert!(merge_branch_with_result(&repo, "feature").is_err());
+        assert_eq!(repo.head().unwrap().target(), Some(base));
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("file.txt")).unwrap(),
+            "local work\n"
+        );
+    }
+
+    #[test]
+    fn merge_preserves_unrelated_unstaged_changes() {
+        let (directory, repo) = crate::git::tests::test_utils::create_test_repo();
+        commit_file(&repo, "local.txt", "base\n", "base");
+        let base = commit_file(&repo, "file.txt", "base\n", "base");
+        repo.branch("feature", &repo.find_commit(base).unwrap(), false)
+            .unwrap();
+        repo.set_head("refs/heads/feature").unwrap();
+        commit_file(&repo, "file.txt", "feature\n", "feature");
+        repo.set_head("refs/heads/main").unwrap();
+        repo.checkout_head(Some(CheckoutBuilder::default().force()))
+            .unwrap();
+        std::fs::write(directory.path().join("local.txt"), "local work\n").unwrap();
+
+        merge_branch_with_result(&repo, "feature").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("local.txt")).unwrap(),
+            "local work\n"
+        );
+        assert!(repo
+            .status_file(std::path::Path::new("local.txt"))
+            .unwrap()
+            .is_wt_modified());
+    }
 
     #[test]
     fn merge_creates_commit_even_when_fast_forward_is_possible() {
@@ -122,6 +140,9 @@ mod tests {
         assert_eq!(head.parent_count(), 2);
         assert_eq!(head.parent_id(0).expect("parent 0"), base_oid);
         assert_eq!(head.parent_id(1).expect("parent 1"), feature_oid);
-        assert_eq!(head.summary().unwrap_or(""), "Merge branch 'feature'");
+        assert_eq!(
+            head.summary().unwrap().unwrap_or(""),
+            "Merge branch 'feature'"
+        );
     }
 }

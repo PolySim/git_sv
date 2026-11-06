@@ -91,6 +91,133 @@ mod tests {
     }
 
     #[test]
+    fn test_truncated_diff_refuses_partial_staging_without_changing_index() {
+        let (dir, repo) = setup_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo.repo, "large.txt", "base\n", "Base");
+        let content = "nouvelle ligne\n".repeat(20_100);
+        create_test_file(&dir, "large.txt", &content);
+        let mut state = AppState::new(repo, dir.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        refresh_staging(&mut state).unwrap();
+        let initial_tree = state.repo.repo.index().unwrap().write_tree().unwrap();
+        assert!(state
+            .staging_state
+            .current_diff
+            .as_ref()
+            .unwrap()
+            .is_truncated());
+        state.staging_state.diff_selected_line = 1;
+        let mut handler = StagingHandler;
+        for action in [StagingAction::StageHunk, StagingAction::StageLine] {
+            handler
+                .handle(&mut HandlerContext { state: &mut state }, action)
+                .unwrap();
+            assert_eq!(
+                state.repo.repo.index().unwrap().write_tree().unwrap(),
+                initial_tree
+            );
+            assert!(state
+                .current_flash_message()
+                .unwrap()
+                .contains("Diff tronqué"));
+        }
+
+        handler
+            .handle(
+                &mut HandlerContext { state: &mut state },
+                StagingAction::StageFile,
+            )
+            .unwrap();
+        let staged_tree = state.repo.repo.index().unwrap().write_tree().unwrap();
+        assert_ne!(staged_tree, initial_tree);
+        state.staging_state.focus = StagingFocus::Staged;
+        state.staging_state.last_file_focus = StagingFocus::Staged;
+        load_staging_diff(&mut state);
+        assert!(state
+            .staging_state
+            .current_diff
+            .as_ref()
+            .unwrap()
+            .is_truncated());
+        state.staging_state.diff_selected_line = 1;
+        for action in [StagingAction::UnstageHunk, StagingAction::UnstageLine] {
+            handler
+                .handle(&mut HandlerContext { state: &mut state }, action)
+                .unwrap();
+            assert_eq!(
+                state.repo.repo.index().unwrap().write_tree().unwrap(),
+                staged_tree
+            );
+            assert!(state
+                .current_flash_message()
+                .unwrap()
+                .contains("Diff tronqué"));
+        }
+
+        handler
+            .handle(
+                &mut HandlerContext { state: &mut state },
+                StagingAction::UnstageFile,
+            )
+            .unwrap();
+        assert_eq!(
+            state.repo.repo.index().unwrap().write_tree().unwrap(),
+            initial_tree
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("large.txt")).unwrap(),
+            content
+        );
+    }
+
+    #[test]
+    fn test_refresh_preserves_selected_file_when_status_order_changes() {
+        let (dir, repo) = setup_test_repo();
+        create_test_file(&dir, "b.txt", "b\n");
+        create_test_file(&dir, "c.txt", "c\n");
+        let mut state = AppState::new(repo, dir.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        refresh_staging(&mut state).unwrap();
+        state.staging_state.set_unstaged_selected(1);
+        create_test_file(&dir, "a.txt", "a\n");
+        refresh_staging(&mut state).unwrap();
+
+        assert_eq!(
+            state.staging_state.unstaged.selected_item().unwrap().path,
+            "c.txt"
+        );
+        assert_eq!(
+            state.staging_state.current_diff.as_ref().unwrap().path,
+            "c.txt"
+        );
+    }
+
+    #[test]
+    fn test_switching_cached_diff_resets_selection_and_scroll() {
+        let (dir, repo) = setup_test_repo();
+        create_test_file(&dir, "a.txt", "first\nsecond\nthird\n");
+        create_test_file(&dir, "b.txt", "first\nsecond\nthird\n");
+        let mut state = AppState::new(repo, dir.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        refresh_staging(&mut state).unwrap();
+        state.staging_state.set_unstaged_selected(1);
+        load_staging_diff(&mut state);
+        state.staging_state.diff_selected_line = 2;
+        state.staging_state.diff_scroll = 1;
+        state.staging_state.diff_horizontal_offset = 8;
+        state.staging_state.set_unstaged_selected(0);
+        load_staging_diff(&mut state);
+
+        assert_eq!(
+            state.staging_state.current_diff.as_ref().unwrap().path,
+            "a.txt"
+        );
+        assert_eq!(state.staging_state.diff_selected_line, 0);
+        assert_eq!(state.staging_state.diff_scroll, 0);
+        assert_eq!(state.staging_state.diff_horizontal_offset, 0);
+    }
+
+    #[test]
     fn test_switch_focus_in_staging() {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
@@ -194,7 +321,6 @@ mod tests {
             .handle(&mut ctx, StagingAction::StartCommitMessage)
             .unwrap();
 
-        drop(ctx);
         assert!(state.staging_state.is_committing);
         assert_eq!(state.staging_state.focus, StagingFocus::CommitMessage);
     }
@@ -215,7 +341,6 @@ mod tests {
             .handle(&mut ctx, StagingAction::CancelCommit)
             .unwrap();
 
-        drop(ctx);
         assert!(!state.staging_state.is_committing);
         assert!(state.staging_state.commit_message.is_empty());
         assert_eq!(state.staging_state.focus, StagingFocus::Unstaged);
@@ -236,7 +361,6 @@ mod tests {
             .handle(&mut ctx, StagingAction::ConfirmCommit)
             .unwrap();
 
-        drop(ctx);
         assert!(state.staging_state.is_committing);
     }
 
@@ -417,7 +541,6 @@ mod tests {
             .handle(&mut ctx, StagingAction::StashSelectedFile)
             .unwrap();
 
-        drop(ctx);
         assert_eq!(state.staging_state.unstaged_files().len(), 0);
         assert_eq!(state.staging_state.staged_files().len(), 1);
         assert_eq!(

@@ -50,7 +50,7 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Run Clippy
-        run: cargo clippy --locked --all-features -- -D warnings
+        run: cargo clippy --locked --all-features --all-targets -- -D warnings
 
   test:
     name: Test
@@ -72,6 +72,9 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked
+
+      - name: Test without image previews
+        run: cargo test --locked --no-default-features
 
   coverage:
     name: Code Coverage

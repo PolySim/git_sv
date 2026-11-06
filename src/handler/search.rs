@@ -96,23 +96,16 @@ fn handle_previous_result(state: &mut AppState) -> Result<()> {
 
 fn handle_change_type(state: &mut AppState) -> Result<()> {
     state.search_state.cycle_search_type();
-    Ok(())
+    handle_execute(state)
 }
 
 fn handle_execute(state: &mut AppState) -> Result<()> {
+    state
+        .search_state
+        .refresh_results(state.graph_view.rows.items(), None);
     if state.search_state.query.is_empty() {
         return Ok(());
     }
-
-    let query = state.search_state.query.clone();
-    let search_type = state.search_state.search_type;
-
-    // Utiliser filter_commits de git::search avec l'API unifiée
-    let results =
-        crate::git::search::filter_commits(state.graph_view.rows.items(), &query, search_type);
-
-    state.search_state.results = results;
-    state.search_state.current_result = 0;
 
     if !state.search_state.results.is_empty() {
         // Naviguer directement vers le premier résultat
@@ -130,4 +123,44 @@ fn handle_execute(state: &mut AppState) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::tests::test_utils::{commit_file, create_test_repo};
+
+    fn search_state() -> (tempfile::TempDir, AppState) {
+        let (temp, repo) = create_test_repo();
+        commit_file(&repo, "test.txt", "content\n", "Unique searchable message");
+        let repo = crate::git::GitRepo { repo };
+        let mut state = AppState::new(repo, temp.path().display().to_string()).unwrap();
+        state.initialize_from_repo().unwrap();
+        state.search_state.query = "Unique".to_string();
+        state.search_state.cursor = state.search_state.query.chars().count();
+        handle_execute(&mut state).unwrap();
+        assert_eq!(state.search_state.results.len(), 1);
+        (temp, state)
+    }
+
+    #[test]
+    fn test_erasing_search_clears_results() {
+        let (_temp, mut state) = search_state();
+        handle_edit(&mut state, crate::state::action::EditAction::SelectAll).unwrap();
+        handle_delete_char(&mut state).unwrap();
+        assert!(state.search_state.query.is_empty());
+        assert!(state.search_state.results.is_empty());
+        assert_eq!(state.search_state.current_result, 0);
+    }
+
+    #[test]
+    fn test_changing_search_type_recomputes_results() {
+        let (_temp, mut state) = search_state();
+        handle_change_type(&mut state).unwrap();
+        assert_eq!(
+            state.search_state.search_type,
+            crate::git::search::SearchType::Author
+        );
+        assert!(state.search_state.results.is_empty());
+    }
 }

@@ -212,7 +212,7 @@ mod tests {
 
         let color2 = determine_color_index(
             0,
-            &vec![RefInfo::new("feature", RefType::LocalBranch)],
+            &[RefInfo::new("feature", RefType::LocalBranch)],
             &mut branch_colors,
             &mut next_color,
             &columns,
@@ -222,7 +222,7 @@ mod tests {
 
         let color3 = determine_color_index(
             0,
-            &vec![RefInfo::new("feature", RefType::LocalBranch)],
+            &[RefInfo::new("feature", RefType::LocalBranch)],
             &mut branch_colors,
             &mut next_color,
             &columns,
@@ -231,7 +231,7 @@ mod tests {
 
         let color4 = determine_color_index(
             0,
-            &vec![RefInfo::new("main", RefType::LocalBranch)],
+            &[RefInfo::new("main", RefType::LocalBranch)],
             &mut branch_colors,
             &mut next_color,
             &columns,

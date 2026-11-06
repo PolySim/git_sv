@@ -250,8 +250,7 @@ fn selected_branch_start_point(state: &AppState) -> Option<String> {
 
 fn refresh_branches_after_create(state: &mut AppState, branch_name: &str) {
     if let Ok((local, remote)) = crate::git::branch::list_all_branches(&state.repo.repo) {
-        state.branches_view_state.local_branches.set_items(local);
-        state.branches_view_state.remote_branches.set_items(remote);
+        state.branches_view_state.replace_branches(local, remote);
 
         if let Some(index) = state
             .branches_view_state

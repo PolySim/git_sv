@@ -38,6 +38,15 @@ impl BranchInfo {
     }
 }
 
+fn timestamp_to_system_time(timestamp: i64) -> Option<SystemTime> {
+    let duration = std::time::Duration::from_secs(timestamp.unsigned_abs());
+    if timestamp < 0 {
+        SystemTime::UNIX_EPOCH.checked_sub(duration)
+    } else {
+        SystemTime::UNIX_EPOCH.checked_add(duration)
+    }
+}
+
 /// Construit les informations d'une branche locale.
 ///
 /// Cette fonction factorise la logique commune entre list_branches() et list_all_branches().
@@ -51,11 +60,11 @@ fn build_local_branch_info(
     // Récupérer les métadonnées du dernier commit.
     let (last_msg, last_date, ahead, behind) = if let Ok(reference) = branch.get().peel_to_commit()
     {
-        let msg = reference.summary().map(|s| s.to_string());
+        let msg = reference.summary().ok().flatten().map(|s| s.to_string());
 
         // Convertir le timestamp en SystemTime
         let date = reference.time().seconds();
-        let system_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(date as u64);
+        let system_time = timestamp_to_system_time(date);
 
         // Calculer ahead/behind si tracking.
         // CORRECTION: Un seul appel à graph_ahead_behind au lieu de deux
@@ -71,7 +80,7 @@ fn build_local_branch_info(
             (None, None)
         };
 
-        (msg, Some(system_time), ahead_count, behind_count)
+        (msg, system_time, ahead_count, behind_count)
     } else {
         (None, None, None, None)
     };
@@ -93,13 +102,13 @@ fn build_remote_branch_info(branch: &Branch) -> Result<BranchInfo> {
 
     // Récupérer les métadonnées du dernier commit.
     let (last_msg, last_date) = if let Ok(reference) = branch.get().peel_to_commit() {
-        let msg = reference.summary().map(|s| s.to_string());
+        let msg = reference.summary().ok().flatten().map(|s| s.to_string());
 
         // Convertir le timestamp en SystemTime
         let date = reference.time().seconds();
-        let system_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(date as u64);
+        let system_time = timestamp_to_system_time(date);
 
-        (msg, Some(system_time))
+        (msg, system_time)
     } else {
         (None, None)
     };
@@ -130,7 +139,7 @@ pub fn list_all_branches(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<Bran
     let head_ref = repo.head().ok();
     let head_name = head_ref
         .as_ref()
-        .and_then(|h| h.shorthand().map(String::from));
+        .and_then(|h| h.shorthand().ok().map(String::from));
 
     // Branches locales.
     for branch_result in repo.branches(Some(BranchType::Local))? {
@@ -208,6 +217,20 @@ pub fn rename_branch(repo: &Repository, old_name: &str, new_name: &str) -> Resul
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::*;
+
+    #[test]
+    fn branch_dates_support_timestamps_before_unix_epoch() {
+        assert_eq!(
+            timestamp_to_system_time(-1),
+            SystemTime::UNIX_EPOCH.checked_sub(std::time::Duration::from_secs(1))
+        );
+        assert_eq!(
+            timestamp_to_system_time(1),
+            SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(1))
+        );
+        let _ = timestamp_to_system_time(i64::MIN);
+        let _ = timestamp_to_system_time(i64::MAX);
+    }
 
     #[test]
     fn test_list_branches() {

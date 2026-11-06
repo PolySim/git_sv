@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_reset_picker_truncates_unicode_commit_message_safely() {
         let message = format!("{}é fin du commit", "a".repeat(49));
-        let state = ResetPickerState::new(Oid::zero(), "abc1234".to_string(), message);
+        let state = ResetPickerState::new(Oid::ZERO_SHA1, "abc1234".to_string(), message);
 
         let output = render_to_string(100, 30, |frame| {
             render(

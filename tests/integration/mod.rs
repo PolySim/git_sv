@@ -89,6 +89,7 @@ impl TestRepo {
             .peel_to_commit()
             .ok()?
             .message()
+            .ok()
             .map(|s| s.to_string())
     }
 

@@ -55,3 +55,66 @@ impl ActionHandler for ConflictHandler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::conflict::{ConflictFile, ConflictType};
+    use crate::git::tests::test_utils::{commit_file, create_test_repo};
+    use crate::state::{AppState, ConflictsState};
+
+    fn state_with_conflicts(files: Vec<ConflictFile>) -> (tempfile::TempDir, AppState) {
+        let (temp, repo) = create_test_repo();
+        commit_file(&repo, "nested/file.txt", "base\n", "Initial");
+        let mut state = AppState::new(
+            crate::git::GitRepo { repo },
+            temp.path().display().to_string(),
+        )
+        .unwrap();
+        state.open_conflicts(ConflictsState::new(
+            files,
+            "merge".into(),
+            "main".into(),
+            "feature".into(),
+        ));
+        (temp, state)
+    }
+
+    #[test]
+    fn test_empty_conflicts_navigation_does_not_panic() {
+        let (_temp, mut state) = state_with_conflicts(Vec::new());
+        navigation::handle_next_section(&mut state).unwrap();
+        modes::handle_line_down(&mut state).unwrap();
+        modes::handle_line_up(&mut state).unwrap();
+        modes::handle_start_editing(&mut state).unwrap();
+        assert!(!state.conflicts_state.as_ref().unwrap().is_editing);
+    }
+
+    #[test]
+    fn test_manual_conflict_edit_writes_into_selected_repository() {
+        let file = ConflictFile {
+            path: "nested/file.txt".into(),
+            conflicts: Vec::new(),
+            is_resolved: false,
+            conflict_type: ConflictType::BothModified,
+        };
+        let (temp, mut state) = state_with_conflicts(vec![file]);
+        edit::handle_start_edit(&mut state).unwrap();
+        modes::handle_edit_insert_char(&mut state, 'é').unwrap();
+        edit::handle_confirm_edit(&mut state).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("nested/file.txt")).unwrap(),
+            "é"
+        );
+        let index = state.repo.repo.index().unwrap();
+        let entry = index
+            .get_path(std::path::Path::new("nested/file.txt"), 0)
+            .unwrap();
+        assert_eq!(
+            state.repo.repo.find_blob(entry.id).unwrap().content(),
+            "é".as_bytes()
+        );
+        assert!(state.conflicts_state.as_ref().unwrap().all_files[0].is_resolved);
+    }
+}

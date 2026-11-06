@@ -24,6 +24,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Check tag and package versions
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          manifest = tomllib.loads(Path("Cargo.toml").read_text())
+          lock = tomllib.loads(Path("Cargo.lock").read_text())
+          package = next(item for item in lock["package"] if item["name"] == "git_sv")
+          assert manifest["package"]["version"] == version, "Tag/Cargo.toml version mismatch"
+          assert package["version"] == version, "Tag/Cargo.lock version mismatch"
+          PYTHON
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -40,7 +56,7 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Run Clippy
-        run: cargo clippy --locked --all-features -- -D warnings
+        run: cargo clippy --locked --all-features --all-targets -- -D warnings
 
       - name: Run tests
         run: cargo test --locked

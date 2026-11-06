@@ -23,10 +23,13 @@ dépendances d'images.
 ## Bornes mémoire
 
 - Le cache LRU de diffs est limité à 50 entrées **et** 64 MiB estimés. Une
-  entrée trop lourde provoque immédiatement une éviction.
+  entrée trop lourde est refusée sans évincer les autres entrées.
 - Les diffs sont partagés avec `Arc<FileDiff>` entre l'état et le cache, ce qui
   évite de dupliquer leurs lignes et leurs images.
-- Un diff matérialise au maximum 20 000 lignes.
+- Un diff matérialise au maximum 20 000 lignes et 4 MiB de texte.
+- Le seuil des entrées texte libgit2 est de 20 MiB.
+- Undo/redo est limité à 8 MiB de texte par champ.
+- Les sorties de processus sont limitées à 8 MiB par flux et drainées simultanément.
 - La lecture d'un fichier non suivi est limitée à 1 MiB pour le diff texte.
 - Une prévisualisation d'image est refusée au-delà de 20 MiB.
 - L'historique charge 200 commits au démarrage, puis double progressivement
@@ -80,3 +83,13 @@ Avant de fusionner une modification sensible aux performances :
 3. reconstruire en release et noter toute croissance significative du binaire ;
 4. tester un dépôt avec beaucoup de commits et un gros diff ;
 5. éviter tout timer de redraw permanent ou cache non borné.
+
+## Audit 0.5.2 — 6 novembre 2026
+
+Le [rapport détaillé](AUDIT-0.5.2.md) décrit les bornes, les régressions testées et
+les limites des observations mémoire. Sur 10 000 commits, le filtrage d'un
+résultat ancien passe de 732,2 ms à 45,1 ms (médianes de cinq mesures alternées).
+Le graphe de 50 commits passe de 32,8 à 39,6 ms ; le gain ne concerne donc pas
+tous les chemins. Le binaire macOS avec OpenSSL embarqué passe de 8 897 440 à
+8 036 896 octets. Ces tailles ne sont pas directement comparables à la build
+sans OpenSSL embarqué de la mesure historique ci-dessus.

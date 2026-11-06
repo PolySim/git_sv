@@ -57,7 +57,7 @@ impl Default for StashEntry {
             branch: None,
             timestamp: None,
             files: Vec::new(),
-            oid: Oid::zero(),
+            oid: Oid::ZERO_SHA1,
         }
     }
 }
@@ -112,7 +112,16 @@ pub fn stash_files(repo: &Repository, stash_oid: Oid) -> Result<Vec<StashFile>> 
     let parent_tree = parent.tree()?;
 
     let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)?;
+    let mut files = collect_stash_files(&diff)?;
+    if stash_commit.parent_count() > 2 {
+        let untracked_tree = stash_commit.parent(2)?.tree()?;
+        let untracked_diff = repo.diff_tree_to_tree(None, Some(&untracked_tree), None)?;
+        files.extend(collect_stash_files(&untracked_diff)?);
+    }
+    Ok(files)
+}
 
+fn collect_stash_files(diff: &git2::Diff<'_>) -> Result<Vec<StashFile>> {
     let mut files = Vec::new();
     diff.foreach(
         &mut |delta, _| {
@@ -147,40 +156,56 @@ pub fn stash_file_diff(repo: &Repository, stash_oid: Oid, file_path: &str) -> Re
     let parent = stash_commit.parent(0)?;
     let parent_tree = parent.tree()?;
 
-    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)?;
+    let mut options = git2::DiffOptions::new();
+    options
+        .pathspec(file_path)
+        .disable_pathspec_match(true)
+        .max_size(4 * 1024 * 1024);
+    let untracked_tree = if stash_commit.parent_count() > 2 {
+        Some(stash_commit.parent(2)?.tree()?)
+    } else {
+        None
+    };
+    let diff = if let Some(tree) = untracked_tree
+        .as_ref()
+        .filter(|tree| tree.get_path(std::path::Path::new(file_path)).is_ok())
+    {
+        repo.diff_tree_to_tree(None, Some(tree), Some(&mut options))?
+    } else {
+        repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), Some(&mut options))?
+    };
 
     let mut file_lines = Vec::new();
-    let target_path = file_path.to_string();
-
-    diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
-        let is_target = delta
-            .new_file()
-            .path()
-            .map(|p| p.to_string_lossy() == target_path)
-            .unwrap_or(false)
-            || delta
-                .old_file()
-                .path()
-                .map(|p| p.to_string_lossy() == target_path)
-                .unwrap_or(false);
-
-        if is_target {
-            let prefix = match line.origin() {
-                '+' => "+",
-                '-' => "-",
-                ' ' => " ",
-                _ => "",
-            };
-            file_lines.push(format!(
-                "{}{}",
-                prefix,
-                String::from_utf8_lossy(line.content())
-                    .trim_end_matches('\n')
-                    .replace('\t', "    ")
-            ));
+    let mut bytes = 0usize;
+    let mut truncated = false;
+    let result = diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        let expanded_size = line.content().len().saturating_mul(4);
+        if file_lines.len() >= 20_000 || bytes.saturating_add(expanded_size) > 8 * 1024 * 1024 {
+            truncated = true;
+            return false;
         }
+        let prefix = match line.origin() {
+            '+' => "+",
+            '-' => "-",
+            ' ' => " ",
+            _ => "",
+        };
+        let content = format!(
+            "{}{}",
+            prefix,
+            String::from_utf8_lossy(line.content())
+                .trim_end_matches('\n')
+                .replace('\t', "    ")
+        );
+        bytes += content.len();
+        file_lines.push(content);
         true
-    })?;
+    });
+    if truncated {
+        file_lines.push("… Diff tronqué : limite d'affichage atteinte".into());
+    } else {
+        result?;
+    }
 
     Ok(file_lines)
 }
@@ -218,30 +243,36 @@ pub fn drop_stash(repo: &mut Repository, index: usize) -> Result<()> {
 
 /// Exécute `git stash push` via la CLI et interprète le résultat.
 fn run_stash_push_command(repo_path: &str, args: &[&str]) -> Result<StashPushOutcome> {
+    let repo = Repository::discover(repo_path)?;
+    let previous = repo.refname_to_id("refs/stash").ok();
     let mut cmd = Command::new("git");
     cmd.arg("stash").arg("push");
-    cmd.args(args);
-    cmd.current_dir(repo_path);
+    let mut paths = false;
+    for argument in args {
+        if paths {
+            cmd.arg(format!(":(literal){argument}"));
+        } else {
+            cmd.arg(argument);
+            paths = *argument == "--";
+        }
+    }
+    cmd.current_dir(
+        repo.workdir()
+            .ok_or_else(|| git2::Error::from_str("Working tree introuvable"))?,
+    );
 
     let output = cmd.output()?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let combined_output = format!("{}\n{}", stdout, stderr).to_lowercase();
-
-    if combined_output.contains("no local changes to save")
-        || combined_output.contains("no staged changes")
-    {
-        return Ok(StashPushOutcome::NoChanges);
-    }
-
     if !output.status.success() {
         return Err(crate::error::GitSvError::OperationFailed {
             operation: "stash_push",
-            details: format!("git stash failed: {}", stderr.trim()),
+            details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         });
     }
-
-    Ok(StashPushOutcome::Created)
+    Ok(if repo.refname_to_id("refs/stash").ok() == previous {
+        StashPushOutcome::NoChanges
+    } else {
+        StashPushOutcome::Created
+    })
 }
 
 /// Stash les changements non stagés d'un fichier spécifique en conservant l'index.
@@ -281,99 +312,75 @@ pub fn stash_untracked_file(
 
 /// Stash tous les changements non stagés (unstaged + untracked) en conservant l'index.
 ///
-/// Algorithme :
-/// - Fichiers MM (staged ET unstaged) : traités en amont avec `--keep-index -- <fichier>`
-/// - Fichiers purement unstaged/untracked :
-///   1. `git stash push --staged`       → stash temporaire des fichiers staged
-///   2. `git add .`                     → stage les fichiers restants
-///   3. `git stash push --staged [-m]`  → stash ces fichiers dans stash@{0}
-///   4. `git stash pop --index stash@{1}` → restaure les fichiers staged
+/// Une seule opération native conserve l'index, y compris pour les fichiers mixtes.
 pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<StashPushOutcome> {
-    // Pré-traitement : fichiers avec changements staged ET unstaged (MM).
-    // `git stash push --staged` échoue sur ces fichiers car le working tree
-    // a des changements qui empêchent la restauration. On les stash séparément.
-    let mixed_files = get_mixed_status_files(repo_path)?;
-    for file in &mixed_files {
-        run_stash_push_command(repo_path, &["--keep-index", "--", file.as_str()])?;
+    let repo = Repository::discover(repo_path)?;
+    let mut options = git2::StatusOptions::new();
+    options.include_untracked(true).recurse_untracked_dirs(true);
+    let statuses = repo.statuses(Some(&mut options))?;
+    let worktree_flags = git2::Status::WT_NEW
+        | git2::Status::WT_MODIFIED
+        | git2::Status::WT_DELETED
+        | git2::Status::WT_RENAMED
+        | git2::Status::WT_TYPECHANGE;
+    if !statuses
+        .iter()
+        .any(|entry| entry.status().intersects(worktree_flags))
+    {
+        return Ok(StashPushOutcome::NoChanges);
     }
-
-    // Étape 1 : stash temporairement les fichiers purement staged
-    let staged_stash_created =
-        run_stash_push_command(repo_path, &["--staged"])? == StashPushOutcome::Created;
-
-    // Étape 2 : stage tous les fichiers restants (originaux unstaged/untracked)
-    let add_output = Command::new("git")
-        .args(["add", "."])
-        .current_dir(repo_path)
-        .output()?;
-    if !add_output.status.success() {
-        if staged_stash_created {
-            let _ = Command::new("git")
-                .args(["stash", "pop"])
-                .current_dir(repo_path)
-                .output();
-        }
-        return Err(crate::error::GitSvError::OperationFailed {
-            operation: "git_add",
-            details: String::from_utf8_lossy(&add_output.stderr)
-                .trim()
-                .to_string(),
-        });
+    let mut args = vec!["--keep-index", "--include-untracked"];
+    if let Some(message) = message {
+        args.extend(["-m", message]);
     }
-
-    // Étape 3 : stash les fichiers originalement unstaged
-    let mut args = vec!["--staged"];
-    if let Some(msg) = message {
-        args.push("-m");
-        args.push(msg);
-    }
-    let outcome = run_stash_push_command(repo_path, &args)?;
-
-    // Étape 4 : restaurer les fichiers originalement staged (avec --index pour préserver le staging)
-    if staged_stash_created {
-        let pop_output = Command::new("git")
-            .args(["stash", "pop", "--index", "stash@{1}"])
-            .current_dir(repo_path)
-            .output()?;
-        if !pop_output.status.success() {
-            let stderr = String::from_utf8_lossy(&pop_output.stderr);
-            return Err(crate::error::GitSvError::OperationFailed {
-                operation: "stash_pop",
-                details: format!("git stash pop stash@{{1}} failed: {}", stderr.trim()),
-            });
-        }
-    }
-
-    Ok(outcome)
-}
-
-/// Retourne les chemins des fichiers ayant à la fois des changements staged et unstaged.
-fn get_mixed_status_files(repo_path: &str) -> Result<Vec<String>> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(repo_path)
-        .output()?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let files = stdout
-        .lines()
-        .filter(|line| {
-            line.len() >= 2 && {
-                let xy = line.as_bytes();
-                // XY où X != ' ' (staged) et Y != ' '/'?' (unstaged)
-                xy[0] != b' ' && xy[0] != b'?' && xy[1] != b' ' && xy[1] != b'?'
-            }
-        })
-        .map(|line| line[3..].to_string())
-        .collect();
-
-    Ok(files)
+    run_stash_push_command(repo_path, &args)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::*;
+
+    #[test]
+    fn unstaged_stash_does_not_pop_an_existing_stash_when_only_index_changed() {
+        let (directory, mut repo) = create_test_repo();
+        commit_file(&repo, "file.txt", "base\n", "base");
+        create_file(&repo, "file.txt", "saved\n");
+        save_stash(&mut repo, Some("previous stash")).unwrap();
+        let previous = repo.refname_to_id("refs/stash").unwrap();
+        create_file(&repo, "file.txt", "staged\n");
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+        let staged_tree = index.write_tree().unwrap();
+
+        assert_eq!(
+            stash_unstaged_files(directory.path().to_str().unwrap(), None).unwrap(),
+            StashPushOutcome::NoChanges
+        );
+        assert_eq!(repo.refname_to_id("refs/stash").unwrap(), previous);
+        assert_eq!(repo.index().unwrap().write_tree().unwrap(), staged_tree);
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("file.txt")).unwrap(),
+            "staged\n"
+        );
+    }
+
+    #[test]
+    fn stash_lists_and_displays_previously_untracked_files() {
+        let (directory, mut repo) = create_test_repo();
+        commit_file(&repo, "tracked.txt", "base\n", "base");
+        create_file(&repo, "untracked.txt", "saved content\n");
+        stash_unstaged_files(directory.path().to_str().unwrap(), Some("untracked")).unwrap();
+        let stashes = list_stashes(&mut repo).unwrap();
+        assert_eq!(stashes.len(), 1);
+        assert!(stashes[0]
+            .files
+            .iter()
+            .any(|file| file.path == "untracked.txt"));
+        let diff = stash_file_diff(&repo, stashes[0].oid, "untracked.txt").unwrap();
+        assert!(diff.iter().any(|line| line == "+saved content"));
+    }
 
     #[test]
     fn test_extract_branch_from_message() {
@@ -539,7 +546,7 @@ mod tests {
             let statuses = repo.statuses(None).unwrap();
             statuses
                 .iter()
-                .find(|entry| entry.path() == Some("tracked.txt"))
+                .find(|entry| entry.path().ok() == Some("tracked.txt"))
                 .map(|entry| entry.status())
                 .expect("tracked.txt devrait encore apparaitre dans le status")
         };
@@ -579,10 +586,10 @@ mod tests {
             let statuses = repo.statuses(None).unwrap();
             let selected_present = statuses
                 .iter()
-                .any(|entry| entry.path() == Some("selected.txt"));
+                .any(|entry| entry.path().ok() == Some("selected.txt"));
             let other_status = statuses
                 .iter()
-                .find(|entry| entry.path() == Some("other.txt"))
+                .find(|entry| entry.path().ok() == Some("other.txt"))
                 .map(|entry| entry.status())
                 .expect("other.txt devrait rester dans le working tree");
             (selected_present, other_status)
@@ -630,7 +637,7 @@ mod tests {
             let statuses = repo.statuses(None).unwrap();
             statuses
                 .iter()
-                .find(|entry| entry.path() == Some("tracked.txt"))
+                .find(|entry| entry.path().ok() == Some("tracked.txt"))
                 .map(|entry| entry.status())
                 .expect("tracked.txt devrait rester stage")
         };
@@ -643,9 +650,7 @@ mod tests {
         assert_eq!(content, "base\npartie staged\n");
 
         let stashes = list_stashes(&mut repo).unwrap();
-        // tracked.txt est un fichier MM (staged + unstaged) : stashé séparément,
-        // donc on peut avoir 2 stash entries (1 pour MM + 1 pour extra.txt).
-        assert!(!stashes.is_empty());
+        assert_eq!(stashes.len(), 1);
         assert!(stashes.iter().any(|s| s.message.contains("stash unstaged")));
     }
 }

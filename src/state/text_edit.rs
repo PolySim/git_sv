@@ -3,6 +3,7 @@
 use std::ops::Range;
 
 const MAX_UNDO_STEPS: usize = 100;
+pub(crate) const MAX_HISTORY_BYTES: usize = 8 * 1024 * 1024;
 
 /// Instantane d'un champ texte utilise par l'annulation et le retablissement.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,27 @@ impl TextEditHistory {
             self.undo.remove(0);
         }
         self.redo.clear();
+        self.enforce_budget(true);
+    }
+
+    /// Borne aussi le poids des instantanés, notamment après un amendement volumineux.
+    pub(crate) fn enforce_budget(&mut self, keep_undo: bool) {
+        let mut bytes = self
+            .undo
+            .iter()
+            .chain(&self.redo)
+            .map(|snapshot| snapshot.text.capacity())
+            .sum::<usize>();
+        let (older, recent) = if keep_undo {
+            (&mut self.redo, &mut self.undo)
+        } else {
+            (&mut self.undo, &mut self.redo)
+        };
+        for snapshots in [older, recent] {
+            while bytes > MAX_HISTORY_BYTES && !snapshots.is_empty() {
+                bytes -= snapshots.remove(0).text.capacity();
+            }
+        }
     }
 }
 

@@ -17,6 +17,7 @@ pub fn refresh_staging_with_entries(
 }
 
 pub fn load_staging_diff(state: &mut AppState) {
+    let previous_diff = state.staging_state.current_diff.clone();
     let (selected_file, is_staged) = match state.staging_state.focus {
         StagingFocus::Unstaged => (
             state
@@ -89,5 +90,15 @@ pub fn load_staging_diff(state: &mut AppState) {
         }
     } else {
         state.staging_state.current_diff = None;
+    }
+
+    let same_diff = previous_diff
+        .as_ref()
+        .zip(state.staging_state.current_diff.as_ref())
+        .is_some_and(|(previous, current)| std::sync::Arc::ptr_eq(previous, current));
+    if !same_diff {
+        state.staging_state.diff_scroll = 0;
+        state.staging_state.diff_selected_line = 0;
+        state.staging_state.diff_horizontal_offset = 0;
     }
 }

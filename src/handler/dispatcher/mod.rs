@@ -75,7 +75,7 @@ impl ActionDispatcher {
             }
 
             AppAction::Refresh => {
-                ctx.state.schedule_refresh();
+                ctx.state.mark_dirty();
                 Ok(())
             }
 

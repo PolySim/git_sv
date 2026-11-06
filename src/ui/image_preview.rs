@@ -7,6 +7,8 @@ use ratatui::{layout::Rect, Frame};
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol, Resize, StatefulImage};
 #[cfg(feature = "image-preview")]
 use std::io::Cursor;
+#[cfg(feature = "image-preview")]
+use std::sync::Arc;
 
 #[cfg(feature = "image-preview")]
 use crate::git::diff::ImageFormat;
@@ -18,6 +20,8 @@ const MAX_RASTER_DIMENSION: u32 = 8_192;
 const MAX_RASTER_ALLOCATION: u64 = 128 * 1_048_576;
 #[cfg(feature = "image-preview")]
 const MAX_SVG_DIMENSION: f32 = 2_048.0;
+#[cfg(feature = "image-preview")]
+const MAX_SVG_SOURCE_BYTES: usize = 20 * 1_048_576;
 
 /// Cache le protocole encodé pour éviter de décoder l'image à chaque frame.
 #[derive(Default)]
@@ -25,7 +29,7 @@ pub struct ImagePreviewState {
     #[cfg(feature = "image-preview")]
     picker: Option<Picker>,
     #[cfg(feature = "image-preview")]
-    current_key: Option<(usize, usize)>,
+    current_preview: Option<ImagePreview>,
     #[cfg(feature = "image-preview")]
     protocol: Option<StatefulProtocol>,
     #[cfg(feature = "image-preview")]
@@ -46,7 +50,7 @@ impl ImagePreviewState {
     pub fn clear(&mut self) {
         #[cfg(feature = "image-preview")]
         {
-            self.current_key = None;
+            self.current_preview = None;
             self.protocol = None;
             self.error = None;
         }
@@ -90,12 +94,14 @@ impl ImagePreviewState {
 
     #[cfg(feature = "image-preview")]
     fn prepare(&mut self, preview: &ImagePreview) {
-        let key = (preview.bytes.as_ptr() as usize, preview.bytes.len());
-        if self.current_key == Some(key) {
+        if self.current_preview.as_ref().is_some_and(|current| {
+            current.format == preview.format && Arc::ptr_eq(&current.bytes, &preview.bytes)
+        }) {
             return;
         }
 
-        self.current_key = Some(key);
+        // Garder l'allocation vivante évite qu'une nouvelle image réutilise la même adresse.
+        self.current_preview = Some(preview.clone());
         self.protocol = None;
         self.error = None;
 
@@ -137,8 +143,27 @@ fn decode_raster(bytes: &[u8]) -> Result<DynamicImage, String> {
 
 #[cfg(feature = "image-preview")]
 fn decode_svg(bytes: &[u8]) -> Result<DynamicImage, String> {
-    let options = resvg::usvg::Options::default();
-    let tree = resvg::usvg::Tree::from_data(bytes, &options)
+    if bytes.len() > MAX_SVG_SOURCE_BYTES {
+        return Err("SVG trop volumineux".to_string());
+    }
+    let source = std::str::from_utf8(bytes).map_err(|_| "SVG non UTF-8".to_string())?;
+    let data_resolver = resvg::usvg::ImageHrefResolver::default_data_resolver();
+    let options = resvg::usvg::Options {
+        image_href_resolver: resvg::usvg::ImageHrefResolver {
+            // Un aperçu de commit ne doit pas charger des fichiers du système courant.
+            resolve_string: Box::new(|_, _| None),
+            resolve_data: Box::new(move |mime, data, options| {
+                // Éviter la décompression non bornée des SVGZ embarqués.
+                if data.len() > MAX_SVG_SOURCE_BYTES || data.starts_with(&[0x1f, 0x8b]) {
+                    return None;
+                }
+                data_resolver(mime, data, options)
+            }),
+        },
+        ..Default::default()
+    };
+    // from_str évite la décompression SVGZ implicite de from_data.
+    let tree = resvg::usvg::Tree::from_str(source, &options)
         .map_err(|error| format!("SVG invalide: {error}"))?;
     let source_size = tree.size();
     let scale = (MAX_SVG_DIMENSION / source_size.width())
@@ -201,5 +226,76 @@ mod tests {
 
         assert_eq!(image.width(), 12);
         assert_eq!(image.height(), 8);
+    }
+
+    #[test]
+    fn audit_preview_cache_distinguishes_format() {
+        let bytes: Arc<[u8]> = Arc::from(
+            br#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"/>"#.as_slice(),
+        );
+        let mut state = ImagePreviewState {
+            picker: Some(Picker::from_fontsize((10, 20))),
+            ..Default::default()
+        };
+        state.prepare(&ImagePreview {
+            bytes: bytes.clone(),
+            format: ImageFormat::Raster,
+        });
+        assert!(state.error.is_some());
+
+        state.prepare(&ImagePreview {
+            bytes,
+            format: ImageFormat::Svg,
+        });
+
+        assert!(state.error.is_none());
+        assert!(state.protocol.is_some());
+    }
+
+    #[test]
+    fn audit_preview_cache_releases_source_when_cleared() {
+        let preview = ImagePreview {
+            bytes: Arc::from(
+                br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#.as_slice(),
+            ),
+            format: ImageFormat::Svg,
+        };
+        let source = Arc::downgrade(&preview.bytes);
+        let mut state = ImagePreviewState {
+            picker: Some(Picker::from_fontsize((10, 20))),
+            ..Default::default()
+        };
+        state.prepare(&preview);
+        drop(preview);
+        assert!(source.upgrade().is_some());
+
+        state.clear();
+
+        assert!(source.upgrade().is_none());
+        assert!(state.protocol.is_none());
+    }
+
+    #[test]
+    fn audit_svg_preview_does_not_read_external_images() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let external = directory.path().join("external.svg");
+        std::fs::write(&external, r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="red"/></svg>"#).unwrap();
+        let source = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><image href="{}" width="1" height="1"/></svg>"#,
+            external.display()
+        );
+
+        let image = decode_svg(source.as_bytes()).unwrap().to_rgba8();
+
+        assert_eq!(image.get_pixel(0, 0)[3], 0);
+    }
+
+    #[test]
+    fn audit_svg_preview_does_not_decompress_embedded_svgz() {
+        let source = r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><image href="data:image/svg+xml;base64,H4sIAAAAAAAC/22MSQ6AIAwAv9L0ARb1ZoDPCFISXAKN9fnK3dskMxnb7gTPXo7mkEWuhUhVB52HsyaajDH0FQiag7DDEYFjTiwdva1xlV8FWy7FYY0Bydu+8C9JJfVYagAAAA==" width="1" height="1"/></svg>"#;
+
+        let image = decode_svg(source.as_bytes()).unwrap().to_rgba8();
+
+        assert_eq!(image.get_pixel(0, 0)[3], 0);
     }
 }

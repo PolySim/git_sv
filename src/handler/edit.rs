@@ -205,6 +205,7 @@ impl<'a> TextBuffer<'a> {
         };
         let current = self.snapshot();
         self.history.redo.push(current);
+        self.history.enforce_budget(false);
         self.restore(snapshot);
     }
 
@@ -214,6 +215,7 @@ impl<'a> TextBuffer<'a> {
         };
         let current = self.snapshot();
         self.history.undo.push(current);
+        self.history.enforce_budget(true);
         self.restore(snapshot);
     }
 
@@ -253,6 +255,10 @@ impl<'a> TextBuffer<'a> {
     }
 
     fn record_snapshot(&mut self) {
+        if self.text.len() > crate::state::text_edit::MAX_HISTORY_BYTES {
+            self.history.clear();
+            return;
+        }
         self.history.record(self.snapshot());
     }
 
@@ -452,6 +458,37 @@ mod tests {
 
         let git_repo = GitRepo::open(dir.path().to_str().unwrap()).unwrap();
         (dir, git_repo)
+    }
+
+    #[test]
+    fn test_large_text_history_stays_bounded_through_undo_redo() {
+        let mut text = "x".repeat(256 * 1024);
+        let mut cursor = 0;
+        let mut selection_anchor = None;
+        let mut history = TextEditHistory::default();
+        let mut buffer =
+            TextBuffer::new(&mut text, &mut cursor, &mut selection_anchor, &mut history);
+        for _ in 0..100 {
+            buffer.insert_char('a');
+        }
+        let expected = buffer.text.clone();
+        let retained = buffer.history.undo.len();
+        assert!(retained < 100);
+        for _ in 0..retained {
+            buffer.undo();
+        }
+        for _ in 0..retained {
+            buffer.redo();
+        }
+        assert_eq!(*buffer.text, expected);
+        let bytes: usize = buffer
+            .history
+            .undo
+            .iter()
+            .chain(&buffer.history.redo)
+            .map(|snapshot| snapshot.text.capacity())
+            .sum();
+        assert!(bytes <= crate::state::text_edit::MAX_HISTORY_BYTES);
     }
 
     #[test]

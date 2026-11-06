@@ -7,11 +7,12 @@ use crate::error::Result;
 /// Liste les noms de tags triés.
 pub fn list_tags(repo: &Repository) -> Result<Vec<String>> {
     let names = repo.tag_names(None)?;
-    let mut tags = names
-        .iter()
-        .flatten()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let mut tags = Vec::new();
+    for name in names.iter() {
+        if let Some(name) = name? {
+            tags.push(name.to_string());
+        }
+    }
     tags.sort();
     Ok(tags)
 }

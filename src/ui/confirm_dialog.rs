@@ -26,7 +26,7 @@ pub enum ConfirmAction {
     /// Supprimer un worktree
     WorktreeRemove(String),
     /// Supprimer un stash
-    StashDrop(usize),
+    StashDrop { index: usize, oid: git2::Oid },
     /// Discard les modifications d'un fichier
     DiscardFile(String),
     /// Discard toutes les modifications
@@ -71,7 +71,7 @@ impl ConfirmAction {
                     format!("Are you sure you want to delete worktree '{}' ?", name),
                 )
             }
-            ConfirmAction::StashDrop(index) => {
+            ConfirmAction::StashDrop { index, .. } => {
                 text_owned(
                     format!("Etes-vous sur de vouloir supprimer le stash @{{{}}} ?", index),
                     format!("Are you sure you want to delete stash @{{{}}} ?", index),
@@ -174,7 +174,7 @@ impl ConfirmAction {
                 "Confirmer suppression worktree",
                 "Confirm worktree deletion",
             ),
-            ConfirmAction::StashDrop(_) => {
+            ConfirmAction::StashDrop { .. } => {
                 text("Confirmer suppression stash", "Confirm stash deletion")
             }
             ConfirmAction::DiscardFile(_) => {
@@ -219,6 +219,7 @@ pub fn render(frame: &mut Frame, ctx: ConfirmDialogRenderContext<'_>) {
 
     // Construire le contenu
     let msg = action.message();
+    let hints = confirmation_hints();
 
     let content = vec![
         Line::from(""),
@@ -231,21 +232,21 @@ pub fn render(frame: &mut Frame, ctx: ConfirmDialogRenderContext<'_>) {
                     .fg(theme.success)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(text(" - Oui  ", " - Yes  ")),
+            Span::raw(hints[0]),
             Span::styled(
                 "n",
                 Style::default()
                     .fg(theme.error)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(text(" - Non  ", " - No  ")),
+            Span::raw(hints[1]),
             Span::styled(
                 "ESC",
                 Style::default()
                     .fg(theme.warning)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(text(" - Annuler", " - Cancel")),
+            Span::raw(hints[2]),
         ]),
     ];
 
@@ -261,6 +262,28 @@ pub fn render(frame: &mut Frame, ctx: ConfirmDialogRenderContext<'_>) {
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, popup_area);
+}
+
+fn confirmation_hints() -> [&'static str; 3] {
+    [
+        text(" - Oui  ", " - Yes  "),
+        text(" - Non  ", " - No  "),
+        text(" - Annuler", " - Cancel"),
+    ]
+}
+
+/// Zone exacte du bouton affirmatif, uniquement quand il est entièrement visible.
+pub(crate) fn confirm_button_contains(area: Rect, x: u16, y: u16) -> bool {
+    let popup = centered_rect(60, 30, area);
+    let hints = confirmation_hints();
+    let choices_width = 5 + hints.iter().map(|hint| hint.chars().count()).sum::<usize>();
+    let inner_width = usize::from(popup.width.saturating_sub(2));
+    if popup.height < 6 || choices_width > inner_width {
+        return false;
+    }
+    let start = popup.x + 1 + ((inner_width - choices_width) / 2) as u16;
+    let yes_width = 1 + hints[0].trim_end().chars().count() as u16;
+    y == popup.y + 4 && x >= start && x < start + yes_width
 }
 
 #[cfg(test)]

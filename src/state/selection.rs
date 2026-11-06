@@ -43,9 +43,7 @@ impl<T> ListSelection<T> {
     pub fn set_items(&mut self, items: Vec<T>) {
         self.items = items;
         // Ajuster la sélection si nécessaire
-        if self.selected >= self.items.len() && !self.items.is_empty() {
-            self.selected = self.items.len() - 1;
-        }
+        self.selected = self.selected.min(self.items.len().saturating_sub(1));
         self.adjust_scroll();
     }
 
@@ -184,13 +182,19 @@ impl<T> ListSelection<T> {
 
     /// Ajuste le scroll pour garder la sélection visible.
     fn adjust_scroll(&mut self) {
+        if self.items.is_empty() {
+            self.selected = 0;
+            self.scroll_offset = 0;
+            return;
+        }
+        let visible_height = self.visible_height.max(1);
         // La sélection est au-dessus de la zone visible
         if self.selected < self.scroll_offset {
             self.scroll_offset = self.selected;
         }
         // La sélection est en-dessous de la zone visible
-        if self.selected >= self.scroll_offset + self.visible_height {
-            self.scroll_offset = self.selected - self.visible_height + 1;
+        if self.selected >= self.scroll_offset.saturating_add(visible_height) {
+            self.scroll_offset = self.selected - visible_height + 1;
         }
     }
 
@@ -233,6 +237,29 @@ impl<T> IntoIterator for ListSelection<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_repopulate_after_empty_list_resets_selection_and_scroll() {
+        let mut selection = ListSelection::with_items(vec![1, 2, 3]);
+        selection.set_visible_height(1);
+        selection.select_last();
+        selection.set_items(Vec::new());
+        assert_eq!(selection.selected_index(), 0);
+        assert_eq!(selection.scroll_offset(), 0);
+        selection.push(4);
+        assert_eq!(selection.selected_item(), Some(&4));
+        assert_eq!(selection.visible_items().count(), 1);
+    }
+
+    #[test]
+    fn test_zero_height_keeps_selected_item_in_scroll_range() {
+        let mut selection = ListSelection::with_items(vec![1, 2, 3]);
+        selection.set_visible_height(0);
+        selection.select(1);
+        assert_eq!(selection.scroll_offset(), 1);
+        selection.set_visible_height(1);
+        assert_eq!(selection.visible_items().next(), Some((1, &2)));
+    }
 
     #[test]
     fn test_select_next() {

@@ -9,18 +9,19 @@ use super::{RefInfo, RefType};
 pub(super) fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<RefInfo>>> {
     let mut map: HashMap<Oid, Vec<RefInfo>> = HashMap::new();
 
-    let head_oid = repo.head().ok().and_then(|h| h.target());
-    let head_branch = repo.head().ok().and_then(|h| {
+    let head = repo.head().ok();
+    let head_oid = head.as_ref().and_then(|head| head.target());
+    let head_branch = head.as_ref().and_then(|h| {
         if h.is_branch() {
-            h.shorthand().map(|s| s.to_string())
+            h.shorthand().ok().map(|s| s.to_string())
         } else {
-            None
+            Some("HEAD".to_string())
         }
     });
 
     for reference in repo.references()? {
         let reference = reference?;
-        if let Some(name) = reference.shorthand() {
+        if let Ok(name) = reference.shorthand() {
             if name == "HEAD" {
                 continue;
             }
@@ -111,5 +112,19 @@ mod tests {
             commit_refs.first().map(|reference| &reference.ref_type),
             Some(&RefType::Head)
         );
+    }
+
+    #[test]
+    fn audit_detached_head_has_a_graph_marker() {
+        let (_temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        let oid =
+            crate::git::tests::test_utils::commit_file(&repo, "file.txt", "content", "initial");
+        repo.set_head_detached(oid).unwrap();
+
+        let refs = collect_refs(&repo).unwrap();
+
+        assert!(refs[&oid]
+            .iter()
+            .any(|reference| { reference.ref_type == RefType::Head && reference.name == "HEAD" }));
     }
 }

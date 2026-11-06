@@ -34,7 +34,7 @@ pub fn list_worktrees(repo: &Repository) -> Result<Vec<WorktreeInfo>> {
         let branch = main_repo
             .as_ref()
             .and_then(|repository| repository.head().ok())
-            .and_then(|head| head.shorthand().map(String::from));
+            .and_then(|head| head.shorthand().ok().map(String::from));
         let normalized = normalized_path(path);
         worktrees.push(WorktreeInfo {
             name: "main".to_string(),
@@ -47,7 +47,10 @@ pub fn list_worktrees(repo: &Repository) -> Result<Vec<WorktreeInfo>> {
 
     // Worktrees additionnels.
     let wt_names = repo.worktrees()?;
-    for name in wt_names.iter().flatten() {
+    for name in wt_names.iter() {
+        let Some(name) = name? else {
+            continue;
+        };
         if let Ok(wt) = repo.find_worktree(name) {
             let path = wt.path().display().to_string();
             // Tenter d'ouvrir le worktree pour lire sa branche.
@@ -55,7 +58,7 @@ pub fn list_worktrees(repo: &Repository) -> Result<Vec<WorktreeInfo>> {
                 wt_repo
                     .head()
                     .ok()
-                    .and_then(|h| h.shorthand().map(String::from))
+                    .and_then(|h| h.shorthand().ok().map(String::from))
             } else {
                 None
             };
@@ -94,23 +97,37 @@ pub fn create_worktree(
     path: &str,
     branch: Option<&str>,
 ) -> Result<()> {
-    let _reference = if let Some(branch_name) = branch {
+    let reference = if let Some(branch_name) = branch {
         let refname = format!("refs/heads/{}", branch_name);
         Some(repo.find_reference(&refname)?)
     } else {
         None
     };
 
-    repo.worktree(name, std::path::Path::new(path), None)?;
+    let mut options = git2::WorktreeAddOptions::new();
+    options.reference(reference.as_ref());
+    repo.worktree(name, std::path::Path::new(path), Some(&options))?;
     Ok(())
 }
 
 /// Supprime un worktree (prune).
 pub fn remove_worktree(repo: &Repository, name: &str) -> Result<()> {
     let wt = repo.find_worktree(name)?;
-    // Vérifier que le worktree est prunable.
-    if wt.validate().is_ok() {
+    if wt.validate().is_err() {
         wt.prune(None)?;
+    } else {
+        // Git refuse les worktrees verrouillés ou contenant des changements locaux.
+        let output = std::process::Command::new("git")
+            .args(["worktree", "remove", "--"])
+            .arg(wt.path())
+            .current_dir(repo.workdir().unwrap_or(repo.path()))
+            .output()?;
+        if !output.status.success() {
+            return Err(crate::error::GitSvError::OperationFailed {
+                operation: "git worktree remove",
+                details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
     }
     Ok(())
 }
@@ -121,6 +138,41 @@ mod tests {
     use crate::git::repo::GitRepo;
     use crate::state::{AppState, BranchesSection, ViewMode};
     use tempfile::TempDir;
+
+    #[test]
+    fn worktree_uses_requested_branch_and_removes_only_clean_worktrees() {
+        let (temp, main_path, _) = create_repository_with_worktree();
+        let repo = Repository::open(main_path).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("chosen-branch", &head, false).unwrap();
+        let path = temp.path().join("chosen-worktree");
+        create_worktree(
+            &repo,
+            "chosen-worktree",
+            path.to_str().unwrap(),
+            Some("chosen-branch"),
+        )
+        .unwrap();
+        let linked = Repository::open(&path).unwrap();
+        assert_eq!(linked.head().unwrap().shorthand().unwrap(), "chosen-branch");
+        drop(linked);
+        std::fs::write(path.join("untracked.txt"), "keep me").unwrap();
+        assert!(remove_worktree(&repo, "chosen-worktree").is_err());
+        assert!(path.join("untracked.txt").exists());
+        std::fs::remove_file(path.join("untracked.txt")).unwrap();
+        remove_worktree(&repo, "chosen-worktree").unwrap();
+        assert!(!path.exists());
+        assert!(repo.find_worktree("chosen-worktree").is_err());
+    }
+
+    #[test]
+    fn removed_worktree_can_be_pruned() {
+        let (_temp, main_path, linked_path) = create_repository_with_worktree();
+        let repo = Repository::open(main_path).unwrap();
+        std::fs::remove_dir_all(linked_path).unwrap();
+        remove_worktree(&repo, "feature-worktree").unwrap();
+        assert!(repo.find_worktree("feature-worktree").is_err());
+    }
 
     fn create_repository_with_worktree() -> (TempDir, PathBuf, PathBuf) {
         let temp = TempDir::new().unwrap();

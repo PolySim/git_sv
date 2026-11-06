@@ -12,14 +12,14 @@
 |------------------|---------|------|
 | ratatui          | 0.29    | Rendu TUI |
 | crossterm        | 0.28    | Evenements clavier/souris et backend terminal |
-| git2             | 0.19    | Acces aux operations git via libgit2 |
+| git2             | 0.21    | Acces aux operations git via libgit2 |
 | clap             | 4       | Parsing CLI |
 | anyhow           | 1       | Erreurs applicatives au point d'entree |
 | thiserror        | 2       | Erreurs typees du projet |
 | chrono           | 0.4     | Dates et formatage temporel |
 | dirs             | 5       | Localisation du fichier de configuration utilisateur |
 | arboard          | 3       | Presse-papier |
-| lru              | 0.12    | Cache des diffs |
+| lru              | 0.18    | Cache des diffs |
 | serde / serde_json | 1.0   | Sorties JSON du CLI |
 | tempfile         | 3       | Repositories temporaires pour les tests |
 | insta            | 1.34    | Support de snapshots de tests |
@@ -349,7 +349,7 @@ Le watcher dans `src/watcher.rs` surveille par polling :
 
 - `.git/HEAD`
 - `.git/index`
-- `.git/refs/heads/`
+- les valeurs des références locales, distantes et tags, partagées entre worktrees
 - `.git/packed-refs`
 - un snapshot des fichiers modifies du working tree
 
@@ -360,7 +360,7 @@ Regles actuelles :
 - debounce : 500 ms ;
 - si un changement est confirme, `state.dirty` est releve puis la boucle recharge les donnees.
 
-Le watcher gere aussi les worktrees de maniere best-effort via `git rev-parse --git-dir` si `.git/` n'est pas un repertoire direct.
+Le watcher découvre le dépôt via libgit2, y compris les fichiers `.git` des worktrees et sous-modules. Il compare les valeurs des références locales, distantes et tags : le seul mtime du dossier ne détecte pas les mises à jour de références existantes.
 
 ---
 

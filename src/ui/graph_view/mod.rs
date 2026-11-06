@@ -71,6 +71,8 @@ pub fn render(frame: &mut Frame, ctx: GraphRenderContext<'_>) {
         )
     };
 
+    // La liste contient déjà uniquement la fenêtre visible du graphe.
+    *state = ListState::default();
     state.select(selected_visual_index);
 
     let branch_name = current_branch.unwrap_or("???");
@@ -164,7 +166,7 @@ mod tests {
         vec![
             GraphRow {
                 node: CommitNode {
-                    oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
+                    oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::ZERO_SHA1),
                     message: "First commit".to_string(),
                     author: "Alice".to_string(),
                     timestamp: 1609459200,
@@ -179,11 +181,11 @@ mod tests {
             },
             GraphRow {
                 node: CommitNode {
-                    oid: Oid::from_bytes(&[2; 20]).unwrap_or(Oid::zero()),
+                    oid: Oid::from_bytes(&[2; 20]).unwrap_or(Oid::ZERO_SHA1),
                     message: "Second commit".to_string(),
                     author: "Bob".to_string(),
                     timestamp: 1609545600,
-                    parents: vec![Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero())],
+                    parents: vec![Oid::from_bytes(&[1; 20]).unwrap_or(Oid::ZERO_SHA1)],
                     refs: vec![],
                     branch_name: None,
                     column: 0,
@@ -193,6 +195,28 @@ mod tests {
                 connection: None,
             },
         ]
+    }
+
+    #[test]
+    fn test_mouse_commit_index_counts_actual_connection_rows() {
+        let mut graph = create_test_graph();
+        assert_eq!(
+            crate::ui::hit_test::calculate_commit_index(&graph, 0, 1),
+            Some(1)
+        );
+        graph[0].connection = Some(ConnectionRow { cells: vec![] });
+        assert_eq!(
+            crate::ui::hit_test::calculate_commit_index(&graph, 0, 1),
+            Some(0)
+        );
+        assert_eq!(
+            crate::ui::hit_test::calculate_commit_index(&graph, 0, 2),
+            Some(1)
+        );
+        assert_eq!(
+            crate::ui::hit_test::calculate_commit_index(&graph, 0, 3),
+            None
+        );
     }
 
     #[test]
@@ -316,11 +340,11 @@ mod tests {
     fn test_build_commit_line_renders_branch_closure_symbol() {
         let row = GraphRow {
             node: CommitNode {
-                oid: Oid::from_bytes(&[3; 20]).unwrap_or(Oid::zero()),
+                oid: Oid::from_bytes(&[3; 20]).unwrap_or(Oid::ZERO_SHA1),
                 message: "Branch closes".to_string(),
                 author: "Alice".to_string(),
                 timestamp: 1609459200,
-                parents: vec![Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero())],
+                parents: vec![Oid::from_bytes(&[1; 20]).unwrap_or(Oid::ZERO_SHA1)],
                 refs: vec![],
                 branch_name: None,
                 column: 0,
@@ -579,9 +603,9 @@ mod tests {
 
     #[test]
     fn test_graph_columns_aligned() {
-        let graph = vec![GraphRow {
+        let graph = [GraphRow {
             node: CommitNode {
-                oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::zero()),
+                oid: Oid::from_bytes(&[1; 20]).unwrap_or(Oid::ZERO_SHA1),
                 message: "First".to_string(),
                 author: "Alice".to_string(),
                 timestamp: 1609459200,

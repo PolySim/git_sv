@@ -204,7 +204,7 @@ fn test_graph_i_opens_and_closes_repository_insights() {
     );
 
     state.ui.repository_insights = Some(crate::git::insights::RepositoryInsights {
-        commit: git2::Oid::zero().to_string(),
+        commit: git2::Oid::ZERO_SHA1.to_string(),
         signature: crate::git::insights::CommitSignatureStatus::Unsigned,
         hooks: Vec::new(),
         submodules: Vec::new(),
@@ -440,6 +440,152 @@ fn test_staging_diff_shortcuts_follow_source_list() {
 }
 
 #[test]
+fn test_mouse_selects_the_rendered_staging_file_after_scrolling() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::Staging;
+    state.staging_state.set_unstaged_files(
+        (0..40)
+            .map(|index| crate::git::repo::StatusEntry {
+                path: format!("file-{index:04}.txt"),
+                status: git2::Status::WT_NEW,
+            })
+            .collect(),
+    );
+    state.staging_state.set_unstaged_selected(30);
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+    terminal
+        .draw(|frame| crate::ui::render(frame, &mut state))
+        .unwrap();
+    let panel = crate::ui::staging_layout::build_staging_layout(state.screen_area).unstaged_panel;
+    let displayed: String = (panel.x..panel.right())
+        .map(|x| terminal.backend().buffer()[(x, panel.y + 1)].symbol())
+        .collect();
+    let action = map_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(event::MouseButton::Left),
+            column: panel.x + 2,
+            row: panel.y + 1,
+            modifiers: KeyModifiers::NONE,
+        },
+        &state,
+    );
+    let Some(AppAction::Staging(StagingAction::SelectUnstaged(index))) = action else {
+        panic!("Le clic doit sélectionner le fichier affiché");
+    };
+    assert!(index > 0);
+    assert!(
+        displayed.contains(&state.staging_state.unstaged_files()[index].path),
+        "{displayed}"
+    );
+}
+
+#[test]
+fn test_mouse_scroll_targets_hovered_staging_list() {
+    let mut state = create_test_state();
+    state.view_mode = ViewMode::Staging;
+    state.staging_state.focus = StagingFocus::Diff;
+    state.staging_state.set_staged_files(
+        (0..3)
+            .map(|index| crate::git::repo::StatusEntry {
+                path: format!("file-{index}.txt"),
+                status: git2::Status::INDEX_NEW,
+            })
+            .collect(),
+    );
+    let panel = crate::ui::staging_layout::build_staging_layout(state.screen_area).staged_panel;
+    let action = map_mouse(
+        MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: panel.x + 2,
+            row: panel.y + 1,
+            modifiers: KeyModifiers::NONE,
+        },
+        &state,
+    );
+    assert_eq!(
+        action,
+        Some(AppAction::Staging(StagingAction::SelectStaged(1)))
+    );
+}
+
+#[test]
+fn test_mouse_cannot_navigate_behind_modal_overlays() {
+    let mut state = create_test_state();
+    state.ui.repository_insights = Some(crate::git::insights::RepositoryInsights {
+        commit: String::new(),
+        signature: crate::git::insights::CommitSignatureStatus::Unsigned,
+        hooks: Vec::new(),
+        submodules: Vec::new(),
+    });
+    for kind in [
+        MouseEventKind::Down(event::MouseButton::Left),
+        MouseEventKind::ScrollDown,
+    ] {
+        assert_eq!(
+            map_mouse(
+                MouseEvent {
+                    kind,
+                    column: 20,
+                    row: 1,
+                    modifiers: KeyModifiers::NONE,
+                },
+                &state
+            ),
+            None
+        );
+    }
+    state.ui.repository_insights = None;
+    state
+        .ui
+        .open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+    assert_eq!(
+        map_mouse(
+            MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                column: 20,
+                row: 5,
+                modifiers: KeyModifiers::NONE,
+            },
+            &state
+        ),
+        None
+    );
+}
+
+#[test]
+fn test_confirmation_mouse_only_accepts_the_visible_yes_button() {
+    for width in [100, 101, 120, 121] {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::Staging;
+        state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, 40)).unwrap();
+        terminal
+            .draw(|frame| crate::ui::render(frame, &mut state))
+            .unwrap();
+        let popup = crate::ui::common::centered_rect(60, 30, state.screen_area);
+        let row = popup.y + 4;
+        let yes_x = (popup.x..popup.right())
+            .find(|&x| terminal.backend().buffer()[(x, row)].symbol() == "y")
+            .unwrap();
+        let mouse = |column, row| MouseEvent {
+            kind: MouseEventKind::Down(event::MouseButton::Left),
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(
+            map_mouse(mouse(yes_x, row), &state),
+            Some(AppAction::ConfirmAction)
+        );
+        assert_ne!(
+            map_mouse(mouse(popup.x + 2, popup.bottom() - 2), &state),
+            Some(AppAction::ConfirmAction)
+        );
+    }
+}
+
+#[test]
 fn test_mouse_click_nav_bar_switches_view() {
     let state = create_test_state();
 
@@ -525,7 +671,7 @@ fn test_mouse_scroll_graph_moves_down() {
 fn test_reset_picker_m_key_selects_mixed() {
     let mut state = create_test_state();
     state.reset_picker = Some(ResetPickerState::new(
-        git2::Oid::zero(),
+        git2::Oid::ZERO_SHA1,
         "abc1234".to_string(),
         "Test".to_string(),
     ));

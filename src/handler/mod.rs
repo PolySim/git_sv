@@ -86,7 +86,7 @@ impl EventHandler {
                 }
             } else if let Some(action) = input.action {
                 // Passer le background runner aux handlers qui en ont besoin
-                self.dispatch_with_background(action)?;
+                self.dispatch_action(action);
             }
 
             if self.state.ui.should_quit {
@@ -241,6 +241,15 @@ impl EventHandler {
         }
         self.state.mark_dirty();
         Ok(())
+    }
+
+    /// Une opération Git refusée ne doit pas fermer l'interface ni perdre la saisie.
+    fn dispatch_action(&mut self, action: crate::state::AppAction) {
+        if let Err(error) = self.dispatch_with_background(action) {
+            self.state
+                .set_flash_message(crate::utils::flash_error("action", error));
+            self.state.mark_dirty();
+        }
     }
 
     /// Dispatche une action avec accès au background runner si nécessaire.
@@ -445,5 +454,28 @@ impl EventHandler {
         self.watcher.reset()?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::action::StagingAction;
+    use crate::state::{AppAction, ViewMode};
+
+    #[test]
+    fn failed_staging_keeps_the_interface_alive() {
+        let (temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        std::fs::write(temp.path().join("file.txt"), "content").unwrap();
+        let repo = crate::git::GitRepo { repo };
+        let mut state = AppState::new(repo, temp.path().display().to_string()).unwrap();
+        state.view_mode = ViewMode::Staging;
+        state.refresh_from_repo().unwrap();
+        let mut handler = EventHandler::new(state).unwrap();
+        std::fs::write(handler.state.repo.repo.path().join("index.lock"), "locked").unwrap();
+        handler.dispatch_action(AppAction::Staging(StagingAction::StageAll));
+        assert!(!handler.state.ui.should_quit);
+        assert!(handler.state.ui.flash_message.is_some());
+        assert!(handler.state.dirty);
     }
 }

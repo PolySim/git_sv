@@ -102,6 +102,77 @@ impl BranchesViewState {
         self.selected_branch_info().map(|(branch, _)| branch)
     }
 
+    /// Remplace les branches en conservant la référence sélectionnée par son nom.
+    pub fn replace_branches(&mut self, local: Vec<BranchInfo>, remote: Vec<BranchInfo>) {
+        let previous = self
+            .selected_branch_info()
+            .map(|(branch, selected)| (branch.name.clone(), selected.is_remote()));
+        self.local_branches.set_items(local);
+        self.remote_branches.set_items(remote);
+        self.selected_branch = previous
+            .and_then(|(name, remote)| {
+                if remote && self.show_remote {
+                    self.remote_branches
+                        .iter()
+                        .position(|branch| branch.name == name)
+                        .map(SelectedBranch::Remote)
+                } else if !remote {
+                    self.local_branches
+                        .iter()
+                        .position(|branch| branch.name == name)
+                        .map(SelectedBranch::Local)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                if !self.local_branches.is_empty() {
+                    Some(SelectedBranch::Local(0))
+                } else if self.show_remote && !self.remote_branches.is_empty() {
+                    Some(SelectedBranch::Remote(0))
+                } else {
+                    None
+                }
+            });
+    }
+
+    /// Conserve le worktree choisi lors des rafraîchissements externes.
+    pub fn replace_worktrees(&mut self, worktrees: Vec<WorktreeInfo>) {
+        let selected_path = self
+            .worktrees
+            .selected_item()
+            .map(|worktree| worktree.path.clone());
+        self.worktrees.set_items(worktrees);
+        let index = selected_path
+            .and_then(|path| {
+                self.worktrees
+                    .iter()
+                    .position(|worktree| worktree.path == path)
+            })
+            .or_else(|| {
+                self.worktrees
+                    .iter()
+                    .position(|worktree| worktree.is_current)
+            });
+        if let Some(index) = index {
+            self.worktrees.select(index);
+        }
+    }
+
+    /// Conserve le stash choisi par OID lorsque sa position dans la pile change.
+    pub fn replace_stashes(&mut self, stashes: Vec<StashEntry>) {
+        let previous = self.stashes.selected_item().map(|stash| stash.oid);
+        self.stashes.set_items(stashes);
+        if let Some(index) =
+            previous.and_then(|oid| self.stashes.iter().position(|stash| stash.oid == oid))
+        {
+            self.stashes.select(index);
+        }
+        if previous != self.stashes.selected_item().map(|stash| stash.oid) {
+            self.clear_stash_details();
+        }
+    }
+
     /// Déplace la sélection vers le haut.
     pub fn select_prev(&mut self) {
         let local_count = self.local_branches.len();
@@ -208,7 +279,17 @@ impl BranchesViewState {
 
     /// Définit l'index du stash sélectionné (compatibilité).
     pub fn set_stash_selected(&mut self, index: usize) {
+        let previous = self.stashes.selected_item().map(|stash| stash.oid);
         self.stashes.select(index);
+        if previous != self.stashes.selected_item().map(|stash| stash.oid) {
+            self.clear_stash_details();
+        }
+    }
+
+    fn clear_stash_details(&mut self) {
+        self.stash_file_selected = 0;
+        self.stash_file_diff = None;
+        self.stash_diff_scroll = 0;
     }
 
     /// Index du worktree sélectionné (compatibilité).

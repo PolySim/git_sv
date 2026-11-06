@@ -109,7 +109,7 @@ pub struct CommitNode {
 impl Default for CommitNode {
     fn default() -> Self {
         Self {
-            oid: Oid::zero(),
+            oid: Oid::ZERO_SHA1,
             message: String::new(),
             author: String::new(),
             timestamp: 0,

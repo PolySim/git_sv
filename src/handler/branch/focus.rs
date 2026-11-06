@@ -29,6 +29,7 @@ pub(super) fn handle_select_stash(state: &mut AppState, index: usize) -> Result<
     if state.view_mode == ViewMode::Branches {
         state.branches_view_state.set_stash_selected(index);
         state.branches_view_state.focus = BranchesFocus::List;
+        super::load_stash_file_diff(state)?;
     }
     Ok(())
 }

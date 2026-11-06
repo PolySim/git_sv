@@ -25,6 +25,26 @@ pub struct SearchState {
 }
 
 impl SearchState {
+    /// Recalcule les résultats après une modification de la requête ou du graphe.
+    pub fn refresh_results(
+        &mut self,
+        rows: &[crate::git::graph::GraphRow],
+        preferred_commit: Option<git2::Oid>,
+    ) {
+        self.results = if self.query.is_empty() {
+            Vec::new()
+        } else {
+            crate::git::search::filter_commits(rows, &self.query, self.search_type)
+        };
+        self.current_result = preferred_commit
+            .and_then(|oid| {
+                self.results
+                    .iter()
+                    .position(|&index| rows[index].node.oid == oid)
+            })
+            .unwrap_or(0);
+    }
+
     /// Ouvre la recherche.
     pub fn open(&mut self) {
         self.is_active = true;

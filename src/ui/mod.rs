@@ -383,6 +383,12 @@ fn render_graph_search_bar(frame: &mut Frame, state: &AppState, area: Rect) {
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, state: &mut AppState) {
     state.update_screen_area(frame.area());
+    if matches!(
+        state.view_mode,
+        ViewMode::Branches | ViewMode::Blame | ViewMode::Conflicts
+    ) {
+        state.image_preview.clear();
+    }
     Block::default()
         .style(Style::default().bg(theme::current_theme().background))
         .render(frame.area(), frame.buffer_mut());

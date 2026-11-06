@@ -43,8 +43,9 @@ impl TerminalSession {
     /// Restaure explicitement le terminal.
     pub fn restore(&mut self) -> Result<()> {
         if !self.restored {
-            restore_terminal(&mut self.terminal, self.keyboard_enhancement_enabled)?;
+            let result = restore_terminal(&mut self.terminal, self.keyboard_enhancement_enabled);
             self.restored = true;
+            result?;
         }
         Ok(())
     }
@@ -78,12 +79,17 @@ impl Drop for TerminalSession {
 /// Initialise le terminal en mode raw + alternate screen + mouse capture.
 fn setup_terminal() -> Result<(Terminal<CrosstermBackend<Stdout>>, bool)> {
     enable_raw_mode()?;
+    let mut rollback = SetupRollback {
+        keyboard_enhancement_enabled: false,
+        active: true,
+    };
     let mut stdout = io::stdout();
     let keyboard_enhancement_enabled = matches!(
         crossterm::terminal::supports_keyboard_enhancement(),
         Ok(true)
     );
     if keyboard_enhancement_enabled {
+        rollback.keyboard_enhancement_enabled = true;
         execute!(
             stdout,
             PushKeyboardEnhancementFlags(
@@ -95,6 +101,7 @@ fn setup_terminal() -> Result<(Terminal<CrosstermBackend<Stdout>>, bool)> {
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
+    rollback.active = false;
     Ok((terminal, keyboard_enhancement_enabled))
 }
 
@@ -103,15 +110,46 @@ fn restore_terminal(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     keyboard_enhancement_enabled: bool,
 ) -> Result<()> {
-    if keyboard_enhancement_enabled {
-        execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
-    }
-    execute!(
+    // Tenter chaque étape même si le terminal refuse une séquence de contrôle.
+    let keyboard_result = if keyboard_enhancement_enabled {
+        execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)
+    } else {
+        Ok(())
+    };
+    let screen_result = execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    )?;
-    disable_raw_mode()?;
-    terminal.show_cursor()?;
+    );
+    let raw_result = disable_raw_mode();
+    let cursor_result = terminal.show_cursor();
+    keyboard_result?;
+    screen_result?;
+    raw_result?;
+    cursor_result?;
     Ok(())
+}
+
+/// Restaure le mode raw même si l'initialisation échoue avant la création de la session.
+struct SetupRollback {
+    keyboard_enhancement_enabled: bool,
+    active: bool,
+}
+
+impl Drop for SetupRollback {
+    fn drop(&mut self) {
+        if self.active {
+            let mut stdout = io::stdout();
+            if self.keyboard_enhancement_enabled {
+                let _ = execute!(stdout, PopKeyboardEnhancementFlags);
+            }
+            let _ = execute!(
+                stdout,
+                LeaveAlternateScreen,
+                DisableMouseCapture,
+                crossterm::cursor::Show
+            );
+            let _ = disable_raw_mode();
+        }
+    }
 }

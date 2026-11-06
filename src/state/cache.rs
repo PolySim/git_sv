@@ -114,7 +114,7 @@ impl DiffCacheKey {
     /// Clé pour un fichier du working directory.
     pub fn working_dir(file_path: impl Into<String>) -> Self {
         Self {
-            commit_oid: Oid::zero(),
+            commit_oid: Oid::ZERO_SHA1,
             file_path: file_path.into(),
             staged: false,
         }
@@ -123,7 +123,7 @@ impl DiffCacheKey {
     /// Clé pour les changements présents dans l'index.
     pub fn staged(file_path: impl Into<String>) -> Self {
         Self {
-            commit_oid: Oid::zero(),
+            commit_oid: Oid::ZERO_SHA1,
             file_path: file_path.into(),
             staged: true,
         }
@@ -172,9 +172,12 @@ impl DiffCache {
         }
 
         let diff = diff.into();
-        self.current_bytes = self
-            .current_bytes
-            .saturating_add(diff.estimated_memory_bytes());
+        let diff_bytes = diff.estimated_memory_bytes();
+        // Une entrée impossible à conserver ne doit pas vider les autres diffs utiles.
+        if diff_bytes > self.max_bytes {
+            return;
+        }
+        self.current_bytes = self.current_bytes.saturating_add(diff_bytes);
         self.cache.put(key, diff);
         self.enforce_limits();
     }
@@ -362,7 +365,7 @@ mod tests {
         let wd_key = DiffCacheKey::working_dir("test.rs");
         let staged_key = DiffCacheKey::staged("test.rs");
         assert!(wd_key.is_working_dir());
-        assert_eq!(wd_key.commit_oid, Oid::zero());
+        assert_eq!(wd_key.commit_oid, Oid::ZERO_SHA1);
         assert_eq!(wd_key.file_path, "test.rs");
         assert_ne!(wd_key, staged_key);
         assert!(staged_key.is_working_dir());
@@ -422,5 +425,28 @@ mod tests {
 
         assert_eq!(cache.len(), 0);
         assert_eq!(cache.memory_bytes(), 0);
+    }
+
+    #[test]
+    fn audit_oversized_diff_does_not_evict_useful_entries() {
+        let mut cache = DiffCache::with_limits(10, 512);
+        let small_key = DiffCacheKey::new(make_oid(1), "small.rs");
+        let mut diff = FileDiff {
+            path: "small.rs".to_string(),
+            status: crate::git::diff::DiffStatus::Modified,
+            lines: Vec::new(),
+            additions: 0,
+            deletions: 0,
+            image_preview: None,
+        };
+        cache.put(small_key.clone(), diff.clone());
+        let before = cache.memory_bytes();
+        diff.path = "x".repeat(1_024);
+
+        cache.put(DiffCacheKey::new(make_oid(2), "large.rs"), diff);
+
+        assert!(cache.contains(&small_key));
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.memory_bytes(), before);
     }
 }

@@ -140,6 +140,12 @@ pub fn apply_resolved_content(
     file: &MergeFile,
     mode: ConflictResolutionMode,
 ) -> Result<()> {
+    if file.conflicts.is_empty() || !all_sections_resolved(file) {
+        return Err(GitSvError::Other(
+            "Résolvez tous les blocs avant d'écrire le fichier".into(),
+        ));
+    }
+    let path = super::worktree_path(repo, &file.path)?;
     let resolved_lines = generate_resolved_content_with_source(file, mode);
     let content: String = resolved_lines
         .into_iter()
@@ -147,7 +153,7 @@ pub fn apply_resolved_content(
         .collect::<Vec<_>>()
         .join("\n");
 
-    std::fs::write(&file.path, &content).map_err(|e| {
+    std::fs::write(&path, &content).map_err(|e| {
         GitSvError::Other(format!(
             "Impossible d'ecrire le fichier '{}': {}",
             file.path, e
@@ -158,6 +164,7 @@ pub fn apply_resolved_content(
         .index()
         .map_err(|e| GitSvError::Other(format!("Impossible d'acceder a l'index: {}", e)))?;
 
+    index.read(true)?;
     index.remove_path(Path::new(&file.path)).map_err(|e| {
         GitSvError::Other(format!(
             "Impossible de supprimer le conflit de l'index: {}",

@@ -42,6 +42,37 @@ fn test_dispatch_quit_action() {
 }
 
 #[test]
+fn test_stash_drop_confirmation_refuses_changed_stash_stack() {
+    let (dir, repo) = setup_test_repo();
+    crate::git::tests::test_utils::commit_file(&repo.repo, "tracked.txt", "base\n", "Tracked file");
+    let mut state = AppState::new(repo, dir.path().display().to_string()).unwrap();
+    std::fs::write(dir.path().join("tracked.txt"), "first\n").unwrap();
+    crate::git::stash::save_stash(&mut state.repo.repo, Some("first")).unwrap();
+    let first = state.repo.repo.revparse_single("stash@{0}").unwrap().id();
+    state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::StashDrop {
+        index: 0,
+        oid: first,
+    });
+    std::fs::write(dir.path().join("tracked.txt"), "second\n").unwrap();
+    crate::git::stash::save_stash(&mut state.repo.repo, Some("second")).unwrap();
+    let second = state.repo.repo.revparse_single("stash@{0}").unwrap().id();
+
+    ActionDispatcher::new()
+        .dispatch(&mut state, AppAction::ConfirmAction)
+        .unwrap();
+
+    assert_eq!(
+        state.repo.repo.revparse_single("stash@{0}").unwrap().id(),
+        second
+    );
+    assert_eq!(
+        state.repo.repo.revparse_single("stash@{1}").unwrap().id(),
+        first
+    );
+    assert!(state.current_flash_message().unwrap().contains("a changé"));
+}
+
+#[test]
 fn test_dispatch_refresh_action() {
     let (dir, repo) = setup_test_repo();
     let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
@@ -51,6 +82,29 @@ fn test_dispatch_refresh_action() {
     dispatcher.dispatch(&mut state, AppAction::Refresh).unwrap();
 
     assert!(state.dirty);
+}
+
+#[test]
+fn test_manual_refresh_reloads_working_directory_diff() {
+    let (dir, repo) = setup_test_repo();
+    std::fs::write(dir.path().join("file.txt"), "before\n").unwrap();
+    let mut state = AppState::new(repo, dir.path().display().to_string()).unwrap();
+    state.view_mode = ViewMode::Staging;
+    state.initialize_from_repo().unwrap();
+    let previous = state.staging_state.current_diff.clone().unwrap();
+    std::fs::write(dir.path().join("file.txt"), "after\n").unwrap();
+
+    ActionDispatcher::new()
+        .dispatch(&mut state, AppAction::Refresh)
+        .unwrap();
+    state.refresh_from_repo().unwrap();
+
+    let current = state.staging_state.current_diff.as_ref().unwrap();
+    assert!(!std::sync::Arc::ptr_eq(&previous, current));
+    assert!(current
+        .lines
+        .iter()
+        .any(|line| line.content.contains("after")));
 }
 
 #[test]
@@ -147,7 +201,7 @@ fn test_dispatch_navigation_action() {
         (0..5)
             .map(|i| crate::git::graph::GraphRow {
                 node: crate::git::graph::CommitNode {
-                    oid: git2::Oid::from_bytes(&[i as u8; 20]).unwrap_or(git2::Oid::zero()),
+                    oid: git2::Oid::from_bytes(&[i as u8; 20]).unwrap_or(git2::Oid::ZERO_SHA1),
                     message: format!("Commit {}", i),
                     author: "Test".to_string(),
                     timestamp: i as i64 * 1000,

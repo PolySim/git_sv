@@ -80,7 +80,9 @@ pub(super) fn handle_next_section(state: &mut AppState) -> Result<()> {
     if let Some(conflicts) = &mut state.conflicts_state {
         let is_file_mode = conflicts.resolution_mode == ConflictResolutionMode::File;
         let file_selected = conflicts.file_selected;
-        let file = &conflicts.all_files[conflicts.file_selected];
+        let Some(file) = conflicts.all_files.get(conflicts.file_selected) else {
+            return Ok(());
+        };
         let max_section = file.conflicts.len().saturating_sub(1);
 
         if conflicts.section_selected < max_section {

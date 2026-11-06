@@ -121,10 +121,12 @@ mod tests {
 
     #[test]
     fn test_search_bar_renders_accented_query_without_invalid_utf8_slice() {
-        let mut search_state = SearchState::default();
-        search_state.is_active = true;
-        search_state.query = "té".to_string();
-        search_state.cursor = 2;
+        let search_state = SearchState {
+            is_active: true,
+            query: "té".to_string(),
+            cursor: 2,
+            ..SearchState::default()
+        };
 
         let output = render_to_string(40, 3, |frame| {
             render(

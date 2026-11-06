@@ -95,6 +95,10 @@ fn handle_partial_change(state: &mut AppState, operation: PartialChange) -> Resu
         state.set_flash_message("Aucun diff sélectionné".to_string());
         return Ok(());
     };
+    if diff.is_truncated() {
+        state.set_flash_message("Diff tronqué : actions partielles indisponibles. Indexez ou désindexez le fichier entier.");
+        return Ok(());
+    }
     let selected_line = state.staging_state.diff_selected_line;
     let result = match operation {
         PartialChange::StageHunk => diff.hunk_at_line(selected_line).map_or_else(

@@ -1,9 +1,8 @@
 //! Lecture du statut de la pull request courante via GitHub CLI.
 
 use std::path::Path;
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -93,11 +92,10 @@ pub fn current_pull_request(repo_path: &Path) -> Result<PullRequestLookup, Strin
             "number,title,state,isDraft,reviewDecision,mergeStateStatus,url,additions,deletions,changedFiles,statusCheckRollup",
         ])
         .current_dir(repo_path)
-        .env("GH_PROMPT_DISABLED", "1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .env("GH_PROMPT_DISABLED", "1");
 
-    let output = run_with_timeout(command)?;
+    let output = super::helpers::run_command_with_timeout(command, "gh pr view", GH_TIMEOUT)
+        .map_err(|error| error.to_string())?;
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
         if is_no_pull_request_error(&error) {
@@ -111,30 +109,6 @@ pub fn current_pull_request(repo_path: &Path) -> Result<PullRequestLookup, Strin
     }
 
     parse_pull_request(&output.stdout).map(PullRequestLookup::Found)
-}
-
-fn run_with_timeout(mut command: Command) -> Result<std::process::Output, String> {
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("GitHub CLI indisponible: {error}"))?;
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => return child.wait_with_output().map_err(|error| error.to_string()),
-            Ok(None) if start.elapsed() < GH_TIMEOUT => {
-                thread::sleep(Duration::from_millis(50));
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!(
-                    "GitHub CLI n'a pas répondu en {} secondes",
-                    GH_TIMEOUT.as_secs()
-                ));
-            }
-            Err(error) => return Err(error.to_string()),
-        }
-    }
 }
 
 fn parse_pull_request(json: &[u8]) -> Result<GithubPullRequest, String> {

@@ -36,7 +36,7 @@ struct Cli {
     path: String,
 
     /// Format de sortie (human, plain, json)
-    #[arg(short, long, default_value = "human")]
+    #[arg(short, long, default_value = "human", global = true, value_parser = ["human", "h", "plain", "p", "json", "j"])]
     format: String,
 
     #[command(subcommand)]
@@ -64,12 +64,12 @@ enum Commands {
         path_filter: Option<String>,
 
         /// Date de début (format: YYYY-MM-DD)
-        #[arg(long)]
-        since: Option<String>,
+        #[arg(long, value_parser = parse_date_start)]
+        since: Option<i64>,
 
         /// Date de fin (format: YYYY-MM-DD)
-        #[arg(long)]
-        until: Option<String>,
+        #[arg(long, value_parser = parse_date_end)]
+        until: Option<i64>,
     },
 
     /// Liste les branches
@@ -111,10 +111,22 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
-    let mut config = AppConfig::load().unwrap_or_default();
-    crate::i18n::set_language(config.language);
+    match run() {
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == std::io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
+        result => result,
+    }
+}
 
+fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let mut config = AppConfig::load()?;
+    crate::i18n::set_language(config.language);
 
     if let Some(Commands::Theme { theme }) = &cli.command {
         cli::theme(&mut config, theme.as_deref())?;
@@ -140,20 +152,16 @@ fn main() -> anyhow::Result<()> {
             until,
         }) => {
             // Mode non-interactif : affiche le log avec filtres
-            let mut filter = GraphFilter {
+            if since.zip(until).is_some_and(|(start, end)| start > end) {
+                anyhow::bail!("--since doit précéder --until");
+            }
+            let filter = GraphFilter {
                 author,
                 message,
                 path: path_filter,
-                ..GraphFilter::default()
+                date_from: since,
+                date_to: until,
             };
-
-            // Parse les dates si fournies
-            if let Some(since_str) = since {
-                filter.date_from = parse_date(&since_str);
-            }
-            if let Some(until_str) = until {
-                filter.date_to = parse_date(&until_str);
-            }
 
             cli::log_filtered(&repo, max_count, &filter, &options)?;
         }
@@ -183,13 +191,24 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Parse une date au format YYYY-MM-DD en timestamp.
-fn parse_date(date_str: &str) -> Option<i64> {
-    use chrono::NaiveDate;
-    NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-        .ok()
-        .and_then(|date| date.and_hms_opt(0, 0, 0))
-        .map(|dt| dt.and_utc().timestamp())
+/// Parse une date UTC, avec une borne de fin incluant toute la journée.
+fn parse_date(date_str: &str, end_of_day: bool) -> std::result::Result<i64, String> {
+    let date = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .map_err(|_| format!("Date invalide '{date_str}', format attendu YYYY-MM-DD"))?;
+    let time = if end_of_day { (23, 59, 59) } else { (0, 0, 0) };
+    Ok(date
+        .and_hms_opt(time.0, time.1, time.2)
+        .unwrap()
+        .and_utc()
+        .timestamp())
+}
+
+fn parse_date_start(value: &str) -> std::result::Result<i64, String> {
+    parse_date(value, false)
+}
+
+fn parse_date_end(value: &str) -> std::result::Result<i64, String> {
+    parse_date(value, true)
 }
 
 #[cfg(test)]
@@ -220,5 +239,23 @@ mod tests {
         let cli = Cli::try_parse_from(["git_sv", "inspect"]).unwrap();
 
         assert!(matches!(cli.command, Some(Commands::Inspect)));
+    }
+
+    #[test]
+    fn date_filters_reject_invalid_dates_and_include_the_last_day() {
+        assert!(Cli::try_parse_from(["git_sv", "log", "--since", "2026-02-30"]).is_err());
+        assert_eq!(
+            parse_date_end("2026-11-06").unwrap() - parse_date_start("2026-11-06").unwrap(),
+            86399
+        );
+    }
+
+    #[test]
+    fn global_options_work_after_the_subcommand_and_reject_unknown_formats() {
+        let cli =
+            Cli::try_parse_from(["git_sv", "--path", "repo", "graph", "--format", "json"]).unwrap();
+        assert_eq!(cli.format, "json");
+        assert_eq!(cli.path, "repo");
+        assert!(Cli::try_parse_from(["git_sv", "--format", "typo", "log"]).is_err());
     }
 }

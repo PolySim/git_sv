@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::path::Path;
 
 use git2::Repository;
@@ -10,104 +9,14 @@ use crate::git::conflict::{
 
 /// Resout un fichier en appliquant les resolutions choisies.
 pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
-    let content = std::fs::read_to_string(&file.path).map_err(|e| {
-        GitSvError::Other(format!(
-            "Impossible de lire le fichier '{}': {}",
-            file.path, e
-        ))
-    })?;
-
-    let mut resolved_content = String::new();
-    let mut conflict_idx = 0;
-    let mut lines = content.lines();
-
-    while let Some(line) = lines.next() {
-        if line.starts_with("<<<<<<<") {
-            let section = file
-                .conflicts
-                .get(conflict_idx)
-                .ok_or_else(|| GitSvError::Other("Section de conflit non trouvee".into()))?;
-
-            for line in lines.by_ref() {
-                if line.starts_with(">>>>>>>") {
-                    break;
-                }
-            }
-
-            match section.resolution {
-                Some(ConflictResolution::Ours) => {
-                    for l in &section.ours {
-                        resolved_content.push_str(l);
-                        resolved_content.push('\n');
-                    }
-                }
-                Some(ConflictResolution::Theirs) => {
-                    for l in &section.theirs {
-                        resolved_content.push_str(l);
-                        resolved_content.push('\n');
-                    }
-                }
-                Some(ConflictResolution::Both) => {
-                    for l in &section.ours {
-                        resolved_content.push_str(l);
-                        resolved_content.push('\n');
-                    }
-                    for l in &section.theirs {
-                        resolved_content.push_str(l);
-                        resolved_content.push('\n');
-                    }
-                }
-                None => {
-                    resolved_content.push_str(line);
-                    resolved_content.push('\n');
-                    for l in &section.ours {
-                        resolved_content.push_str(l);
-                        resolved_content.push('\n');
-                    }
-                    resolved_content.push_str("=======\n");
-                    for l in &section.theirs {
-                        resolved_content.push_str(l);
-                        resolved_content.push('\n');
-                    }
-                    resolved_content.push_str(&format!(">>>>>>> {}\n", "HEAD"));
-                }
-            }
-
-            conflict_idx += 1;
-        } else {
-            resolved_content.push_str(line);
-            resolved_content.push('\n');
-        }
-    }
-
-    let mut file_handle = std::fs::File::create(&file.path).map_err(|e| {
-        GitSvError::Other(format!(
-            "Impossible d'ecrire le fichier '{}': {}",
-            file.path, e
-        ))
-    })?;
-    file_handle
-        .write_all(resolved_content.as_bytes())
-        .map_err(|e| {
-            GitSvError::Other(format!(
-                "Erreur lors de l'ecriture du fichier '{}': {}",
-                file.path, e
-            ))
-        })?;
-
-    let mut index = repo
-        .index()
-        .map_err(|e| GitSvError::Other(format!("Impossible d'acceder a l'index: {}", e)))?;
-
-    index.remove_path(Path::new(&file.path)).ok();
-    index.add_path(Path::new(&file.path)).map_err(|e| {
-        GitSvError::Other(format!("Impossible d'ajouter le fichier a l'index: {}", e))
-    })?;
-    index
-        .write()
-        .map_err(|e| GitSvError::Other(format!("Impossible d'ecrire l'index: {}", e)))?;
-
-    Ok(())
+    let merge_file = MergeFile {
+        path: file.path.clone(),
+        has_conflicts: true,
+        conflicts: file.conflicts.clone(),
+        is_resolved: file.is_resolved,
+        conflict_type: Some(file.conflict_type),
+    };
+    super::apply_resolved_content(repo, &merge_file, super::ConflictResolutionMode::Block)
 }
 
 /// Resout tous les conflits d'un fichier avec la meme strategie.
@@ -116,7 +25,8 @@ pub fn resolve_file_with_strategy(
     path: &str,
     strategy: ConflictResolution,
 ) -> Result<()> {
-    let mut sections = parse_conflict_file(path)?;
+    let full_path = super::worktree_path(repo, path)?;
+    let mut sections = parse_conflict_file(full_path.to_string_lossy().as_ref())?;
 
     for section in &mut sections {
         section.resolution = Some(strategy);
@@ -149,91 +59,56 @@ pub fn resolve_special_file(
         }
     };
 
-    let path = Path::new(&file.path);
+    let relative_path = Path::new(&file.path);
+    let path = super::worktree_path(repo, &file.path)?;
+    let mut index = repo.index()?;
+    index.read(true)?;
 
     if should_delete {
-        if path.exists() {
-            std::fs::remove_file(path).map_err(|e| {
-                GitSvError::Other(format!(
-                    "Impossible de supprimer le fichier '{}': {}",
-                    file.path, e
-                ))
-            })?;
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
         }
-
-        let mut index = repo
-            .index()
-            .map_err(|e| GitSvError::Other(format!("Impossible d'acceder a l'index: {}", e)))?;
-
-        index.remove_path(path).map_err(|e| {
-            GitSvError::Other(format!(
-                "Impossible de retirer le fichier de l'index: {}",
-                e
-            ))
-        })?;
-        index
-            .write()
-            .map_err(|e| GitSvError::Other(format!("Impossible d'ecrire l'index: {}", e)))?;
-
-        Ok(true)
-    } else {
-        let content = match file.conflict_type {
-            Some(ConflictType::DeletedByUs) => file
-                .conflicts
-                .first()
-                .map(|s| s.theirs.join("\n"))
-                .unwrap_or_default(),
-            Some(ConflictType::DeletedByThem) => file
-                .conflicts
-                .first()
-                .map(|s| s.ours.join("\n"))
-                .unwrap_or_default(),
-            Some(ConflictType::BothAdded) => {
-                let section = file.conflicts.first();
-                match resolution {
-                    ConflictResolution::Ours => {
-                        section.map(|s| s.ours.join("\n")).unwrap_or_default()
-                    }
-                    ConflictResolution::Theirs => {
-                        section.map(|s| s.theirs.join("\n")).unwrap_or_default()
-                    }
-                    ConflictResolution::Both => section
-                        .map(|s| {
-                            let mut result = s.ours.clone();
-                            result.extend(s.theirs.clone());
-                            result.join("\n")
-                        })
-                        .unwrap_or_default(),
-                }
-            }
-            _ => String::new(),
-        };
-
-        let mut file_handle = std::fs::File::create(path).map_err(|e| {
-            GitSvError::Other(format!(
-                "Impossible de creer le fichier '{}': {}",
-                file.path, e
-            ))
-        })?;
-        file_handle.write_all(content.as_bytes()).map_err(|e| {
-            GitSvError::Other(format!(
-                "Erreur lors de l'ecriture du fichier '{}': {}",
-                file.path, e
-            ))
-        })?;
-
-        let mut index = repo
-            .index()
-            .map_err(|e| GitSvError::Other(format!("Impossible d'acceder a l'index: {}", e)))?;
-
-        index.remove_path(path).ok();
-        index.add_path(path).map_err(|e| {
-            GitSvError::Other(format!("Impossible d'ajouter le fichier a l'index: {}", e))
-        })?;
-        index
-            .write()
-            .map_err(|e| GitSvError::Other(format!("Impossible d'ecrire l'index: {}", e)))?;
-
-        Ok(false)
+        index.remove_path(relative_path)?;
+        index.write()?;
+        return Ok(true);
     }
+
+    if file.conflict_type == Some(ConflictType::BothAdded) {
+        let mut resolved = file.clone();
+        for section in &mut resolved.conflicts {
+            section.resolution = Some(resolution);
+        }
+        super::apply_resolved_content(repo, &resolved, super::ConflictResolutionMode::Block)?;
+        return Ok(false);
+    }
+
+    // Lire le blob de l'index conserve exactement les octets, y compris le dernier saut de ligne.
+    let stage = if file.conflict_type == Some(ConflictType::DeletedByUs) {
+        3
+    } else {
+        2
+    };
+    let entry = index
+        .get_path(relative_path, stage)
+        .ok_or_else(|| GitSvError::Other("Version du conflit introuvable dans l'index".into()))?;
+    if entry.mode == 0o120000 {
+        return Err(GitSvError::Other(
+            "Résolvez les liens symboliques avec Git".into(),
+        ));
+    }
+    let blob = repo.find_blob(entry.id)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, blob.content())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(entry.mode & 0o777))?;
+    }
+    index.add_path(relative_path)?;
+    index.write()?;
+    Ok(false)
 }

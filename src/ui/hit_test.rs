@@ -279,86 +279,51 @@ fn point_in_rect(x: u16, y: u16, rect: Rect) -> bool {
 
 /// Vérifie si un point est dans un modal ou popup.
 fn hit_test_modals(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
-    // Merge picker
-    if let Some(ref picker) = state.merge_picker {
-        if picker.is_active {
-            // Le merge picker est centré, on considère toute l'écran comme modal
-            // pour bloquer les interactions derrière
-            return Some(HitTestResult {
-                zone: ClickableZone::Modal,
-                relative_x: x,
-                relative_y: y,
-                rect: Rect::new(0, 0, u16::MAX, u16::MAX),
-            });
-        }
-    }
-
-    // Reset picker
-    if let Some(ref picker) = state.reset_picker {
-        if picker.is_active {
-            return Some(HitTestResult {
-                zone: ClickableZone::Modal,
-                relative_x: x,
-                relative_y: y,
-                rect: Rect::new(0, 0, u16::MAX, u16::MAX),
-            });
-        }
-    }
-
-    // Confirmation dialog
-    if state.ui.pending_confirmation.is_some() {
-        return Some(HitTestResult {
-            zone: ClickableZone::Modal,
-            relative_x: x,
-            relative_y: y,
-            rect: Rect::new(0, 0, u16::MAX, u16::MAX),
-        });
-    }
-
-    // Filter popup
-    if state.filters.filter_popup.is_open {
-        return Some(HitTestResult {
-            zone: ClickableZone::Modal,
-            relative_x: x,
-            relative_y: y,
-            rect: Rect::new(0, 0, u16::MAX, u16::MAX),
-        });
-    }
-
-    None
+    let blocking = state
+        .merge_picker
+        .as_ref()
+        .is_some_and(|picker| picker.is_active)
+        || state
+            .reset_picker
+            .as_ref()
+            .is_some_and(|picker| picker.is_active)
+        || state.ui.pending_confirmation.is_some()
+        || state.filters.filter_popup.is_open
+        || state.ui.repository_insights.is_some()
+        || state.ui.github_pull_request.is_some()
+        || state.ui.loading_spinner.is_some()
+        || state.branches_view_state.focus == crate::state::BranchesFocus::Input
+        || state.view_mode == ViewMode::Help
+        || (state.view_mode == ViewMode::Conflicts
+            && state
+                .conflicts_state
+                .as_ref()
+                .is_some_and(|conflicts| conflicts.is_editing));
+    blocking.then_some(HitTestResult {
+        zone: ClickableZone::Modal,
+        relative_x: x,
+        relative_y: y,
+        rect: state.screen_area,
+    })
 }
 
 /// Calcule l'index d'un commit dans le graphe à partir d'une position Y.
 ///
 /// Retourne None si la position est en dehors de la liste visible.
 pub fn calculate_commit_index(
-    graph_height: usize,
+    graph: &[crate::git::graph::GraphRow],
     visible_offset: usize,
     relative_y: u16,
 ) -> Option<usize> {
-    // Chaque commit prend environ 2 lignes (commit + connexion)
-    const LINES_PER_COMMIT: u16 = 2;
-
-    let line_index = relative_y / LINES_PER_COMMIT;
-    let commit_index = visible_offset + line_index as usize;
-
-    if commit_index < graph_height {
-        Some(commit_index)
-    } else {
-        None
+    let mut remaining = usize::from(relative_y);
+    for (index, row) in graph.iter().enumerate().skip(visible_offset) {
+        let height = 1 + usize::from(row.connection.is_some());
+        if remaining < height {
+            return Some(index);
+        }
+        remaining -= height;
     }
-}
-
-/// Calcule l'index d'un fichier dans la liste à partir d'une position Y.
-pub fn calculate_file_index(file_count: usize, relative_y: u16) -> Option<usize> {
-    // Les fichiers prennent 1 ligne chacun
-    let index = relative_y as usize;
-
-    if index < file_count {
-        Some(index)
-    } else {
-        None
-    }
+    None
 }
 
 /// Détermine quel tab de navigation est cliqué.
@@ -405,26 +370,6 @@ mod tests {
         assert!(!point_in_rect(30, 15, rect)); // À droite
         assert!(!point_in_rect(15, 9, rect)); // Au-dessus
         assert!(!point_in_rect(15, 20, rect)); // En-dessous
-    }
-
-    #[test]
-    fn test_calculate_commit_index() {
-        // Avec un offset de 10 et une hauteur de 100 commits
-        assert_eq!(calculate_commit_index(100, 10, 0), Some(10));
-        assert_eq!(calculate_commit_index(100, 10, 1), Some(10)); // Même commit (ligne de connexion)
-        assert_eq!(calculate_commit_index(100, 10, 2), Some(11));
-        assert_eq!(calculate_commit_index(100, 10, 4), Some(12));
-
-        // Hors limites
-        assert_eq!(calculate_commit_index(100, 10, 200), None);
-    }
-
-    #[test]
-    fn test_calculate_file_index() {
-        assert_eq!(calculate_file_index(10, 0), Some(0));
-        assert_eq!(calculate_file_index(10, 5), Some(5));
-        assert_eq!(calculate_file_index(10, 9), Some(9));
-        assert_eq!(calculate_file_index(10, 10), None); // Hors limites
     }
 
     #[test]

@@ -20,7 +20,7 @@ pub struct CommitInfo {
 impl CommitInfo {
     /// Crée un CommitInfo depuis un git2::Commit.
     pub fn from_git2_commit(commit: &git2::Commit) -> Self {
-        let message = commit.summary().unwrap_or("").to_string();
+        let message = commit.summary().ok().flatten().unwrap_or("").to_string();
         let author = commit.author().name().unwrap_or("Inconnu").to_string();
         let email = commit.author().email().unwrap_or("").to_string();
         let timestamp = commit.time().seconds();
@@ -77,7 +77,8 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
             })?;
             Some(repo.find_commit(oid)?)
         }
-        Err(_) => None, // Premier commit du repo.
+        Err(error) if error.code() == git2::ErrorCode::UnbornBranch => None,
+        Err(error) => return Err(error.into()),
     };
 
     let parents: Vec<&git2::Commit> = parent_commit.iter().collect();
@@ -89,7 +90,7 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
 
 /// Amende le dernier commit avec le message donné et l'index courant.
 pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
-    let _sig = repo
+    let sig = repo
         .signature()
         .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
 
@@ -105,7 +106,7 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
     let oid = head_commit.amend(
         Some("HEAD"),  // Mettre à jour HEAD
         None,          // Ne pas changer l'auteur
-        None,          // Ne pas changer le committer
+        Some(&sig),    // Actualiser l'identité et la date du committer
         None,          // Ne pas changer l'encodage
         Some(message), // Nouveau message
         Some(&tree),   // Nouveau tree
@@ -141,20 +142,30 @@ pub fn stage_all(repo: &Repository) -> Result<()> {
 
 /// Unstage un fichier (le retirer de l'index, revenir à HEAD).
 pub fn unstage_file(repo: &Repository, path: &str) -> Result<()> {
-    let head = repo.head()?;
-    let head_commit = head.peel_to_commit()?;
-
-    // Réinitialiser ce fichier dans l'index depuis HEAD.
-    repo.reset_default(Some(head_commit.as_object()), [path])?;
+    let head = head_commit_or_unborn(repo)?;
+    repo.reset_default(head.as_ref().map(|commit| commit.as_object()), [path])?;
     Ok(())
 }
 
-/// Unstage tous les fichiers.
+/// Unstage tous les fichiers sans modifier le worktree ni l'opération Git en cours.
 pub fn unstage_all(repo: &Repository) -> Result<()> {
-    let head = repo.head()?;
-    let obj = head.peel(git2::ObjectType::Commit)?;
-    repo.reset(&obj, git2::ResetType::Mixed, None)?;
+    let head = head_commit_or_unborn(repo)?;
+    if let Some(head) = head {
+        repo.reset_default(Some(head.as_object()), ["*"])?;
+    } else {
+        let mut index = repo.index()?;
+        index.clear()?;
+        index.write()?;
+    }
     Ok(())
+}
+
+fn head_commit_or_unborn(repo: &Repository) -> Result<Option<git2::Commit<'_>>> {
+    match repo.head() {
+        Ok(head) => Ok(Some(head.peel_to_commit()?)),
+        Err(error) if error.code() == git2::ErrorCode::UnbornBranch => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// Cherry-pick un commit sur la branche courante.
@@ -346,7 +357,7 @@ mod tests {
         // Le fichier ne devrait plus être dans l'état "staged modified"
         let mut found_staged = false;
         for entry in statuses.iter() {
-            if entry.path() == Some("test.txt") {
+            if entry.path().ok() == Some("test.txt") {
                 let status = entry.status();
                 if status.contains(git2::Status::INDEX_MODIFIED) {
                     found_staged = true;
@@ -369,7 +380,7 @@ mod tests {
         let statuses = repo.statuses(None).unwrap();
         let deleted_status = statuses
             .iter()
-            .find(|entry| entry.path() == Some("deleted.txt"))
+            .find(|entry| entry.path().ok() == Some("deleted.txt"))
             .map(|entry| entry.status())
             .expect("Le fichier supprimé devrait apparaître dans le status");
 
@@ -391,7 +402,7 @@ mod tests {
 
         // Vérifier que le commit existe
         let commit = repo.find_commit(oid).unwrap();
-        assert_eq!(commit.summary().unwrap(), "My commit message");
+        assert_eq!(commit.summary().unwrap(), Some("My commit message"));
     }
 
     #[test]
@@ -449,5 +460,42 @@ mod tests {
         // Donc le fichier devrait avoir le contenu initial
         let index = repo.index().unwrap();
         assert_eq!(index.iter().count(), 1);
+    }
+
+    #[test]
+    fn unstage_before_first_commit_preserves_working_files() {
+        let (_temp, repo) = create_test_repo();
+        std::fs::write(repo.workdir().unwrap().join("file.txt"), "content").unwrap();
+        stage_file(&repo, "file.txt").unwrap();
+        unstage_file(&repo, "file.txt").unwrap();
+        assert!(repo.index().unwrap().is_empty());
+        stage_file(&repo, "file.txt").unwrap();
+        unstage_all(&repo).unwrap();
+        assert!(repo.index().unwrap().is_empty());
+        assert_eq!(
+            std::fs::read_to_string(repo.workdir().unwrap().join("file.txt")).unwrap(),
+            "content"
+        );
+    }
+
+    #[test]
+    fn amend_updates_committer_and_preserves_author() {
+        let (_temp, repo) = create_test_repo();
+        let initial = commit_file(&repo, "file", "content", "initial");
+        let author = repo
+            .find_commit(initial)
+            .unwrap()
+            .author()
+            .name()
+            .unwrap()
+            .to_string();
+        repo.config()
+            .unwrap()
+            .set_str("user.name", "New Committer")
+            .unwrap();
+        let amended = amend_commit(&repo, "amended").unwrap();
+        let commit = repo.find_commit(amended).unwrap();
+        assert_eq!(commit.author().name().unwrap(), author);
+        assert_eq!(commit.committer().name().unwrap(), "New Committer");
     }
 }

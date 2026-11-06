@@ -102,7 +102,11 @@ pub fn inspect(repo: &GitRepo, options: &CliOptions) -> Result<()> {
     let insights = crate::git::insights::collect(&repo.repo, commit)?;
 
     if options.format == OutputFormat::Json {
-        println!("{}", serde_json::to_string_pretty(&insights)?);
+        writeln!(
+            std::io::stdout().lock(),
+            "{}",
+            serde_json::to_string_pretty(&insights)?
+        )?;
         return Ok(());
     }
 
@@ -594,7 +598,11 @@ fn print_log_json(commits: &[CommitInfo]) -> Result<()> {
         })
         .collect();
 
-    println!("{}", serde_json::to_string_pretty(&json_commits)?);
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(&json_commits)?
+    )?;
     Ok(())
 }
 
@@ -617,7 +625,11 @@ fn print_branches_json(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<()
         });
     }
 
-    println!("{}", serde_json::to_string_pretty(&all_branches)?);
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(&all_branches)?
+    )?;
     Ok(())
 }
 
@@ -631,7 +643,11 @@ fn print_status_json(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
         })
         .collect();
 
-    println!("{}", serde_json::to_string_pretty(&json_entries)?);
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(&json_entries)?
+    )?;
     Ok(())
 }
 
@@ -671,7 +687,11 @@ fn print_graph_json(graph_rows: &[crate::git::graph::GraphRow]) -> Result<()> {
         })
         .collect();
 
-    println!("{}", serde_json::to_string_pretty(&json_rows)?);
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(&json_rows)?
+    )?;
     Ok(())
 }
 

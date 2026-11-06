@@ -43,6 +43,7 @@ impl GraphFilter {
     }
 
     /// Filtre une liste de commits selon les critères actifs.
+    #[cfg(test)]
     pub fn filter_commits(&self, commits: &[CommitInfo]) -> Vec<CommitInfo> {
         if !self.is_active() {
             return commits.to_vec();
@@ -56,7 +57,7 @@ impl GraphFilter {
     }
 
     /// Vérifie si un commit correspond aux critères de filtre.
-    fn matches(&self, commit: &CommitInfo) -> bool {
+    pub(crate) fn matches(&self, commit: &CommitInfo) -> bool {
         // Filtre par auteur
         if let Some(ref author_filter) = self.author {
             if !commit
@@ -333,7 +334,7 @@ mod tests {
         paths: Option<Vec<&str>>,
     ) -> CommitInfo {
         CommitInfo {
-            oid: Oid::zero(),
+            oid: Oid::ZERO_SHA1,
             message: message.to_string(),
             author: author.to_string(),
             email: "test@example.com".to_string(),
