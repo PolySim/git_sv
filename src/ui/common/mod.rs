@@ -46,7 +46,11 @@ pub fn render_status_bar(frame: &mut Frame, config: StatusBarConfig<'_>, area: R
     let bg = config.bg_color.unwrap_or(theme.status_bar_bg);
 
     let path_width = (usize::from(area.width) / 3).clamp(12, 40);
-    let repo_path = truncate_start(config.repo_path, path_width, true);
+    let repo_path = truncate_start(
+        &crate::utils::terminal_path(config.repo_path),
+        path_width,
+        true,
+    );
     let mut spans = vec![
         Span::styled(
             " git_sv ",
@@ -67,13 +71,13 @@ pub fn render_status_bar(frame: &mut Frame, config: StatusBarConfig<'_>, area: R
         Span::styled(repo_path, Style::default().fg(theme.text_secondary).bg(bg)),
         Span::styled(" · ", Style::default().fg(theme.text_secondary).bg(bg)),
         Span::styled(
-            branch_name.to_string(),
+            crate::utils::terminal_text(branch_name).into_owned(),
             Style::default().fg(theme.commit_hash).bg(bg),
         ),
     ];
     if let Some(message) = config.flash_message {
         spans.push(Span::styled(
-            format!("  {message}"),
+            format!("  {}", crate::utils::terminal_text(message)),
             Style::default()
                 .fg(theme.secondary)
                 .bg(bg)

@@ -604,12 +604,19 @@ impl AppState {
             self.branches_view_state.replace_worktrees(worktrees);
         }
 
-        if let Ok(stashes) = crate::git::stash::list_stashes(&mut self.repo.repo) {
-            self.branches_view_state.replace_stashes(stashes);
-            if self.branches_view_state.section == BranchesSection::Stashes
-                && self.branches_view_state.stash_file_diff.is_none()
-            {
-                let _ = crate::handler::branch::load_stash_file_diff(self);
+        match crate::git::stash::list_stashes(&mut self.repo.repo) {
+            Ok(stashes) => {
+                self.branches_view_state.replace_stashes(stashes);
+                if self.branches_view_state.section == BranchesSection::Stashes
+                    && self.branches_view_state.stash_file_diff.is_none()
+                {
+                    if let Err(error) = crate::handler::branch::load_stash_file_diff(self) {
+                        self.set_flash_message(crate::utils::flash_error("diff du stash", error));
+                    }
+                }
+            }
+            Err(error) => {
+                self.set_flash_message(crate::utils::flash_error("chargement stashes", error))
             }
         }
     }

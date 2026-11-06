@@ -117,11 +117,12 @@ pub fn remove_worktree(repo: &Repository, name: &str) -> Result<()> {
         wt.prune(None)?;
     } else {
         // Git refuse les worktrees verrouillés ou contenant des changements locaux.
-        let output = std::process::Command::new("git")
-            .args(["worktree", "remove", "--"])
-            .arg(wt.path())
-            .current_dir(repo.workdir().unwrap_or(repo.path()))
-            .output()?;
+        let output =
+            super::helpers::clear_repository_environment(&mut std::process::Command::new("git"))
+                .args(["worktree", "remove", "--"])
+                .arg(wt.path())
+                .current_dir(repo.workdir().unwrap_or(repo.path()))
+                .output()?;
         if !output.status.success() {
             return Err(crate::error::GitSvError::OperationFailed {
                 operation: "git worktree remove",

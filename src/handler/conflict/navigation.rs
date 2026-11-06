@@ -135,6 +135,18 @@ pub(super) fn handle_switch_panel(state: &mut AppState) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn handle_previous_panel(state: &mut AppState) -> Result<()> {
+    if let Some(conflicts) = &mut state.conflicts_state {
+        conflicts.panel_focus = match conflicts.panel_focus {
+            ConflictPanelFocus::FileList => ConflictPanelFocus::ResultPanel,
+            ConflictPanelFocus::OursPanel => ConflictPanelFocus::FileList,
+            ConflictPanelFocus::TheirsPanel => ConflictPanelFocus::OursPanel,
+            ConflictPanelFocus::ResultPanel => ConflictPanelFocus::TheirsPanel,
+        };
+    }
+    Ok(())
+}
+
 pub(super) fn handle_accept_ours_file(state: &mut AppState) -> Result<()> {
     use crate::git::conflict::{
         resolve_file_with_strategy, resolve_special_file, ConflictResolution, ConflictType,
@@ -295,7 +307,7 @@ pub(super) fn handle_accept_ours_block(state: &mut AppState) -> Result<()> {
             }
 
             // Vérifier si toutes les sections sont résolues
-            all_sections_resolved(file)
+            all_sections_resolved(file, conflicts.resolution_mode)
         } else {
             false
         }
@@ -348,7 +360,7 @@ pub(super) fn handle_accept_theirs_block(state: &mut AppState) -> Result<()> {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 conflict.resolution = Some(ConflictResolution::Theirs);
             }
-            all_sections_resolved(file)
+            all_sections_resolved(file, conflicts.resolution_mode)
         } else {
             false
         }
@@ -391,7 +403,7 @@ pub(super) fn handle_accept_both(state: &mut AppState) -> Result<()> {
             if let Some(conflict) = file.conflicts.get_mut(section_idx) {
                 conflict.resolution = Some(ConflictResolution::Both);
             }
-            all_sections_resolved(file)
+            all_sections_resolved(file, conflicts.resolution_mode)
         } else {
             false
         }
@@ -434,7 +446,7 @@ pub(super) fn handle_mark_resolved(state: &mut AppState) -> Result<()> {
         let resolved = conflicts
             .all_files
             .get(conflicts.file_selected)
-            .map(all_sections_resolved)
+            .map(|file| all_sections_resolved(file, conflicts.resolution_mode))
             .unwrap_or(false);
         (path, resolved)
     } else {

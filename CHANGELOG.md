@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.5.4 - 2026-11-06
+
+### Fixed
+
+- stashes conservés lorsque leur application produit des conflits ; vérification de leur identité avant apply/pop et refus d'un stash ciblé qui capturerait d'autres fichiers indexés
+- discard préservant les fichiers ignorés, les dépôts imbriqués et les dossiers remplaçant un fichier suivi ; désindexation et outil de comparaison limités au chemin littéral sélectionné
+- commits de fusion conservant tous leurs parents ; index relu après un échec d'écriture et staging partiel refusé lorsque le diff affiché a changé
+- commandes Git isolées des variables de dépôt héritées ; aperçu du working tree refusant de traverser un lien symbolique parent vers un autre dossier
+- collage traité comme une édition atomique, sans déclencher de raccourci ; actions sensibles protégées contre les modificateurs inattendus, répétitions et relâchements de touches
+- résolution des conflits cohérente entre modes bloc/ligne/édition, aperçu actualisé après édition, CRLF conservés et écrasement d'une modification externe refusé
+- caractères de contrôle et de direction échappés dans les sorties humaines sans modifier les données Git ou JSON ; chemins non UTF-8 refusés explicitement plutôt que remplacés par un nom ambigu
+- accents combinés, emojis et caractères larges conservés au rendu ; curseur et défilement horizontal corrects sur les longues lignes
+
 ## 0.5.3 - 2026-11-06
 
 ### Changed

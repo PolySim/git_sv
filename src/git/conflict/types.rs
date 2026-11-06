@@ -82,6 +82,8 @@ pub struct ConflictFile {
 #[derive(Debug, Clone)]
 pub struct MergeFile {
     pub path: String,
+    /// Résultat manuel sauvegardé, distinct des versions d'origine encore comparées.
+    pub resolved_content: Option<Vec<String>>,
     pub has_conflicts: bool,
     pub conflicts: Vec<ConflictSection>,
     pub is_resolved: bool,

@@ -359,7 +359,7 @@ impl RepositorySnapshot {
                 Ok((snapshot, entries)) => {
                     self.accept_worktree(request, snapshot, entries, &mut outcome)
                 }
-                Err(_) => self.report_status_error(request, &mut outcome),
+                Err(error) => self.report_status_error(request, &mut outcome, &error),
             }
         }
         outcome
@@ -382,15 +382,24 @@ impl RepositorySnapshot {
         self.status_failed = false;
     }
 
-    fn report_status_error(&mut self, request: ScanRequest, outcome: &mut ScanOutcome) {
+    fn report_status_error(
+        &mut self,
+        request: ScanRequest,
+        outcome: &mut ScanOutcome,
+        error: &crate::error::GitSvError,
+    ) {
         outcome.status_failed = true;
         if !self.status_failed || request.publish_status {
             outcome.status_error = Some(
-                crate::i18n::text(
-                    "Impossible de vérifier le statut du dépôt. Une nouvelle tentative suivra.",
-                    "Unable to check repository status. Another attempt will follow.",
-                )
-                .to_string(),
+                if matches!(error, crate::error::GitSvError::UnsupportedPathEncoding) {
+                    error.to_string()
+                } else {
+                    crate::i18n::text(
+                        "Impossible de vérifier le statut du dépôt. Une nouvelle tentative suivra.",
+                        "Unable to check repository status. Another attempt will follow.",
+                    )
+                    .to_string()
+                },
             );
         }
         self.status_failed = true;
@@ -451,7 +460,10 @@ fn collect_worktree_snapshot(
     let mut snapshot = Vec::with_capacity(statuses.len());
     let mut entries = Vec::with_capacity(statuses.len());
     for entry in statuses.iter() {
-        let path = PathBuf::from(String::from_utf8_lossy(entry.path_bytes()).into_owned());
+        let status_path = entry
+            .path()
+            .map_err(|_| crate::error::GitSvError::UnsupportedPathEncoding)?;
+        let path = PathBuf::from(status_path);
         let metadata = fs::symlink_metadata(root.join(&path)).ok();
         snapshot.push(WorktreeEntrySnapshot {
             path,
@@ -460,7 +472,7 @@ fn collect_worktree_snapshot(
             size: metadata.as_ref().map(fs::Metadata::len),
         });
         entries.push(StatusEntry {
-            path: entry.path().unwrap_or("???").to_string(),
+            path: status_path.to_string(),
             status: entry.status(),
         });
     }
@@ -471,6 +483,19 @@ fn collect_worktree_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn safety_watcher_rejects_ambiguous_non_utf8_status_paths() {
+        let temp = create_repository();
+        fs::write(temp.path().join("???"), "unrelated").unwrap();
+        let repo = Repository::open(temp.path()).unwrap();
+        crate::git::tests::test_utils::add_raw_index_file(&repo, b"bad\xff.txt", b"raw name");
+        assert!(matches!(
+            collect_worktree_snapshot(&repo),
+            Err(crate::error::GitSvError::UnsupportedPathEncoding)
+        ));
+    }
     use std::sync::mpsc::{self, Receiver, SyncSender};
     use tempfile::TempDir;
 

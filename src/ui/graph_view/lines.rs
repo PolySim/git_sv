@@ -193,28 +193,28 @@ fn push_ref_badges(
     for reference in refs {
         let (label, style) = match reference.ref_type {
             RefType::Head => (
-                format!(" HEAD:{} ", reference.name),
+                format!(" HEAD:{} ", crate::utils::terminal_text(&reference.name)),
                 Style::default()
                     .fg(theme.background)
                     .bg(theme.success)
                     .add_modifier(Modifier::BOLD),
             ),
             RefType::LocalBranch => (
-                format!(" {} ", reference.name),
+                format!(" {} ", crate::utils::terminal_text(&reference.name)),
                 Style::default()
                     .fg(theme.background)
                     .bg(get_branch_color(color_index))
                     .add_modifier(Modifier::BOLD),
             ),
             RefType::Tag => (
-                format!(" tag:{} ", reference.name),
+                format!(" tag:{} ", crate::utils::terminal_text(&reference.name)),
                 Style::default()
                     .fg(theme.background)
                     .bg(theme.warning)
                     .add_modifier(Modifier::BOLD),
             ),
             RefType::RemoteBranch => (
-                format!(" remote:{} ", reference.name),
+                format!(" remote:{} ", crate::utils::terminal_text(&reference.name)),
                 Style::default()
                     .fg(theme.text_secondary)
                     .add_modifier(Modifier::DIM),
@@ -252,7 +252,7 @@ fn build_metadata(author: &str, timestamp: i64, available_width: u16) -> Option<
         let author = truncate_text(author, 10);
         let relative_date = truncate_text(&format_relative_time(timestamp), 12);
         return Some((
-            format!(" │ {:<10}", author),
+            format!(" │ {}", crate::ui::common::text::pad_right(&author, 10)),
             format!(" · {:>12}", relative_date),
         ));
     }
@@ -260,36 +260,13 @@ fn build_metadata(author: &str, timestamp: i64, available_width: u16) -> Option<
     let author = truncate_text(author, 14);
     let relative_date = truncate_text(&format_relative_time(timestamp), 16);
     Some((
-        format!(" │ {:<14}", author),
+        format!(" │ {}", crate::ui::common::text::pad_right(&author, 14)),
         format!(" · {:>16}", relative_date),
     ))
 }
 
 fn truncate_text(value: &str, max_width: usize) -> String {
-    let width = display_width(value);
-    if width <= max_width {
-        return value.to_string();
-    }
-    if max_width == 0 {
-        return String::new();
-    }
-    if max_width == 1 {
-        return "…".to_string();
-    }
-
-    let ellipsis_width = display_width("…");
-    let mut truncated = String::new();
-    let mut used = 0;
-    for character in value.chars() {
-        let character_width = display_width(&character.to_string());
-        if used + character_width + ellipsis_width > max_width {
-            break;
-        }
-        truncated.push(character);
-        used += character_width;
-    }
-    truncated.push('…');
-    truncated
+    crate::ui::common::text::truncate(&crate::utils::terminal_text(value), max_width, true)
 }
 
 fn display_width(value: &str) -> usize {

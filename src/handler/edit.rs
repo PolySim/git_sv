@@ -40,6 +40,18 @@ impl<'a> TextBuffer<'a> {
         *self.cursor += 1;
     }
 
+    /// Un collage est une seule édition, y compris pour les retours à la ligne Unicode.
+    fn insert_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.record_snapshot();
+        self.delete_selection();
+        let byte_index = char_to_byte_index(self.text, *self.cursor);
+        self.text.insert_str(byte_index, text);
+        *self.cursor += text.chars().count();
+    }
+
     /// Supprime le caractère avant le curseur.
     fn delete_char_before(&mut self) {
         if self.has_selection() {
@@ -345,6 +357,7 @@ impl ActionHandler for EditHandler {
 
         match action {
             EditAction::InsertChar(c) => buffer.insert_char(c),
+            EditAction::InsertText(text) => buffer.insert_text(&text),
             EditAction::DeleteCharBefore => buffer.delete_char_before(),
             EditAction::DeleteCharAfter => buffer.delete_char_after(),
             EditAction::CursorLeft => buffer.cursor_left(),
@@ -408,6 +421,7 @@ pub(super) fn edit_text(
     let mut buffer = TextBuffer::new(text, cursor, selection_anchor, history);
     match action {
         EditAction::InsertChar(c) => buffer.insert_char(c),
+        EditAction::InsertText(text) => buffer.insert_text(&text),
         EditAction::DeleteCharBefore => buffer.delete_char_before(),
         EditAction::DeleteCharAfter => buffer.delete_char_after(),
         EditAction::CursorLeft => buffer.cursor_left(),
@@ -489,6 +503,70 @@ mod tests {
             .map(|snapshot| snapshot.text.capacity())
             .sum();
         assert!(bytes <= crate::state::text_edit::MAX_HISTORY_BYTES);
+    }
+
+    #[test]
+    fn pasted_text_is_preserved_and_undone_as_one_edit() {
+        let original = "début sélection fin";
+        let pasted = "é🙂漢e\u{301}👩\u{200d}💻\r\nligne\n\u{1b}[31m";
+        let mut text = original.to_string();
+        let mut cursor = 15;
+        let mut anchor = Some(6);
+        let mut history = TextEditHistory::default();
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut anchor,
+            &mut history,
+            EditAction::InsertText(pasted.to_string()),
+        );
+
+        assert_eq!(text, format!("début {pasted} fin"));
+        assert_eq!(cursor, 6 + pasted.chars().count());
+        assert_eq!(anchor, None);
+        assert_eq!(history.undo.len(), 1);
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut anchor,
+            &mut history,
+            EditAction::Undo,
+        );
+        assert_eq!(text, original);
+        assert_eq!(cursor, 15);
+        assert_eq!(anchor, Some(6));
+
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut anchor,
+            &mut history,
+            EditAction::Redo,
+        );
+        assert_eq!(text, format!("début {pasted} fin"));
+        assert_eq!(cursor, 6 + pasted.chars().count());
+        assert_eq!(anchor, None);
+    }
+
+    #[test]
+    fn empty_paste_preserves_selection_and_undo_history() {
+        let mut text = "é🙂".to_string();
+        let mut cursor = 2;
+        let mut anchor = Some(0);
+        let mut history = TextEditHistory::default();
+        edit_text(
+            &mut text,
+            &mut cursor,
+            &mut anchor,
+            &mut history,
+            EditAction::InsertText(String::new()),
+        );
+        assert_eq!(text, "é🙂");
+        assert_eq!(anchor, Some(0));
+        assert_eq!(cursor, 2);
+        assert!(history.undo.is_empty());
     }
 
     #[test]

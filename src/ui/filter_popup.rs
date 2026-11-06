@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::state::{selection_range, FilterField, FilterPopupState, GraphFilter};
+use crate::state::{FilterField, FilterPopupState, GraphFilter};
 use crate::ui::theme::current_theme;
 
 pub struct FilterPopupRenderContext<'a> {
@@ -221,30 +221,18 @@ fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
 
     let prefix = if is_selected { "> " } else { "  " };
     let value_para = if is_selected {
-        let chars: Vec<char> = value.chars().collect();
-        let cursor = cursor.min(chars.len());
-        let selection = selection_range(cursor, selection_anchor);
         let mut spans = vec![Span::styled(prefix, value_style)];
-
-        for (index, character) in chars.iter().enumerate() {
-            let style = if index == cursor {
-                Style::default().fg(theme.background).bg(theme.warning)
-            } else if selection
-                .as_ref()
-                .is_some_and(|range| range.contains(&index))
-            {
-                Style::default().fg(theme.background).bg(theme.primary)
-            } else {
-                value_style
-            };
-            spans.push(Span::styled(character.to_string(), style));
-        }
-        if cursor == chars.len() {
-            spans.push(Span::styled(
-                " ",
+        spans.extend(
+            crate::ui::text_edit::line_with_cursor(
+                value,
+                cursor,
+                selection_anchor,
+                value_style,
+                Style::default().fg(theme.background).bg(theme.primary),
                 Style::default().fg(theme.background).bg(theme.warning),
-            ));
-        }
+            )
+            .spans,
+        );
         Paragraph::new(Line::from(spans)).wrap(Wrap { trim: false })
     } else {
         let display_value = if value.is_empty() {
@@ -252,9 +240,13 @@ fn render_filter_field(frame: &mut Frame, ctx: FilterFieldRenderContext<'_>) {
         } else {
             value
         };
-        Paragraph::new(format!("{}{}", prefix, display_value))
-            .style(value_style)
-            .wrap(Wrap { trim: false })
+        Paragraph::new(format!(
+            "{}{}",
+            prefix,
+            crate::utils::terminal_text(display_value)
+        ))
+        .style(value_style)
+        .wrap(Wrap { trim: false })
     };
 
     frame.render_widget(value_para, chunks[1]);

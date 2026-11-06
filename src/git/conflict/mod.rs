@@ -50,3 +50,25 @@ pub fn worktree_path(
     }
     Ok(resolved)
 }
+
+/// Synchronise l'index après une résolution et restaure son cache si Git refuse l'écriture.
+pub(crate) fn stage_resolution(
+    repo: &git2::Repository,
+    relative_path: &std::path::Path,
+    deleted: bool,
+) -> crate::error::Result<()> {
+    let mut index = repo.index()?;
+    index.read(true)?;
+    let result = (|| -> std::result::Result<(), git2::Error> {
+        index.remove_path(relative_path)?;
+        if !deleted {
+            index.add_path(relative_path)?;
+        }
+        index.write()
+    })();
+    if result.is_err() {
+        // Un index.lock externe ne doit pas laisser un résultat invisible dans le cache libgit2.
+        let _ = index.read(true);
+    }
+    result.map_err(Into::into)
+}

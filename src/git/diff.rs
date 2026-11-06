@@ -259,7 +259,7 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
             _ => continue, // Ignorer les autres types.
         };
 
-        let (path, old_path) = diff_paths(&delta);
+        let (path, old_path) = diff_paths(&delta)?;
 
         // Calculer les stats de lignes via le patch.
         let (additions, deletions) = if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
@@ -283,8 +283,7 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
 /// Retourne les chemins modifiés sans construire les patches ni compter leurs lignes.
 pub fn commit_changed_paths(repo: &Repository, oid: Oid) -> Result<Vec<String>> {
     let diff = commit_tree_diff(repo, oid)?;
-    Ok(diff
-        .deltas()
+    diff.deltas()
         .filter(|delta| {
             matches!(
                 delta.status(),
@@ -294,8 +293,8 @@ pub fn commit_changed_paths(repo: &Repository, oid: Oid) -> Result<Vec<String>> 
                     | git2::Delta::Renamed
             )
         })
-        .map(|delta| diff_paths(&delta).0)
-        .collect())
+        .map(|delta| diff_paths(&delta).map(|(path, _)| path))
+        .collect()
 }
 
 fn commit_tree_diff(repo: &Repository, oid: Oid) -> Result<git2::Diff<'_>> {
@@ -532,7 +531,7 @@ fn find_and_extract_file_diff(
 ) -> Result<FileDiff> {
     // Trouver le delta correspondant au fichier.
     for (idx, delta) in diff.deltas().enumerate() {
-        let (path, old_path) = diff_paths(&delta);
+        let (path, old_path) = diff_paths(&delta)?;
         let matches_requested_path = path == file_path || (old_path.as_deref() == Some(file_path));
 
         if !matches_requested_path {
@@ -577,10 +576,7 @@ fn find_and_extract_file_diff(
 }
 
 fn build_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<FileDiff> {
-    let workdir = repo
-        .workdir()
-        .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
-    let full_path = workdir.join(file_path);
+    let full_path = super::helpers::worktree_path(repo, Path::new(file_path))?;
     let metadata = fs::symlink_metadata(&full_path)?;
 
     let format = if metadata.is_symlink() {
@@ -728,7 +724,7 @@ fn tree_image_preview(
 
 fn working_tree_image_preview(repo: &Repository, file_path: &str) -> Option<ImagePreview> {
     let format = image_format(file_path)?;
-    let full_path = repo.workdir()?.join(file_path);
+    let full_path = super::helpers::worktree_path(repo, Path::new(file_path)).ok()?;
     let bytes = read_bounded_file(&full_path, MAX_IMAGE_PREVIEW_BYTES as u64).ok()??;
     build_image_preview(format, bytes)
 }
@@ -778,29 +774,29 @@ fn limit_message_line(message: impl Into<String>) -> DiffLine {
     }
 }
 
-fn diff_paths(delta: &git2::DiffDelta<'_>) -> (String, Option<String>) {
+fn diff_paths(delta: &git2::DiffDelta<'_>) -> Result<(String, Option<String>)> {
     let new_path = delta
         .new_file()
         .path()
-        .and_then(|p| p.to_str())
-        .map(str::to_string);
+        .map(|p| super::helpers::path_as_utf8(p).map(str::to_string))
+        .transpose()?;
     let old_path = delta
         .old_file()
         .path()
-        .and_then(|p| p.to_str())
-        .map(str::to_string);
+        .map(|p| super::helpers::path_as_utf8(p).map(str::to_string))
+        .transpose()?;
 
     let display_path = new_path
         .clone()
         .or_else(|| old_path.clone())
-        .unwrap_or_else(|| "???".to_string());
+        .ok_or_else(|| git2::Error::from_str("Chemin du diff indisponible"))?;
 
     let previous_path = match (&old_path, &new_path) {
         (Some(old), Some(new)) if old != new => Some(old.clone()),
         _ => None,
     };
 
-    (display_path, previous_path)
+    Ok((display_path, previous_path))
 }
 
 impl DiffStatus {
@@ -818,6 +814,51 @@ impl DiffStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn safety_commit_diff_rejects_non_utf8_paths_instead_of_guessing() {
+        let (_temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo, "???", "unrelated", "initial");
+        crate::git::tests::test_utils::add_raw_index_file(&repo, b"bad\xff.txt", b"raw name");
+        let oid = crate::git::tests::test_utils::commit(&repo, "raw path");
+        assert!(matches!(
+            commit_diff(&repo, oid),
+            Err(crate::error::GitSvError::UnsupportedPathEncoding)
+        ));
+        assert!(matches!(
+            commit_changed_paths(&repo, oid),
+            Err(crate::error::GitSvError::UnsupportedPathEncoding)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safety_worktree_preview_does_not_read_through_a_replaced_parent_symlink() {
+        let (_temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo, "folder/file.svg", "<svg/>", "initial");
+        let outside = tempfile::TempDir::new().unwrap();
+        let secret = b"PRIVATE_OUTSIDE_REPOSITORY_SENTINEL";
+        std::fs::write(outside.path().join("file.svg"), secret).unwrap();
+        let root = repo.workdir().unwrap();
+        std::fs::remove_file(root.join("folder/file.svg")).unwrap();
+        std::fs::remove_dir(root.join("folder")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.join("folder")).unwrap();
+        if let Ok(diff) = working_dir_file_diff(&repo, "folder/file.svg") {
+            assert!(!diff
+                .lines
+                .iter()
+                .any(|line| line.content.contains("PRIVATE_OUTSIDE_REPOSITORY_SENTINEL")));
+            assert!(!diff.image_preview.as_ref().is_some_and(|preview| preview
+                .bytes
+                .windows(secret.len())
+                .any(|bytes| bytes == secret)));
+        }
+        assert_eq!(
+            std::fs::read(outside.path().join("file.svg")).unwrap(),
+            secret
+        );
+    }
     use crate::git::tests::test_utils::*;
     use std::path::Path;
 

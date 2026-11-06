@@ -142,7 +142,7 @@ fn append_last_commit_lines(
             text("Dernier commit:", "Last commit:"),
             Style::default().add_modifier(Modifier::BOLD),
         )]));
-        lines.push(Line::from(msg.to_string()));
+        lines.push(Line::from(crate::utils::terminal_text(msg).into_owned()));
     }
 }
 
@@ -158,7 +158,7 @@ fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> 
                             text("Nom: ", "Name: "),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
-                        Span::raw(branch.name.clone()),
+                        Span::raw(crate::utils::terminal_text(&branch.name).into_owned()),
                     ]),
                     Line::from(vec![
                         Span::styled(
@@ -193,7 +193,7 @@ fn build_branch_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> 
                             text("Nom: ", "Name: "),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
-                        Span::raw(branch.name.clone()),
+                        Span::raw(crate::utils::terminal_text(&branch.name).into_owned()),
                     ]),
                     Line::from(vec![
                         Span::styled(
@@ -255,14 +255,14 @@ fn build_worktree_detail_content(state: &BranchesViewState) -> Vec<Line<'static>
                     text("Nom: ", "Name: "),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(worktree.name.clone()),
+                Span::raw(crate::utils::terminal_path(&worktree.name).into_owned()),
             ]),
             Line::from(vec![
                 Span::styled(
                     text("Chemin: ", "Path: "),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(worktree.path.clone()),
+                Span::raw(crate::utils::terminal_path(&worktree.path).into_owned()),
             ]),
             Line::from(vec![
                 Span::styled(
@@ -307,7 +307,10 @@ fn build_worktree_detail_content(state: &BranchesViewState) -> Vec<Line<'static>
                     text("Branche: ", "Branch: "),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(worktree.branch.as_deref().unwrap_or("N/A").to_string()),
+                Span::raw(
+                    crate::utils::terminal_text(worktree.branch.as_deref().unwrap_or("N/A"))
+                        .into_owned(),
+                ),
             ]),
         ]
     } else {
@@ -334,7 +337,7 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
                 text("Message: ", "Message: "),
                 Style::default().add_modifier(Modifier::BOLD),
             ),
-            Span::raw(stash.message.clone()),
+            Span::raw(crate::utils::terminal_text(&stash.message).into_owned()),
         ]),
         Line::from(vec![
             Span::styled(
@@ -351,7 +354,7 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
                 text("Branche: ", "Branch: "),
                 Style::default().add_modifier(Modifier::BOLD),
             ),
-            Span::raw(branch.to_string()),
+            Span::raw(crate::utils::terminal_text(branch).into_owned()),
         ]));
     }
 
@@ -383,7 +386,7 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
                             Modifier::empty()
                         }),
                 ),
-                Span::raw(file.path.clone()),
+                Span::raw(crate::utils::terminal_path(&file.path).into_owned()),
             ]));
         }
 
@@ -396,13 +399,22 @@ fn build_stash_detail_content(state: &BranchesViewState) -> Vec<Line<'static>> {
 
             lines.extend(diff_lines.iter().map(|line| {
                 let styled_line = if line.starts_with('+') {
-                    Span::styled(line.clone(), Style::default().fg(theme.success))
+                    Span::styled(
+                        crate::utils::terminal_text(line).into_owned(),
+                        Style::default().fg(theme.success),
+                    )
                 } else if line.starts_with('-') {
-                    Span::styled(line.clone(), Style::default().fg(theme.error))
+                    Span::styled(
+                        crate::utils::terminal_text(line).into_owned(),
+                        Style::default().fg(theme.error),
+                    )
                 } else if line.starts_with('@') {
-                    Span::styled(line.clone(), Style::default().fg(theme.primary))
+                    Span::styled(
+                        crate::utils::terminal_text(line).into_owned(),
+                        Style::default().fg(theme.primary),
+                    )
                 } else {
-                    Span::raw(line.clone())
+                    Span::raw(crate::utils::terminal_text(line).into_owned())
                 };
                 Line::from(styled_line)
             }));
@@ -530,7 +542,7 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
 
         let mut spans = vec![
             Span::styled(prefix, style),
-            Span::styled(&branch.name, style),
+            Span::styled(crate::utils::terminal_text(&branch.name), style),
         ];
 
         // Ahead/Behind si disponible.
@@ -557,7 +569,10 @@ fn render_branches_list(frame: &mut Frame, state: &BranchesViewState, area: Rect
         for branch in &state.remote_branches {
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(&branch.name, Style::default().fg(theme.text_secondary)),
+                Span::styled(
+                    crate::utils::terminal_text(&branch.name),
+                    Style::default().fg(theme.text_secondary),
+                ),
             ])));
         }
     }
@@ -616,7 +631,7 @@ fn render_worktrees_list(frame: &mut Frame, state: &BranchesViewState, area: Rec
 
             Line::from(vec![
                 Span::styled(prefix, style),
-                Span::styled(&worktree.name, style),
+                Span::styled(crate::utils::terminal_path(&worktree.name), style),
             ])
         })
         .map(ListItem::new)
@@ -656,7 +671,7 @@ fn render_stashes_list(frame: &mut Frame, state: &BranchesViewState, area: Rect)
                     format!("stash@{{{}}}: ", stash.index),
                     Style::default().fg(theme.primary),
                 ),
-                Span::raw(&stash.message),
+                Span::raw(crate::utils::terminal_text(&stash.message)),
             ]);
             ListItem::new(line)
         })
@@ -760,19 +775,23 @@ pub fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: 
             .fg(theme.selection_fg)
             .bg(theme.selection_bg),
     );
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.warning));
+    let inner = block.inner(popup);
+    let (input, cursor) = crate::ui::text_edit::input_viewport(
+        input,
+        &state.input_text,
+        state.input_cursor,
+        inner.width,
+        inner.height,
+    );
     let paragraph = Paragraph::new(input)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.warning)),
-        )
+        .block(block)
         .style(Style::default().fg(theme.text_normal).bg(theme.background));
-
     frame.render_widget(paragraph, popup);
-
-    // Curseur.
-    let before_cursor: String = state.input_text.chars().take(state.input_cursor).collect();
-    let cursor_width = Line::from(before_cursor).width() as u16;
-    frame.set_cursor_position((popup.x + cursor_width + 1, popup.y + 1));
+    if let Some((column, row)) = cursor {
+        frame.set_cursor_position((inner.x + column, inner.y + row));
+    }
 }

@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::state::action::{
     BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
@@ -10,27 +10,142 @@ use crate::state::{
 };
 
 pub(crate) fn map_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
+    if key.kind == KeyEventKind::Release {
+        return None;
+    }
+    let action = map_pressed_key(key, state)?;
+    // Une touche maintenue peut naviguer ou éditer, jamais répéter une opération Git.
+    if key.kind == KeyEventKind::Repeat && !is_repeatable(&action) {
+        return None;
+    }
+    Some(action)
+}
+
+fn map_pressed_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     if let Some(action) = map_quit_shortcut(key) {
         return Some(action);
     }
 
     if has_blocking_modal(state) {
-        return map_modal_key(key, state);
+        return plain_modifiers(key)
+            .then(|| map_modal_key(key, state))
+            .flatten();
+    }
+
+    if state.view_mode == ViewMode::Help {
+        return plain_modifiers(key)
+            .then(|| map_help_key(key, state))
+            .flatten();
     }
 
     if has_blocking_text_input(state) {
         return map_text_input_key(key, state);
     }
 
-    if state.view_mode == ViewMode::Help {
-        return map_help_key(key, state);
-    }
-
     if let Some(action) = map_configured_key(key, state) {
         return Some(action);
     }
 
+    if !plain_modifiers(key) {
+        return match state.view_mode {
+            ViewMode::Graph => map_graph_ctrl_key(key, state),
+            ViewMode::Staging => map_staging_ctrl_key(key),
+            _ => None,
+        };
+    }
     map_view_switch_key(key, state).or_else(|| map_view_key(key, state))
+}
+
+fn plain_modifiers(key: KeyEvent) -> bool {
+    (key.modifiers - KeyModifiers::SHIFT).is_empty()
+}
+
+// AltGr est transmis comme Ctrl+Alt par la console Windows ; il produit du texte dans un éditeur.
+fn is_altgr(key: KeyEvent) -> bool {
+    key.modifiers - KeyModifiers::SHIFT == KeyModifiers::CONTROL | KeyModifiers::ALT
+}
+
+/// Un collage est une seule édition ; ses retours à la ligne ne sont jamais des touches Enter.
+pub(super) fn map_paste(text: String, state: &AppState) -> Option<AppAction> {
+    if has_blocking_modal(state) || state.view_mode == ViewMode::Help || text.is_empty() {
+        return None;
+    }
+    let edit = EditAction::InsertText(text);
+    if state.view_mode == ViewMode::ProjectTree && state.project_tree_state.search.is_active {
+        return Some(AppAction::ProjectTree(ProjectTreeAction::EditSearch(edit)));
+    }
+    if state.view_mode == ViewMode::Graph && state.search_state.is_active {
+        return Some(AppAction::Search(SearchAction::Edit(edit)));
+    }
+    if state.filters.filter_popup.is_open {
+        return Some(AppAction::Filter(FilterAction::Edit(edit)));
+    }
+    if (state.view_mode == ViewMode::Staging
+        && state.staging_state.focus == StagingFocus::CommitMessage)
+        || state.branches_view_state.focus == BranchesFocus::Input
+    {
+        return Some(AppAction::Edit(edit));
+    }
+    if state.view_mode == ViewMode::Conflicts
+        && state
+            .conflicts_state
+            .as_ref()
+            .is_some_and(|conflicts| conflicts.is_editing)
+    {
+        if let EditAction::InsertText(text) = edit {
+            return Some(AppAction::Conflict(ConflictAction::EditInsertText(text)));
+        }
+    }
+    None
+}
+
+fn is_repeatable(action: &AppAction) -> bool {
+    matches!(
+        action,
+        AppAction::Navigation(_)
+            | AppAction::Edit(_)
+            | AppAction::Search(
+                SearchAction::InsertChar(_)
+                    | SearchAction::DeleteChar
+                    | SearchAction::Edit(_)
+                    | SearchAction::NextResult
+                    | SearchAction::PreviousResult,
+            )
+            | AppAction::Filter(
+                FilterAction::InsertChar(_) | FilterAction::DeleteChar | FilterAction::Edit(_),
+            )
+            | AppAction::ProjectTree(
+                ProjectTreeAction::EditSearch(_)
+                    | ProjectTreeAction::SearchNext
+                    | ProjectTreeAction::SearchPrevious
+                    | ProjectTreeAction::ExpandSelected
+                    | ProjectTreeAction::CollapseSelected,
+            )
+            | AppAction::Branch(BranchAction::StashFileNext | BranchAction::StashFilePrev)
+            | AppAction::Conflict(
+                ConflictAction::PreviousFile
+                    | ConflictAction::NextFile
+                    | ConflictAction::PreviousSection
+                    | ConflictAction::NextSection
+                    | ConflictAction::LineDown
+                    | ConflictAction::LineUp
+                    | ConflictAction::ResultScrollDown
+                    | ConflictAction::ResultScrollUp
+                    | ConflictAction::EditInsertChar(_)
+                    | ConflictAction::EditBackspace
+                    | ConflictAction::EditDelete
+                    | ConflictAction::EditCursorUp
+                    | ConflictAction::EditCursorDown
+                    | ConflictAction::EditCursorLeft
+                    | ConflictAction::EditCursorRight
+                    | ConflictAction::EditNewline,
+            )
+            | AppAction::MergePickerUp
+            | AppAction::MergePickerDown
+            | AppAction::ResetPickerUp
+            | AppAction::ResetPickerDown
+            | AppAction::Git(GitAction::RepositoryInsightsUp | GitAction::RepositoryInsightsDown)
+    )
 }
 
 fn map_configured_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
@@ -124,7 +239,7 @@ pub(crate) fn map_key_for_test(key: KeyEvent, state: &AppState) -> Option<AppAct
 }
 
 fn map_quit_shortcut(key: KeyEvent) -> Option<AppAction> {
-    (key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c'))
+    (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c'))
         .then_some(AppAction::Quit)
 }
 
@@ -143,7 +258,7 @@ fn has_blocking_modal(state: &AppState) -> bool {
 }
 
 fn has_blocking_text_input(state: &AppState) -> bool {
-    state.search_state.is_active
+    (state.view_mode == ViewMode::Graph && state.search_state.is_active)
         || (state.view_mode == ViewMode::ProjectTree && state.project_tree_state.search.is_active)
         || state.filters.filter_popup.is_open
         || (state.view_mode == ViewMode::Staging
@@ -209,7 +324,7 @@ fn map_text_input_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return map_project_tree_search_key(key);
     }
 
-    if state.search_state.is_active {
+    if state.view_mode == ViewMode::Graph && state.search_state.is_active {
         return map_search_key(key);
     }
 
@@ -349,10 +464,10 @@ fn map_project_tree_search_key(key: KeyEvent) -> Option<AppAction> {
         KeyCode::Enter => Some(ProjectTreeAction::ConfirmSearch),
         KeyCode::Down if key.modifiers.is_empty() => Some(ProjectTreeAction::SearchNext),
         KeyCode::Up if key.modifiers.is_empty() => Some(ProjectTreeAction::SearchPrevious),
-        KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
             Some(ProjectTreeAction::SearchNext)
         }
-        KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
             Some(ProjectTreeAction::SearchPrevious)
         }
         _ => None,
@@ -406,10 +521,10 @@ fn map_search_key(key: KeyEvent) -> Option<AppAction> {
         KeyCode::Up if key.modifiers.is_empty() => {
             Some(AppAction::Search(SearchAction::PreviousResult))
         }
-        KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
             Some(AppAction::Search(SearchAction::NextResult))
         }
-        KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
             Some(AppAction::Search(SearchAction::PreviousResult))
         }
         KeyCode::Tab => Some(AppAction::Search(SearchAction::ChangeType)),
@@ -434,6 +549,7 @@ fn map_text_edit_key(key: KeyEvent) -> Option<EditAction> {
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
 
     match key.code {
+        KeyCode::Char(c) if is_altgr(key) => Some(EditAction::InsertChar(c)),
         KeyCode::Char('z' | 'Z') if shortcut && shift => Some(EditAction::Redo),
         KeyCode::Char('z' | 'Z') if shortcut => Some(EditAction::Undo),
         KeyCode::Char('y' | 'Y') if shortcut => Some(EditAction::Redo),
@@ -489,7 +605,7 @@ fn map_filter_popup_key(key: KeyEvent) -> Option<AppAction> {
         KeyCode::Up if key.modifiers.is_empty() => {
             Some(AppAction::Filter(FilterAction::PreviousField))
         }
-        KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
             Some(AppAction::Filter(FilterAction::Clear))
         }
         _ => None,
@@ -528,7 +644,7 @@ fn map_graph_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 }
 
 fn map_graph_ctrl_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
-    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+    if key.modifiers != KeyModifiers::CONTROL {
         return None;
     }
 
@@ -742,7 +858,7 @@ fn map_staging_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 }
 
 fn map_staging_ctrl_key(key: KeyEvent) -> Option<AppAction> {
-    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+    if key.modifiers != KeyModifiers::CONTROL {
         return None;
     }
 
@@ -883,21 +999,44 @@ fn map_conflicts_editing_key(key: KeyEvent, state: &AppState) -> Option<AppActio
     }
 
     match key.code {
-        KeyCode::Esc => Some(AppAction::Conflict(ConflictAction::StopEditing)),
-        KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Esc if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::StopEditing))
+        }
+        KeyCode::Enter if key.modifiers == KeyModifiers::CONTROL => {
             Some(AppAction::Conflict(ConflictAction::ConfirmEdit))
         }
-        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
             Some(AppAction::Conflict(ConflictAction::ConfirmEdit))
         }
-        KeyCode::Char(c) => Some(AppAction::Conflict(ConflictAction::EditInsertChar(c))),
-        KeyCode::Backspace => Some(AppAction::Conflict(ConflictAction::EditBackspace)),
-        KeyCode::Delete => Some(AppAction::Conflict(ConflictAction::EditDelete)),
-        KeyCode::Enter => Some(AppAction::Conflict(ConflictAction::EditNewline)),
-        KeyCode::Up => Some(AppAction::Conflict(ConflictAction::EditCursorUp)),
-        KeyCode::Down => Some(AppAction::Conflict(ConflictAction::EditCursorDown)),
-        KeyCode::Left => Some(AppAction::Conflict(ConflictAction::EditCursorLeft)),
-        KeyCode::Right => Some(AppAction::Conflict(ConflictAction::EditCursorRight)),
+        KeyCode::Char(c)
+            if is_altgr(key)
+                || !key.modifiers.intersects(
+                    KeyModifiers::CONTROL | KeyModifiers::SUPER | KeyModifiers::META,
+                ) =>
+        {
+            Some(AppAction::Conflict(ConflictAction::EditInsertChar(c)))
+        }
+        KeyCode::Backspace if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditBackspace))
+        }
+        KeyCode::Delete if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditDelete))
+        }
+        KeyCode::Enter if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditNewline))
+        }
+        KeyCode::Up if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditCursorUp))
+        }
+        KeyCode::Down if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditCursorDown))
+        }
+        KeyCode::Left if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditCursorLeft))
+        }
+        KeyCode::Right if plain_modifiers(key) => {
+            Some(AppAction::Conflict(ConflictAction::EditCursorRight))
+        }
         _ => None,
     }
 }
@@ -912,7 +1051,11 @@ fn map_conflicts_navigation_key(key: KeyEvent, state: &AppState) -> Option<AppAc
         .unwrap_or(ConflictResolutionMode::Block);
 
     match key.code {
-        KeyCode::Tab | KeyCode::BackTab => Some(AppAction::Conflict(ConflictAction::SwitchPanel)),
+        KeyCode::BackTab => Some(AppAction::Conflict(ConflictAction::PreviousPanel)),
+        KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
+            Some(AppAction::Conflict(ConflictAction::PreviousPanel))
+        }
+        KeyCode::Tab => Some(AppAction::Conflict(ConflictAction::SwitchPanel)),
         KeyCode::Char('j') | KeyCode::Down => match panel_focus {
             Some(ConflictPanelFocus::FileList) => {
                 Some(AppAction::Conflict(ConflictAction::NextFile))
@@ -1217,5 +1360,312 @@ mod tests {
             map_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &state),
             Some(AppAction::ProjectTree(ProjectTreeAction::ConfirmSearch))
         );
+    }
+
+    #[test]
+    fn release_events_never_repeat_actions_or_insert_text() {
+        let mut state = create_test_state();
+        let mut key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE);
+        key.kind = crossterm::event::KeyEventKind::Release;
+        assert_eq!(map_key(key, &state), None);
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::CommitMessage;
+        assert_eq!(map_key(key, &state), None);
+    }
+
+    #[test]
+    fn modified_keys_do_not_fall_through_to_destructive_plain_shortcuts() {
+        let mut state = create_test_state();
+        for view in [
+            ViewMode::Graph,
+            ViewMode::Staging,
+            ViewMode::Branches,
+            ViewMode::ProjectTree,
+        ] {
+            state.view_mode = view;
+            state.branches_view_state.section = BranchesSection::Stashes;
+            for modifier in [KeyModifiers::ALT, KeyModifiers::SUPER, KeyModifiers::META] {
+                for character in ['p', 'd', 'a', 's', '1', 'w'] {
+                    assert_eq!(
+                        map_key(KeyEvent::new(KeyCode::Char(character), modifier), &state),
+                        None,
+                        "{view:?}: {modifier:?}+{character}"
+                    );
+                }
+            }
+        }
+        state.view_mode = ViewMode::Staging;
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+                &state
+            ),
+            None
+        );
+        state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL),
+                &state
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn auto_repeat_keeps_navigation_but_does_not_apply_a_stash_twice() {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::Branches;
+        state.branches_view_state.section = BranchesSection::Stashes;
+        let mut key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+        key.kind = crossterm::event::KeyEventKind::Repeat;
+        assert_eq!(map_key(key, &state), None);
+        key.code = KeyCode::Char('j');
+        assert_eq!(
+            map_key(key, &state),
+            Some(AppAction::Navigation(NavigationAction::MoveDown))
+        );
+    }
+
+    #[test]
+    fn conflict_editor_does_not_insert_unhandled_control_chords() {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::Conflicts;
+        let mut conflicts = crate::state::ConflictsState::new(
+            Vec::new(),
+            "merge".into(),
+            "ours".into(),
+            "theirs".into(),
+        );
+        conflicts.is_editing = true;
+        state.conflicts_state = Some(conflicts);
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL),
+                &state
+            ),
+            None
+        );
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::SUPER),
+                &state
+            ),
+            None
+        );
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL),
+                &state
+            ),
+            Some(AppAction::Conflict(ConflictAction::ConfirmEdit))
+        );
+    }
+    #[test]
+    fn paste_is_one_edit_in_each_text_context_and_never_a_git_command() {
+        let mut state = create_test_state();
+        let text = "é界\r\ndapy\t1\u{3}\u{1b}[31m".to_string();
+        let edit = EditAction::InsertText(text.clone());
+        for view in [
+            ViewMode::Graph,
+            ViewMode::Staging,
+            ViewMode::Branches,
+            ViewMode::ProjectTree,
+        ] {
+            state.view_mode = view;
+            assert_eq!(map_paste(text.clone(), &state), None);
+        }
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::CommitMessage;
+        assert_eq!(
+            map_paste(text.clone(), &state),
+            Some(AppAction::Edit(edit.clone()))
+        );
+        state.view_mode = ViewMode::Branches;
+        state.branches_view_state.focus = BranchesFocus::Input;
+        assert_eq!(
+            map_paste(text.clone(), &state),
+            Some(AppAction::Edit(edit.clone()))
+        );
+        state.branches_view_state.focus = BranchesFocus::List;
+        state.view_mode = ViewMode::Graph;
+        state.search_state.is_active = true;
+        assert_eq!(
+            map_paste(text.clone(), &state),
+            Some(AppAction::Search(SearchAction::Edit(edit.clone())))
+        );
+        state.search_state.is_active = false;
+        state.filters.filter_popup.is_open = true;
+        assert_eq!(
+            map_paste(text.clone(), &state),
+            Some(AppAction::Filter(FilterAction::Edit(edit.clone())))
+        );
+        state.filters.filter_popup.is_open = false;
+        state.view_mode = ViewMode::ProjectTree;
+        state.project_tree_state.open_search();
+        assert_eq!(
+            map_paste(text.clone(), &state),
+            Some(AppAction::ProjectTree(ProjectTreeAction::EditSearch(edit)))
+        );
+        state.view_mode = ViewMode::Conflicts;
+        state.conflicts_state = Some(crate::state::ConflictsState::new(
+            Vec::new(),
+            "merge".into(),
+            "main".into(),
+            "topic".into(),
+        ));
+        state.conflicts_state.as_mut().unwrap().is_editing = true;
+        assert_eq!(
+            map_paste(text.clone(), &state),
+            Some(AppAction::Conflict(ConflictAction::EditInsertText(
+                text.clone()
+            )))
+        );
+        state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+        assert_eq!(map_paste(text, &state), None);
+    }
+
+    #[test]
+    fn help_and_inactive_search_do_not_dispatch_hidden_text_actions() {
+        let mut state = create_test_state();
+        state.branches_view_state.focus = BranchesFocus::Input;
+        state.view_mode = ViewMode::Help;
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &state),
+            None
+        );
+        assert_eq!(map_paste("texte".into(), &state), None);
+        state.branches_view_state.focus = BranchesFocus::List;
+        state.search_state.is_active = true;
+        state.view_mode = ViewMode::Staging;
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE),
+                &state
+            ),
+            Some(AppAction::Staging(StagingAction::StartCommitMessage))
+        );
+    }
+
+    #[test]
+    fn altgr_characters_are_text_and_never_shortcuts() {
+        let mut state = create_test_state();
+        for character in ['@', '{', '}', '[', ']', '€', 'a', 'n', 'p', 'r', 's', 'z'] {
+            let key = KeyEvent::new(
+                KeyCode::Char(character),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            );
+            state.view_mode = ViewMode::Graph;
+            state.search_state.is_active = false;
+            state.filters.filter_popup.is_open = false;
+            assert_eq!(map_key(key, &state), None);
+            state.view_mode = ViewMode::Staging;
+            state.staging_state.focus = StagingFocus::CommitMessage;
+            assert_eq!(
+                map_key(key, &state),
+                Some(AppAction::Edit(EditAction::InsertChar(character)))
+            );
+            state.view_mode = ViewMode::Graph;
+            state.search_state.is_active = true;
+            assert_eq!(
+                map_key(key, &state),
+                Some(AppAction::Search(SearchAction::InsertChar(character)))
+            );
+            state.search_state.is_active = false;
+            state.filters.filter_popup.is_open = true;
+            assert_eq!(
+                map_key(key, &state),
+                Some(AppAction::Filter(FilterAction::InsertChar(character)))
+            );
+            state.filters.filter_popup.is_open = false;
+            state.view_mode = ViewMode::Conflicts;
+            state.conflicts_state = Some(crate::state::ConflictsState::new(
+                Vec::new(),
+                "merge".into(),
+                "main".into(),
+                "topic".into(),
+            ));
+            state.conflicts_state.as_mut().unwrap().is_editing = true;
+            assert_eq!(
+                map_key(key, &state),
+                Some(AppAction::Conflict(ConflictAction::EditInsertChar(
+                    character
+                )))
+            );
+        }
+    }
+    #[test]
+    fn shift_tab_goes_to_the_previous_conflict_panel() {
+        let mut state = create_test_state();
+        state.view_mode = ViewMode::Conflicts;
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &state),
+            Some(AppAction::Conflict(ConflictAction::SwitchPanel))
+        );
+        for key in [
+            KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT),
+            KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
+        ] {
+            assert_eq!(
+                map_key(key, &state),
+                Some(AppAction::Conflict(ConflictAction::PreviousPanel))
+            );
+        }
+    }
+    #[test]
+    fn destructive_shortcuts_and_confirmations_ignore_repeat_and_release() {
+        let mut state = create_test_state();
+        for view in [
+            ViewMode::Graph,
+            ViewMode::Staging,
+            ViewMode::Branches,
+            ViewMode::ProjectTree,
+            ViewMode::Conflicts,
+        ] {
+            state.view_mode = view;
+            state.branches_view_state.section = BranchesSection::Stashes;
+            state.ui.is_merging = view == ViewMode::Graph;
+            for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+                for character in ['q', 'y', 'D', 'A', 'P', 'p', 'V', 'Z'] {
+                    let key =
+                        KeyEvent::new_with_kind(KeyCode::Char(character), KeyModifiers::NONE, kind);
+                    assert_eq!(map_key(key, &state), None, "{view:?} {kind:?} {character}");
+                }
+                let quit = KeyEvent::new_with_kind(KeyCode::Char('c'), KeyModifiers::CONTROL, kind);
+                assert_eq!(map_key(quit, &state), None);
+            }
+        }
+        state.view_mode = ViewMode::Staging;
+        state.staging_state.focus = StagingFocus::CommitMessage;
+        assert_eq!(
+            map_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &state),
+            Some(AppAction::Staging(StagingAction::ConfirmCommit))
+        );
+        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+            assert_eq!(
+                map_key(
+                    KeyEvent::new_with_kind(KeyCode::Enter, KeyModifiers::NONE, kind),
+                    &state
+                ),
+                None
+            );
+        }
+        state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+        assert_eq!(
+            map_key(
+                KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+                &state
+            ),
+            Some(AppAction::ConfirmAction)
+        );
+        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+            assert_eq!(
+                map_key(
+                    KeyEvent::new_with_kind(KeyCode::Char('y'), KeyModifiers::NONE, kind),
+                    &state
+                ),
+                None
+            );
+        }
     }
 }

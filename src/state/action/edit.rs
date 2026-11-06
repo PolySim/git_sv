@@ -6,6 +6,8 @@
 pub enum EditAction {
     /// Insérer un caractère
     InsertChar(char),
+    /// Insérer un collage complet sans interpréter son contenu comme des raccourcis.
+    InsertText(String),
     /// Supprimer le caractère avant le curseur
     DeleteCharBefore,
     /// Supprimer le caractère après le curseur

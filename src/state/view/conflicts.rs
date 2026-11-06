@@ -43,6 +43,8 @@ pub struct ConflictsState {
     pub is_editing: bool,
     /// Buffer éditable (contenu du résultat, modifiable).
     pub edit_buffer: Vec<String>,
+    /// Chemin et contenu exact au début de l'édition, pour détecter une modification externe.
+    pub edit_original: Option<(String, String)>,
     /// Ligne du curseur dans le buffer d'édition.
     pub edit_cursor_line: usize,
     /// Colonne du curseur dans le buffer d'édition.
@@ -67,6 +69,7 @@ impl ConflictsState {
         let all_files: Vec<MergeFile> = files
             .into_iter()
             .map(|f| MergeFile {
+                resolved_content: None,
                 path: f.path,
                 has_conflicts: true,
                 conflicts: f.conflicts,
@@ -90,6 +93,7 @@ impl ConflictsState {
             theirs_branch_name,
             is_editing: false,
             edit_buffer: Vec::new(),
+            edit_original: None,
             edit_cursor_line: 0,
             edit_cursor_col: 0,
             ours_panel_height: 0,

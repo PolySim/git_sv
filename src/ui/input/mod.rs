@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use crate::state::{AppAction, AppState};
 
-use keyboard::map_key;
+use keyboard::{map_key, map_paste};
 
 #[cfg(test)]
 pub(crate) use keyboard::map_key_for_test;
@@ -33,6 +33,7 @@ pub fn handle_input_with_timeout(
         let action = match event::read()? {
             Event::Key(key) => map_key(key, state),
             Event::Mouse(mouse) => map_mouse(mouse, state),
+            Event::Paste(text) => map_paste(text, state),
             _ => None,
         };
         Ok(InputPoll {

@@ -244,7 +244,10 @@ impl GitRepo {
         let mut entries = Vec::new();
 
         for entry in statuses.iter() {
-            let path = entry.path().unwrap_or("???").to_string();
+            let path = entry
+                .path()
+                .map_err(|_| crate::error::GitSvError::UnsupportedPathEncoding)?
+                .to_string();
             let status = entry.status();
             entries.push(StatusEntry { path, status });
         }
@@ -435,6 +438,23 @@ impl StatusEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn safety_status_rejects_non_utf8_without_aliasing_a_real_file() {
+        let (temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo, "???", "unrelated", "initial");
+        crate::git::tests::test_utils::add_raw_index_file(&repo, b"bad\xff.txt", b"raw name");
+        let error = GitRepo { repo }.status().unwrap_err();
+        assert!(matches!(
+            error,
+            crate::error::GitSvError::UnsupportedPathEncoding
+        ));
+        assert_eq!(
+            std::fs::read(temp.path().join("???")).unwrap(),
+            b"unrelated"
+        );
+    }
     use crate::git::tests::test_utils::*;
     use crate::i18n::{with_language, Language};
 

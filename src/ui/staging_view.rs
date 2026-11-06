@@ -214,7 +214,10 @@ fn render_file_list(frame: &mut Frame, ctx: FileListRenderContext<'_>) {
                     format!(" {} ", status_icon),
                     Style::default().fg(status_color),
                 ),
-                Span::styled(&entry.path, Style::default().fg(theme.text_normal)),
+                Span::styled(
+                    crate::utils::terminal_path(&entry.path),
+                    Style::default().fg(theme.text_normal),
+                ),
             ]);
 
             ListItem::new(line)
@@ -330,36 +333,29 @@ fn render_commit_input(frame: &mut Frame, ctx: CommitInputRenderContext<'_>) {
                 .bg(theme.selection_bg),
         )
     } else {
-        display_text.into()
+        crate::ui::text_edit::text_with_selection(display_text, 0, None, text_style, text_style)
     };
 
-    let paragraph = Paragraph::new(rendered_text).style(text_style).block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(border_style),
-    );
-
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+    let inner = block.inner(area);
+    let (rendered_text, cursor) = if is_focused {
+        crate::ui::text_edit::input_viewport(
+            rendered_text,
+            message,
+            cursor_pos,
+            inner.width,
+            inner.height,
+        )
+    } else {
+        (rendered_text, None)
+    };
+    let paragraph = Paragraph::new(rendered_text).style(text_style).block(block);
     frame.render_widget(paragraph, area);
-
-    // Si focalisé, positionner le curseur.
-    if is_focused {
-        // Calculer la position du curseur en tenant compte des retours à la ligne
-        let mut cursor_line = 0u16;
-        let mut cursor_col = 0u16;
-        for (current_pos, char) in message.chars().enumerate() {
-            if current_pos >= cursor_pos {
-                break;
-            }
-            if char == '\n' {
-                cursor_line += 1;
-                cursor_col = 0;
-            } else {
-                cursor_col += 1;
-            }
-        }
-
-        frame.set_cursor_position((area.x + cursor_col + 1, area.y + cursor_line + 1));
+    if let Some((column, row)) = cursor {
+        frame.set_cursor_position((inner.x + column, inner.y + row));
     }
 }
 

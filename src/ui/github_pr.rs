@@ -30,14 +30,16 @@ pub fn render(frame: &mut Frame, ctx: GithubPrRenderContext<'_>) {
     };
     let title = format!(
         " GitHub PR #{} · {}{} ",
-        pull_request.number, pull_request.state, draft
+        pull_request.number,
+        crate::utils::terminal_text(&pull_request.state),
+        draft
     );
     let checks = pull_request.checks;
 
     let content = vec![
         Line::from(""),
         Line::from(Span::styled(
-            pull_request.title.clone(),
+            crate::utils::terminal_text(&pull_request.title).into_owned(),
             Style::default().add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
@@ -59,7 +61,7 @@ pub fn render(frame: &mut Frame, ctx: GithubPrRenderContext<'_>) {
         ),
         Line::from(""),
         Line::from(Span::styled(
-            pull_request.url.clone(),
+            crate::utils::terminal_text(&pull_request.url).into_owned(),
             Style::default().fg(theme.primary),
         )),
         Line::from(""),
@@ -93,7 +95,7 @@ fn detail_line(label: &str, value: &str) -> Line<'static> {
             format!("{label:<9}"),
             Style::default().add_modifier(Modifier::BOLD),
         ),
-        Span::raw(value.to_string()),
+        Span::raw(crate::utils::terminal_text(value).into_owned()),
     ])
 }
 

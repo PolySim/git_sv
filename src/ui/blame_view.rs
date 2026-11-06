@@ -36,13 +36,19 @@ impl Widget for BlameView<'_> {
         // Titre avec le chemin du fichier
         let title = if let Some(ref blame) = self.state.blame {
             text_owned(
-                format!(" Blame : {} ", blame.path),
-                format!(" Blame: {} ", blame.path),
+                format!(" Blame : {} ", crate::utils::terminal_path(&blame.path)),
+                format!(" Blame: {} ", crate::utils::terminal_path(&blame.path)),
             )
         } else {
             text_owned(
-                format!(" Blame : {} ", self.state.file_path),
-                format!(" Blame: {} ", self.state.file_path),
+                format!(
+                    " Blame : {} ",
+                    crate::utils::terminal_path(&self.state.file_path)
+                ),
+                format!(
+                    " Blame: {} ",
+                    crate::utils::terminal_path(&self.state.file_path)
+                ),
             )
         };
 
@@ -88,8 +94,8 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
     let selected_line = state.selected_line;
 
     // Récupérer les lignes visibles
-    let start = scroll_offset;
-    let end = (scroll_offset + visible_height).min(blame.lines.len());
+    let start = scroll_offset.min(blame.lines.len());
+    let end = start.saturating_add(visible_height).min(blame.lines.len());
 
     // Calculer la largeur maximale des colonnes
     let max_line_num_width = blame.lines.len().to_string().len().max(4);
@@ -116,17 +122,13 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
             Style::default().fg(theme.commit_hash).bg(bg_color),
         );
 
-        // Auteur (tronqué si nécessaire - safe UTF-8)
-        let author = if blame_line.author.len() > author_width {
-            let truncated: String = blame_line
-                .author
-                .chars()
-                .take(author_width.saturating_sub(1))
-                .collect();
-            format!("{}…", truncated)
-        } else {
-            format!("{:width$}", blame_line.author, width = author_width)
-        };
+        // La largeur en cellules conserve les accents combinés et les emoji composés.
+        let author = crate::ui::common::text::truncate(
+            &crate::utils::terminal_text(&blame_line.author),
+            author_width,
+            true,
+        );
+        let author = crate::ui::common::text::pad_right(&author, author_width);
         let author_span = Span::styled(
             format!("{} ", author),
             Style::default().fg(theme.primary).bg(bg_color),
@@ -172,7 +174,7 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
 
         // Contenu de la ligne
         let content_span = Span::styled(
-            &blame_line.content,
+            crate::utils::terminal_text(&blame_line.content),
             Style::default().fg(theme.text_normal).bg(bg_color),
         );
 
@@ -194,5 +196,25 @@ fn render_blame_content(blame: &FileBlame, state: &BlameState, area: Rect, buf: 
         };
         let paragraph = Paragraph::new(line);
         paragraph.render(line_area, buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shorter_blame_does_not_panic_with_an_old_scroll_position() {
+        let mut state = BlameState::new("é\nfile.txt".to_string(), git2::Oid::ZERO_SHA1);
+        state.blame = Some(FileBlame {
+            path: state.file_path.clone(),
+            lines: Vec::new(),
+        });
+        state.scroll_offset = usize::MAX;
+        let area = Rect::new(0, 0, 80, 12);
+        let mut buffer = Buffer::empty(area);
+        BlameView::new(&state).render(area, &mut buffer);
+        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(rendered.contains("é\\nfile.txt"));
     }
 }

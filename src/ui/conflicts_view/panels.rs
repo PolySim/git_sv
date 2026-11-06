@@ -8,6 +8,7 @@ use ratatui::{
 use crate::git::conflict::{ConflictResolution, ConflictResolutionMode, ConflictType};
 use crate::state::{ConflictPanelFocus, ConflictsState};
 use crate::ui::theme::current_theme;
+use crate::utils::{terminal_path, terminal_text};
 
 use super::{
     conflict_section_title, conflict_separator, panel_border_style, panel_title_style,
@@ -82,7 +83,10 @@ pub(super) fn render_files_panel(
 
             let label = format!(
                 "{} {}{}{}",
-                status_icon, type_icon, file.path, resolution_label
+                status_icon,
+                type_icon,
+                terminal_path(&file.path),
+                resolution_label
             );
             ListItem::new(label).style(style)
         })
@@ -104,11 +108,14 @@ pub(super) fn render_ours_panel(
     let title_style = panel_title_style(is_focused);
 
     let title_text = if is_file_mode {
-        format!(" {} [Fichier entier] ", state.ours_branch_name)
+        format!(
+            " {} [Fichier entier] ",
+            terminal_text(&state.ours_branch_name)
+        )
     } else if is_line_mode {
-        format!(" {} [Mode Ligne] ", state.ours_branch_name)
+        format!(" {} [Mode Ligne] ", terminal_text(&state.ours_branch_name))
     } else {
-        format!(" {} ", state.ours_branch_name)
+        format!(" {} ", terminal_text(&state.ours_branch_name))
     };
 
     let border_color = if is_focused {
@@ -176,15 +183,22 @@ pub(super) fn render_ours_panel(
             for (line_idx, line) in section.ours.iter().enumerate() {
                 let is_current_line = line_idx == state.line_selected && is_focused;
                 let is_included = section
-                    .line_level_resolution
-                    .as_ref()
-                    .map(|lr| {
-                        lr.ours_lines_included
-                            .get(line_idx)
-                            .copied()
-                            .unwrap_or(false)
+                    .resolution
+                    .map(|choice| {
+                        matches!(choice, ConflictResolution::Ours | ConflictResolution::Both)
                     })
-                    .unwrap_or(true);
+                    .unwrap_or_else(|| {
+                        section
+                            .line_level_resolution
+                            .as_ref()
+                            .map(|lr| {
+                                lr.ours_lines_included
+                                    .get(line_idx)
+                                    .copied()
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(true)
+                    });
 
                 let indicator = if is_included { "[x]" } else { "[ ]" };
                 let style = if is_current_line {
@@ -203,7 +217,7 @@ pub(super) fn render_ours_panel(
                 };
 
                 lines.push(Line::from(vec![Span::styled(
-                    format!("{} {}", indicator, line),
+                    format!("{} {}", indicator, terminal_text(line)),
                     style,
                 )]));
             }
@@ -222,7 +236,7 @@ pub(super) fn render_ours_panel(
 
             for line in &section.ours {
                 lines.push(Line::from(vec![Span::styled(
-                    format!("> {}", line),
+                    format!("> {}", terminal_text(line)),
                     ours_style,
                 )]));
             }
@@ -233,7 +247,7 @@ pub(super) fn render_ours_panel(
 
     let paragraph = Paragraph::new(lines)
         .block(block)
-        .wrap(Wrap { trim: true })
+        .wrap(Wrap { trim: false })
         .scroll((state.ours_scroll as u16, 0));
 
     frame.render_widget(paragraph, area);
@@ -251,11 +265,17 @@ pub(super) fn render_theirs_panel(
     let title_style = panel_title_style(is_focused);
 
     let title_text = if is_file_mode {
-        format!(" {} [Fichier entier] ", state.theirs_branch_name)
+        format!(
+            " {} [Fichier entier] ",
+            terminal_text(&state.theirs_branch_name)
+        )
     } else if is_line_mode {
-        format!(" {} [Mode Ligne] ", state.theirs_branch_name)
+        format!(
+            " {} [Mode Ligne] ",
+            terminal_text(&state.theirs_branch_name)
+        )
     } else {
-        format!(" {} ", state.theirs_branch_name)
+        format!(" {} ", terminal_text(&state.theirs_branch_name))
     };
 
     let border_color = if is_focused {
@@ -323,15 +343,25 @@ pub(super) fn render_theirs_panel(
             for (line_idx, line) in section.theirs.iter().enumerate() {
                 let is_current_line = line_idx == state.line_selected && is_focused;
                 let is_included = section
-                    .line_level_resolution
-                    .as_ref()
-                    .map(|lr| {
-                        lr.theirs_lines_included
-                            .get(line_idx)
-                            .copied()
-                            .unwrap_or(false)
+                    .resolution
+                    .map(|choice| {
+                        matches!(
+                            choice,
+                            ConflictResolution::Theirs | ConflictResolution::Both
+                        )
                     })
-                    .unwrap_or(false);
+                    .unwrap_or_else(|| {
+                        section
+                            .line_level_resolution
+                            .as_ref()
+                            .map(|lr| {
+                                lr.theirs_lines_included
+                                    .get(line_idx)
+                                    .copied()
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(false)
+                    });
 
                 let indicator = if is_included { "[x]" } else { "[ ]" };
                 let style = if is_current_line {
@@ -350,7 +380,7 @@ pub(super) fn render_theirs_panel(
                 };
 
                 lines.push(Line::from(vec![Span::styled(
-                    format!("{} {}", indicator, line),
+                    format!("{} {}", indicator, terminal_text(line)),
                     style,
                 )]));
             }
@@ -367,7 +397,7 @@ pub(super) fn render_theirs_panel(
 
             for line in &section.theirs {
                 lines.push(Line::from(vec![Span::styled(
-                    format!("> {}", line),
+                    format!("> {}", terminal_text(line)),
                     theirs_style,
                 )]));
             }
@@ -378,7 +408,7 @@ pub(super) fn render_theirs_panel(
 
     let paragraph = Paragraph::new(lines)
         .block(block)
-        .wrap(Wrap { trim: true })
+        .wrap(Wrap { trim: false })
         .scroll((state.theirs_scroll as u16, 0));
 
     frame.render_widget(paragraph, area);
@@ -450,7 +480,10 @@ pub(super) fn render_result_panel(
                     Line::from(vec![
                         Span::styled(line_num, Style::default().fg(theme.text_secondary)),
                         Span::raw(" "),
-                        Span::styled(content.to_string(), Style::default().fg(theme.text_normal)),
+                        Span::styled(
+                            terminal_text(content.strip_suffix('\r').unwrap_or(content)),
+                            Style::default().fg(theme.text_normal),
+                        ),
                     ])
                 }
             })
@@ -471,14 +504,17 @@ pub(super) fn render_result_panel(
                         .fg(theme.warning)
                         .add_modifier(Modifier::BOLD),
                 };
-                Line::from(vec![Span::styled(rline.content, style)])
+                Line::from(vec![Span::styled(
+                    terminal_text(&rline.content).into_owned(),
+                    style,
+                )])
             })
             .collect()
     };
 
     let paragraph = Paragraph::new(lines)
         .block(block)
-        .wrap(Wrap { trim: true })
+        .wrap(Wrap { trim: false })
         .scroll((state.result_scroll as u16, 0));
 
     frame.render_widget(paragraph, area);

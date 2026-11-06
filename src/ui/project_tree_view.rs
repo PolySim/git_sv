@@ -10,7 +10,7 @@ use ratatui::{
 use crate::git::diff::DiffStatus;
 use crate::git::project_tree::PathHistorySide;
 use crate::i18n::{text, text_owned};
-use crate::state::{selection_range, AppState, ProjectEntryKind, ProjectTreeFocus, ViewMode};
+use crate::state::{AppState, ProjectEntryKind, ProjectTreeFocus, ViewMode};
 use crate::ui::common::help_bar::KeyHint;
 use crate::ui::project_tree_layout::build_project_tree_layout;
 use crate::ui::theme::{current_theme, Theme};
@@ -89,8 +89,8 @@ pub fn render(frame: &mut Frame, state: &mut AppState, unresolved_conflicts: usi
     let trailing = state
         .project_tree_state
         .selected_entry()
-        .map(|entry| entry.path.as_str());
-    super::common::help_bar::render(frame, layout.help_bar, &hints, trailing);
+        .map(|entry| crate::utils::terminal_path(&entry.path));
+    super::common::help_bar::render(frame, layout.help_bar, &hints, trailing.as_deref());
 }
 
 fn render_tree(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect) {
@@ -119,9 +119,9 @@ fn render_tree(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect)
                 Style::default().fg(theme.text_normal)
             };
             let label = if search_active {
-                entry.path.clone()
+                crate::utils::terminal_path(&entry.path).into_owned()
             } else {
-                entry.name.clone()
+                crate::utils::terminal_path(&entry.name).into_owned()
             };
             ListItem::new(Line::from(vec![
                 Span::raw(if search_active {
@@ -178,32 +178,25 @@ fn render_tree(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect)
 fn render_search(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect) {
     let theme = current_theme();
     let search = &state.project_tree_state.search;
-    let cursor = search.cursor.min(search.query.chars().count());
-    let selection = selection_range(cursor, search.selection_anchor);
     let mut spans = vec![Span::styled(
         "/ ",
         Style::default()
             .fg(theme.primary)
             .add_modifier(Modifier::BOLD),
     )];
-    for (index, character) in search.query.chars().enumerate() {
-        let style = if index == cursor {
-            Style::default().bg(theme.primary).fg(theme.background)
-        } else if selection
-            .as_ref()
-            .is_some_and(|range| range.contains(&index))
-        {
+    spans.extend(
+        crate::ui::text_edit::line_with_cursor(
+            &search.query,
+            search.cursor,
+            search.selection_anchor,
+            Style::default().fg(theme.text_normal),
             Style::default()
                 .bg(theme.selection_bg)
-                .fg(theme.selection_fg)
-        } else {
-            Style::default().fg(theme.text_normal)
-        };
-        spans.push(Span::styled(character.to_string(), style));
-    }
-    if cursor == search.query.chars().count() {
-        spans.push(Span::styled(" ", Style::default().bg(theme.primary)));
-    }
+                .fg(theme.selection_fg),
+            Style::default().bg(theme.primary).fg(theme.background),
+        )
+        .spans,
+    );
     spans.push(Span::styled(
         text_owned(
             format!(
@@ -252,9 +245,12 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
                     Style::default().fg(theme.text_secondary),
                 ),
                 Span::raw("  "),
-                Span::styled(commit.author.clone(), Style::default().fg(theme.secondary)),
+                Span::styled(
+                    crate::utils::terminal_text(&commit.author).into_owned(),
+                    Style::default().fg(theme.secondary),
+                ),
                 Span::raw("  "),
-                Span::raw(commit.message.clone()),
+                Span::raw(crate::utils::terminal_text(&commit.message).into_owned()),
             ]))
         })
         .collect();
@@ -263,6 +259,7 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
         .selected_entry()
         .map(|entry| entry.path.as_str())
         .unwrap_or(text("aucune selection", "no selection"));
+    let selected_path = crate::utils::terminal_path(selected_path);
     let title = if let Some(comparison) = state.project_tree_state.comparison.as_ref() {
         let counts = match (comparison.ahead, comparison.behind) {
             (Some(ahead), Some(behind)) => format!("+{ahead} / -{behind}"),
@@ -272,16 +269,16 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
             format!(
                 "{}Historique · {} ↔ {} · {} — {} ",
                 if focused { "▶ " } else { " " },
-                comparison.base_branch,
-                comparison.target_branch,
+                crate::utils::terminal_text(&comparison.base_branch),
+                crate::utils::terminal_text(&comparison.target_branch),
                 counts,
                 selected_path
             ),
             format!(
                 "{}History · {} ↔ {} · {} — {} ",
                 if focused { "▶ " } else { " " },
-                comparison.base_branch,
-                comparison.target_branch,
+                crate::utils::terminal_text(&comparison.base_branch),
+                crate::utils::terminal_text(&comparison.target_branch),
                 counts,
                 selected_path
             ),
@@ -372,7 +369,10 @@ fn render_changed_files(frame: &mut Frame, state: &AppState, area: ratatui::layo
                     format!("-{} ", file.deletions),
                     Style::default().fg(theme.error),
                 ),
-                Span::styled(file.path.clone(), Style::default().fg(theme.text_normal)),
+                Span::styled(
+                    crate::utils::terminal_path(&file.path).into_owned(),
+                    Style::default().fg(theme.text_normal),
+                ),
             ]);
             ListItem::new(file_line)
         });

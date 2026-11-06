@@ -98,7 +98,7 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!("{}  ", branch),
+            format!("{}  ", crate::utils::terminal_text(branch)),
             Style::default().fg(theme.commit_hash),
         ),
         status_text,
@@ -130,7 +130,7 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     if let Some(msg) = flash_message {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            msg.to_string(),
+            crate::utils::terminal_text(msg).into_owned(),
             Style::default()
                 .fg(theme.secondary)
                 .add_modifier(Modifier::BOLD),

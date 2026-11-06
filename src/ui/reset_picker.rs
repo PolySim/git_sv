@@ -36,7 +36,11 @@ pub fn render(frame: &mut Frame, ctx: ResetPickerRenderContext<'_>) {
     );
 
     // Message du commit (tronqué si trop long)
-    let commit_msg = truncate(&state.commit_message, 50, true);
+    let commit_msg = truncate(
+        &crate::utils::terminal_text(&state.commit_message),
+        50,
+        true,
+    );
 
     // Styles pour les options
     let soft_style = if state.is_soft_selected() {

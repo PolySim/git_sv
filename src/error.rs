@@ -75,6 +75,10 @@ pub enum GitSvError {
     #[error("Fichier '{path}' non trouvé")]
     FileNotFound { path: String },
 
+    /// Un chemin non représentable ne doit jamais être remplacé par un autre nom.
+    #[error("Nom de fichier non UTF-8 : opération refusée pour préserver les données. Utilisez Git pour renommer ce fichier.")]
+    UnsupportedPathEncoding,
+
     /// État invalide de l'application
     #[error("État invalide: {0}")]
     InvalidState(String),

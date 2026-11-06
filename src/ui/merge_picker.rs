@@ -35,7 +35,7 @@ pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
     frame.render_widget(Clear, popup_area);
 
     // Construire le titre avec la branche courante
-    let current_branch_name = current_branch.unwrap_or("???");
+    let current_branch_name = crate::utils::terminal_text(current_branch.unwrap_or("???"));
     let title = match state.mode {
         BranchPickerMode::Merge => text_owned(
             format!(" Fusionner dans '{}' ", current_branch_name),
@@ -57,7 +57,10 @@ pub fn render(frame: &mut Frame, ctx: MergePickerRenderContext<'_>) {
         .iter()
         .map(|branch| {
             let style = Style::default();
-            let line = Line::from(vec![Span::raw("  "), Span::styled(branch, style)]);
+            let line = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(crate::utils::terminal_text(branch), style),
+            ]);
             ListItem::new(line)
         })
         .collect();

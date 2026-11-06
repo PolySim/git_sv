@@ -7,6 +7,7 @@ use crate::config::{AppConfig, ThemeMode};
 use crate::git::{branch::BranchInfo, commit::CommitInfo, GitRepo};
 use crate::i18n::{text, text_owned};
 use crate::state::GraphFilter;
+use crate::utils::{terminal_path, terminal_text};
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use std::io::{BufRead, IsTerminal, Write};
@@ -112,7 +113,11 @@ pub fn inspect(repo: &GitRepo, options: &CliOptions) -> Result<()> {
 
     let mut output = std::io::stdout().lock();
     writeln!(output, "Commit: {}", insights.commit)?;
-    writeln!(output, "Signature: {}", insights.signature.summary())?;
+    writeln!(
+        output,
+        "Signature: {}",
+        terminal_text(&insights.signature.summary())
+    )?;
     writeln!(
         output,
         "Hooks: {} actif(s) / {} configuré(s)",
@@ -121,7 +126,7 @@ pub fn inspect(repo: &GitRepo, options: &CliOptions) -> Result<()> {
     )?;
     for hook in &insights.hooks {
         let marker = if hook.enabled { "✓" } else { "○" };
-        writeln!(output, "  {marker} {}", hook.name)?;
+        writeln!(output, "  {marker} {}", terminal_text(&hook.name))?;
     }
     writeln!(
         output,
@@ -133,7 +138,7 @@ pub fn inspect(repo: &GitRepo, options: &CliOptions) -> Result<()> {
         writeln!(
             output,
             "  {} · {} · {}",
-            submodule.path,
+            terminal_path(&submodule.path),
             submodule.revision.as_deref().unwrap_or("-------"),
             submodule.state.label()
         )?;
@@ -190,7 +195,7 @@ pub fn theme(config: &mut AppConfig, requested: Option<&str>) -> Result<()> {
         output,
         "  {} {}",
         text("Configuration :", "Configuration:"),
-        path.display()
+        terminal_path(&path.to_string_lossy())
     )?;
     Ok(())
 }
@@ -267,6 +272,7 @@ fn theme_description(theme: ThemeMode) -> &'static str {
 }
 
 fn invalid_theme_error(value: &str) -> anyhow::Error {
+    let value = terminal_text(value);
     anyhow!(
         "{} '{value}'. {}",
         text("Thème inconnu", "Unknown theme"),
@@ -292,9 +298,14 @@ fn print_log_human(commits: &[CommitInfo]) -> Result<()> {
             handle,
             "\x1b[33m{}\x1b[0m \x1b[1m{}\x1b[0m",
             &commit.oid.to_string()[..7],
-            commit.message.lines().next().unwrap_or(""),
+            terminal_text(commit.message.lines().next().unwrap_or("")),
         )?;
-        writeln!(handle, "  \x1b[90m{} | {}\x1b[0m", commit.author, date)?;
+        writeln!(
+            handle,
+            "  \x1b[90m{} | {}\x1b[0m",
+            terminal_text(&commit.author),
+            date
+        )?;
         writeln!(handle)?;
     }
 
@@ -308,12 +319,12 @@ fn print_branches_human(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<(
     // Branche courante
     let current_branch = local.iter().find(|b| b.is_head);
     if let Some(branch) = current_branch {
-        writeln!(handle, "\x1b[32m* {}\x1b[0m", branch.name)?;
+        writeln!(handle, "\x1b[32m* {}\x1b[0m", terminal_text(&branch.name))?;
     }
 
     // Autres branches locales
     for branch in local.iter().filter(|b| !b.is_head) {
-        writeln!(handle, "  {}", branch.name)?;
+        writeln!(handle, "  {}", terminal_text(&branch.name))?;
     }
 
     // Branches distantes
@@ -325,7 +336,7 @@ fn print_branches_human(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<(
             text("Branches distantes:", "Remote branches:")
         )?;
         for branch in remote {
-            writeln!(handle, "  {}", branch.name)?;
+            writeln!(handle, "  {}", terminal_text(&branch.name))?;
         }
     }
 
@@ -429,15 +440,16 @@ fn print_status_human(
 }
 
 fn terminal_file_link(workdir: Option<&Path>, path: &str, enabled: bool) -> String {
+    let label = terminal_path(path);
     if !enabled {
-        return path.to_string();
+        return label.into_owned();
     }
     let Some(workdir) = workdir else {
-        return path.to_string();
+        return label.into_owned();
     };
     let absolute = workdir.join(path);
     let encoded = percent_encode_path(&absolute.to_string_lossy());
-    format!("\x1b]8;;file://{encoded}\x1b\\{path}\x1b]8;;\x1b\\")
+    format!("\x1b]8;;file://{encoded}\x1b\\{label}\x1b]8;;\x1b\\")
 }
 
 fn percent_encode_path(path: &str) -> String {
@@ -465,7 +477,7 @@ fn print_graph_text(graph_rows: &[crate::git::graph::GraphRow]) -> Result<()> {
             "{} {} {}",
             symbol,
             &node.oid.to_string()[..7],
-            node.message.lines().next().unwrap_or("")
+            terminal_text(node.message.lines().next().unwrap_or(""))
         )?;
     }
 
@@ -486,8 +498,8 @@ fn print_log_plain(commits: &[CommitInfo]) -> Result<()> {
             handle,
             "{} {} {} {}",
             &commit.oid.to_string()[..7],
-            commit.message.lines().next().unwrap_or(""),
-            commit.author,
+            terminal_text(commit.message.lines().next().unwrap_or("")),
+            terminal_text(&commit.author),
             date,
         )?;
     }
@@ -501,11 +513,11 @@ fn print_branches_plain(local: &[BranchInfo], remote: &[BranchInfo]) -> Result<(
 
     for branch in local {
         let prefix = if branch.is_head { "* " } else { "  " };
-        writeln!(handle, "{}{}", prefix, branch.name)?;
+        writeln!(handle, "{}{}", prefix, terminal_text(&branch.name))?;
     }
 
     for branch in remote {
-        writeln!(handle, "  {}", branch.name)?;
+        writeln!(handle, "  {}", terminal_text(&branch.name))?;
     }
 
     Ok(())
@@ -529,7 +541,7 @@ fn print_status_plain(entries: &[crate::git::repo::StatusEntry]) -> Result<()> {
         } else {
             " "
         };
-        writeln!(handle, "{} {}", status_char, entry.path)?;
+        writeln!(handle, "{} {}", status_char, terminal_path(&entry.path))?;
     }
 
     Ok(())
@@ -774,6 +786,22 @@ mod tests {
             terminal_file_link(Some(Path::new("/tmp/repo")), "file.rs", false),
             "file.rs"
         );
+    }
+
+    #[test]
+    fn terminal_file_link_cannot_inject_terminal_commands_or_fake_lines() {
+        let path = "é\u{1b}]52;c;Y29udGVudA==\u{7}\nforged\u{202e}.txt";
+        let plain = terminal_file_link(Some(Path::new("/tmp/repo")), path, false);
+        assert!(!plain.chars().any(char::is_control));
+        assert!(!plain.contains('\u{202e}'));
+        assert!(plain.contains('é'));
+
+        let linked = terminal_file_link(Some(Path::new("/tmp/repo")), path, true);
+        assert_eq!(linked.matches('\u{1b}').count(), 4);
+        assert!(!linked.contains('\u{7}'));
+        assert!(!linked.contains('\n'));
+        assert!(!linked.contains('\u{202e}'));
+        assert!(linked.contains("%1B%5D52"));
     }
 
     #[test]

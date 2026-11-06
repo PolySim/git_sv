@@ -110,7 +110,16 @@ enum Commands {
     },
 }
 
-fn main() -> anyhow::Result<()> {
+/// Ne modifie que le diagnostic final, jamais l'erreur ou les données manipulées dans l'application.
+struct TerminalError(anyhow::Error);
+
+impl std::fmt::Debug for TerminalError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&crate::utils::terminal_text(&format!("{:?}", self.0)))
+    }
+}
+
+fn main() -> std::result::Result<(), TerminalError> {
     match run() {
         Err(error)
             if error
@@ -119,7 +128,7 @@ fn main() -> anyhow::Result<()> {
         {
             Ok(())
         }
-        result => result,
+        result => result.map_err(TerminalError),
     }
 }
 

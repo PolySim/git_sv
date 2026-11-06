@@ -61,6 +61,11 @@ impl CommitInfo {
 
 /// Crée un commit avec le message donné sur l'index courant.
 pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
+    if repo.state() == git2::RepositoryState::Merge {
+        // Le commit de résolution doit conserver tous les parents du merge.
+        super::conflict::finalize_merge(repo, message)?;
+        return Ok(repo.head()?.peel_to_commit()?.id());
+    }
     let sig = repo
         .signature()
         .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
@@ -89,6 +94,12 @@ pub fn create_commit(repo: &Repository, message: &str) -> Result<Oid> {
 
 /// Amende le dernier commit avec le message donné et l'index courant.
 pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
+    if repo.state() == git2::RepositoryState::Merge {
+        return Err(crate::error::GitSvError::Other(
+            "Impossible d'amender un commit pendant une fusion ; créez le commit de résolution"
+                .into(),
+        ));
+    }
     let sig = repo
         .signature()
         .or_else(|_| Signature::now("git_sv", "git_sv@local"))?;
@@ -116,33 +127,66 @@ pub fn amend_commit(repo: &Repository, message: &str) -> Result<Oid> {
 
 /// Stage un fichier dans l'index.
 pub fn stage_file(repo: &Repository, path: &str) -> Result<()> {
-    let mut index = repo.index()?;
-
-    let status = repo
-        .status_file(std::path::Path::new(path))
-        .unwrap_or_else(|_| git2::Status::empty());
-    if status.contains(git2::Status::WT_DELETED) {
-        index.remove_path(std::path::Path::new(path))?;
-    } else {
-        index.add_path(std::path::Path::new(path))?;
-    }
-
-    index.write()?;
-    Ok(())
+    let status = repo.status_file(std::path::Path::new(path))?;
+    update_index(repo, |index| {
+        if status.contains(git2::Status::WT_DELETED) {
+            index.remove_path(std::path::Path::new(path))
+        } else {
+            index.add_path(std::path::Path::new(path))
+        }
+    })
 }
 
 /// Stage tous les fichiers modifiés.
 pub fn stage_all(repo: &Repository) -> Result<()> {
+    update_index(repo, |index| {
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+    })
+}
+
+fn update_index(
+    repo: &Repository,
+    edit: impl FnOnce(&mut git2::Index) -> std::result::Result<(), git2::Error>,
+) -> Result<()> {
     let mut index = repo.index()?;
-    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
-    index.write()?;
-    Ok(())
+    let result = edit(&mut index).and_then(|()| index.write());
+    if result.is_err() {
+        // Un write refusé ne doit pas laisser des changements indexés en mémoire.
+        let _ = index.read(true);
+    }
+    result.map_err(Into::into)
 }
 
 /// Unstage un fichier (le retirer de l'index, revenir à HEAD).
 pub fn unstage_file(repo: &Repository, path: &str) -> Result<()> {
     let head = head_commit_or_unborn(repo)?;
-    repo.reset_default(head.as_ref().map(|commit| commit.as_object()), [path])?;
+    if head.is_none() {
+        return update_index(repo, |index| index.remove_path(std::path::Path::new(path)));
+    }
+    // reset_default interprète les métacaractères du nom comme un pathspec.
+    let mut command = std::process::Command::new("git");
+    command
+        .args([
+            "--literal-pathspecs",
+            "restore",
+            "--staged",
+            "--source=HEAD",
+            "--",
+            path,
+        ])
+        .current_dir(repo.workdir().unwrap_or(repo.path()));
+    let output = crate::git::helpers::run_command_with_timeout(
+        command,
+        "désindexation",
+        std::time::Duration::from_secs(30),
+    )?;
+    if !output.status.success() {
+        return Err(crate::error::GitSvError::OperationFailed {
+            operation: "désindexation",
+            details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        });
+    }
+    repo.index()?.read(true)?;
     Ok(())
 }
 
@@ -150,13 +194,11 @@ pub fn unstage_file(repo: &Repository, path: &str) -> Result<()> {
 pub fn unstage_all(repo: &Repository) -> Result<()> {
     let head = head_commit_or_unborn(repo)?;
     if let Some(head) = head {
-        repo.reset_default(Some(head.as_object()), ["*"])?;
+        let tree = head.tree()?;
+        update_index(repo, |index| index.read_tree(&tree))
     } else {
-        let mut index = repo.index()?;
-        index.clear()?;
-        index.write()?;
+        update_index(repo, |index| index.clear())
     }
-    Ok(())
 }
 
 fn head_commit_or_unborn(repo: &Repository) -> Result<Option<git2::Commit<'_>>> {
@@ -268,6 +310,164 @@ mod tests {
     use super::*;
     use crate::git::tests::test_utils::*;
     use std::path::Path;
+
+    #[cfg(unix)]
+    #[test]
+    fn staging_does_not_import_contents_through_a_replaced_parent_symlink() {
+        for all in [false, true] {
+            let (temp, repo) = create_test_repo();
+            commit_file(&repo, "folder/file.txt", "base\n", "base");
+            std::fs::remove_dir_all(temp.path().join("folder")).unwrap();
+            let outside = tempfile::TempDir::new().unwrap();
+            std::fs::write(outside.path().join("file.txt"), b"external secret\n").unwrap();
+            std::os::unix::fs::symlink(outside.path(), temp.path().join("folder")).unwrap();
+            let _ = if all {
+                stage_all(&repo)
+            } else {
+                stage_file(&repo, "folder/file.txt")
+            };
+            for entry in repo.index().unwrap().iter() {
+                assert_ne!(
+                    repo.find_blob(entry.id).unwrap().content(),
+                    b"external secret\n"
+                );
+            }
+            assert_eq!(
+                std::fs::read(outside.path().join("file.txt")).unwrap(),
+                b"external secret\n"
+            );
+        }
+    }
+
+    #[test]
+    fn unstage_file_targets_literal_metacharacters_without_touching_siblings() {
+        let (temp, repo) = create_test_repo();
+        for path in ["[a].txt", "a.txt"] {
+            commit_file(&repo, path, "base\n", "initial");
+            std::fs::write(temp.path().join(path), "staged\n").unwrap();
+            stage_file(&repo, path).unwrap();
+        }
+        // Re-stager le premier fichier, car le deuxième commit a utilisé son index.
+        std::fs::write(temp.path().join("[a].txt"), "selected staged\n").unwrap();
+        stage_file(&repo, "[a].txt").unwrap();
+        let sibling = repo
+            .index()
+            .unwrap()
+            .get_path(Path::new("a.txt"), 0)
+            .unwrap()
+            .id;
+        unstage_file(&repo, "[a].txt").unwrap();
+        let index = repo.index().unwrap();
+        assert_eq!(index.get_path(Path::new("a.txt"), 0).unwrap().id, sibling);
+        let expected = repo
+            .head()
+            .unwrap()
+            .peel_to_tree()
+            .unwrap()
+            .get_path(Path::new("[a].txt"))
+            .unwrap()
+            .id();
+        assert_eq!(
+            index.get_path(Path::new("[a].txt"), 0).unwrap().id,
+            expected
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("[a].txt")).unwrap(),
+            b"selected staged\n"
+        );
+    }
+
+    #[test]
+    fn ordinary_commit_finishes_merge_with_both_parents() {
+        let (_temp, repo) = create_test_repo();
+        let base = commit_file(&repo, "base.txt", "base\n", "base");
+        repo.branch("other", &repo.find_commit(base).unwrap(), false)
+            .unwrap();
+        let ours = commit_file(&repo, "ours.txt", "ours\n", "ours");
+        repo.set_head("refs/heads/other").unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .unwrap();
+        let theirs = commit_file(&repo, "theirs.txt", "theirs\n", "theirs");
+        repo.set_head("refs/heads/main").unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .unwrap();
+        let annotated = repo.find_annotated_commit(theirs).unwrap();
+        repo.merge(&[&annotated], None, None).unwrap();
+        drop(annotated);
+        assert_eq!(repo.state(), git2::RepositoryState::Merge);
+        let index_before = std::fs::read(repo.path().join("index")).unwrap();
+        assert!(amend_commit(&repo, "Amend interdit").is_err());
+        assert_eq!(repo.head().unwrap().target(), Some(ours));
+        assert_eq!(
+            std::fs::read(repo.path().join("index")).unwrap(),
+            index_before
+        );
+        let oid = create_commit(&repo, "Merge résolu 🚀").unwrap();
+        let commit = repo.find_commit(oid).unwrap();
+        assert_eq!(commit.parent_ids().collect::<Vec<_>>(), vec![ours, theirs]);
+        assert_eq!(repo.state(), git2::RepositoryState::Clean);
+        assert!(!repo.path().join("MERGE_HEAD").exists());
+    }
+
+    #[test]
+    fn unresolved_merge_commit_preserves_head_index_and_merge_state() {
+        let (_temp, repo) = create_test_repo();
+        let base = commit_file(&repo, "conflict.txt", "base\n", "base");
+        repo.branch("other", &repo.find_commit(base).unwrap(), false)
+            .unwrap();
+        let ours = commit_file(&repo, "conflict.txt", "ours\n", "ours");
+        repo.set_head("refs/heads/other").unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .unwrap();
+        let theirs = commit_file(&repo, "conflict.txt", "theirs\n", "theirs");
+        repo.set_head("refs/heads/main").unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .unwrap();
+        let annotated = repo.find_annotated_commit(theirs).unwrap();
+        repo.merge(&[&annotated], None, None).unwrap();
+        let before_index = std::fs::read(repo.path().join("index")).unwrap();
+        let before_merge_head = std::fs::read(repo.path().join("MERGE_HEAD")).unwrap();
+        assert!(create_commit(&repo, "Impossible").is_err());
+        assert_eq!(repo.head().unwrap().target(), Some(ours));
+        assert!(repo.index().unwrap().has_conflicts());
+        assert_eq!(
+            std::fs::read(repo.path().join("index")).unwrap(),
+            before_index
+        );
+        assert_eq!(
+            std::fs::read(repo.path().join("MERGE_HEAD")).unwrap(),
+            before_merge_head
+        );
+    }
+
+    #[test]
+    fn rejected_index_writes_leave_disk_and_cached_staging_unchanged() {
+        for stage in [false, true] {
+            let (temp, repo) = create_test_repo();
+            commit_file(&repo, "file.txt", "base\n", "base");
+            std::fs::write(temp.path().join("file.txt"), "staged\n").unwrap();
+            stage_file(&repo, "file.txt").unwrap();
+            std::fs::write(temp.path().join("file.txt"), "unstaged\n").unwrap();
+            let before = repo.index().unwrap().write_tree().unwrap();
+            let before_bytes = std::fs::read(repo.path().join("index")).unwrap();
+            std::fs::write(repo.path().join("index.lock"), b"lock").unwrap();
+            let result = if stage {
+                stage_file(&repo, "file.txt")
+            } else {
+                unstage_file(&repo, "file.txt")
+            };
+            assert!(result.is_err());
+            assert_eq!(
+                std::fs::read(repo.path().join("index")).unwrap(),
+                before_bytes
+            );
+            assert_eq!(repo.index().unwrap().write_tree().unwrap(), before);
+            assert_eq!(
+                std::fs::read(temp.path().join("file.txt")).unwrap(),
+                b"unstaged\n"
+            );
+        }
+    }
 
     #[test]
     fn test_commit_info_from_git2_commit() {

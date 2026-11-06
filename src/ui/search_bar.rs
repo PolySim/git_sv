@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::git::search::SearchType;
-use crate::state::{selection_range, SearchState};
+use crate::state::SearchState;
 use crate::ui::theme::current_theme;
 
 pub struct SearchBarRenderContext<'a> {
@@ -29,9 +29,6 @@ pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
 
     // Construire le texte de recherche avec curseur
     let query_text = &search_state.query;
-    let chars: Vec<char> = query_text.chars().collect();
-    let cursor_pos = search_state.cursor.min(chars.len());
-    let selection = selection_range(cursor_pos, search_state.selection_anchor);
 
     // Construire la ligne affichée
     let mut spans = vec![];
@@ -44,34 +41,22 @@ pub fn render(frame: &mut Frame, ctx: SearchBarRenderContext<'_>) {
             .add_modifier(Modifier::BOLD),
     ));
 
-    for (index, character) in chars.iter().enumerate() {
-        let style = if index == cursor_pos {
-            Style::default()
-                .bg(theme.primary)
-                .fg(theme.background)
-                .add_modifier(Modifier::BOLD)
-        } else if selection
-            .as_ref()
-            .is_some_and(|range| range.contains(&index))
-        {
+    spans.extend(
+        crate::ui::text_edit::line_with_cursor(
+            query_text,
+            search_state.cursor,
+            search_state.selection_anchor,
+            Style::default(),
             Style::default()
                 .bg(theme.selection_bg)
-                .fg(theme.selection_fg)
-        } else {
-            Style::default()
-        };
-        spans.push(Span::styled(character.to_string(), style));
-    }
-
-    if cursor_pos == chars.len() {
-        spans.push(Span::styled(
-            " ",
+                .fg(theme.selection_fg),
             Style::default()
                 .bg(theme.primary)
                 .fg(theme.background)
                 .add_modifier(Modifier::BOLD),
-        ));
-    }
+        )
+        .spans,
+    );
 
     // Ajouter le type de recherche
     let type_label = match search_state.search_type {

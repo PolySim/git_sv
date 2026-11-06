@@ -7,23 +7,19 @@ pub(super) fn handle_start_edit(state: &mut AppState) -> Result<()> {
 }
 
 pub(super) fn handle_confirm_edit(state: &mut AppState) -> Result<()> {
-    use std::io::Write;
-
-    let (file_path, content) = if let Some(ref conflicts) = state.conflicts_state {
-        if let Some(file) = conflicts.all_files.get(conflicts.file_selected) {
-            let path = file.path.clone();
-            let buf_content = conflicts.edit_buffer.join("\n");
-            (Some(path), Some(buf_content))
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
+    let Some(conflicts) = state
+        .conflicts_state
+        .as_ref()
+        .filter(|conflicts| conflicts.is_editing)
+    else {
+        return Ok(());
     };
-
-    let (file_path, content) = match (file_path, content) {
-        (Some(p), Some(c)) => (p, c),
-        _ => return Ok(()),
+    let Some(file) = conflicts.all_files.get(conflicts.file_selected) else {
+        return Ok(());
+    };
+    let file_path = file.path.clone();
+    let Some((original_path, original)) = &conflicts.edit_original else {
+        return Ok(());
     };
     let absolute_path = match crate::git::conflict::worktree_path(&state.repo.repo, &file_path) {
         Ok(path) => path,
@@ -32,66 +28,48 @@ pub(super) fn handle_confirm_edit(state: &mut AppState) -> Result<()> {
             return Ok(());
         }
     };
-
-    // Écrire le contenu du buffer dans le fichier
-    match std::fs::File::create(&absolute_path) {
-        Ok(mut file_handle) => {
-            if let Err(e) = file_handle.write_all(content.as_bytes()) {
-                state.set_flash_message(flash_error("écriture fichier", e));
-                return Ok(());
+    // Refuser une écriture périmée : conserver le buffer pour permettre sa récupération.
+    if original_path != &file_path
+        || std::fs::read(&absolute_path).as_deref().ok() != Some(original.as_bytes())
+    {
+        state.set_flash_message("Le fichier a changé depuis le début de l'édition. Sauvegarde annulée ; le buffer est conservé.");
+        return Ok(());
+    }
+    let content = conflicts.edit_buffer.join("\n");
+    let write_result = (|| -> Result<()> {
+        std::fs::write(&absolute_path, content.as_bytes())?;
+        crate::git::conflict::stage_resolution(
+            &state.repo.repo,
+            std::path::Path::new(&file_path),
+            false,
+        )?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        // Si seul l'index a échoué, autoriser une nouvelle tentative avec le même buffer.
+        if std::fs::read(&absolute_path).as_deref().ok() == Some(content.as_bytes()) {
+            if let Some(conflicts) = &mut state.conflicts_state {
+                conflicts.edit_original = Some((file_path.clone(), content));
             }
-
-            // Mettre à jour l'index git
-            match state.repo.repo.index() {
-                Ok(mut index) => {
-                    // Supprimer les entrées existantes pour ce chemin
-                    index.remove_path(std::path::Path::new(&file_path)).ok();
-
-                    // Ajouter le fichier résolu à l'index
-                    if let Err(e) = index.add_path(std::path::Path::new(&file_path)) {
-                        state.set_flash_message(flash_error("git add", e));
-                        return Ok(());
-                    }
-
-                    if let Err(e) = index.write() {
-                        state.set_flash_message(flash_error("écriture index", e));
-                        return Ok(());
-                    }
-                }
-                Err(e) => {
-                    state.set_flash_message(flash_error("accès index", e));
-                    return Ok(());
-                }
-            }
-
-            // Marquer le fichier comme résolu dans l'état
-            if let Some(ref mut conflicts) = state.conflicts_state {
-                if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
-                    file.is_resolved = true;
-                }
-            }
-
-            state.mark_dirty();
-            state.set_flash_message(flash_success(format!(
-                "{} sauvegardé et marqué comme résolu",
-                file_path
-            )));
         }
-        Err(e) => {
-            state.set_flash_message(flash_error("création fichier", e));
+        state.set_flash_message(flash_error("sauvegarde du conflit", error));
+        return Ok(());
+    }
+    if let Some(conflicts) = &mut state.conflicts_state {
+        if let Some(file) = conflicts.all_files.get_mut(conflicts.file_selected) {
+            file.is_resolved = true;
+            file.resolved_content = Some(std::mem::take(&mut conflicts.edit_buffer));
         }
     }
-
-    if let Some(ref mut conflicts) = state.conflicts_state {
-        conflicts.is_editing = false;
-    }
-
+    super::modes::handle_stop_editing(state)?;
+    state.mark_dirty();
+    state.set_flash_message(flash_success(format!(
+        "{} sauvegardé et marqué comme résolu",
+        file_path
+    )));
     Ok(())
 }
 
 pub(super) fn handle_cancel_edit(state: &mut AppState) -> Result<()> {
-    if let Some(ref mut conflicts) = state.conflicts_state {
-        conflicts.is_editing = false;
-    }
-    Ok(())
+    super::modes::handle_stop_editing(state)
 }

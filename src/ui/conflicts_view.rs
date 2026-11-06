@@ -14,6 +14,7 @@ use ratatui::{
 use crate::git::conflict::ConflictResolutionMode;
 use crate::state::{ConflictPanelFocus, ConflictsState};
 use crate::ui::theme::current_theme;
+use crate::utils::{terminal_path, terminal_text};
 
 pub use help::{render_help_overlay, ConflictsHelpOverlayRenderContext};
 use panels::{render_files_panel, render_ours_panel, render_result_panel, render_theirs_panel};
@@ -85,7 +86,7 @@ fn push_context_lines(lines: &mut Vec<Line<'static>>, context_lines: &[String]) 
     let theme = current_theme();
     lines.extend(context_lines.iter().map(|line| {
         Line::from(vec![Span::styled(
-            format!("  {}", line),
+            format!("  {}", terminal_text(line)),
             Style::default().fg(theme.text_secondary),
         )])
     }));
@@ -101,11 +102,12 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
     ));
     spans.push(Span::raw(" "));
 
+    let line = line.strip_suffix('\r').unwrap_or(line);
     let chars: Vec<char> = line.chars().collect();
 
     if cursor_col >= chars.len() {
         spans.push(Span::styled(
-            line.to_string(),
+            terminal_text(line).into_owned(),
             Style::default().fg(theme.text_normal),
         ));
         spans.push(Span::styled(
@@ -117,12 +119,15 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
     } else {
         if cursor_col > 0 {
             let before: String = chars[..cursor_col].iter().collect();
-            spans.push(Span::styled(before, Style::default().fg(theme.text_normal)));
+            spans.push(Span::styled(
+                terminal_text(&before).into_owned(),
+                Style::default().fg(theme.text_normal),
+            ));
         }
 
         let cursor_char = chars[cursor_col].to_string();
         spans.push(Span::styled(
-            cursor_char,
+            terminal_text(&cursor_char).into_owned(),
             Style::default()
                 .bg(theme.selection_fg)
                 .fg(theme.selection_bg),
@@ -130,7 +135,10 @@ fn render_edit_line_with_cursor<'a>(line: &'a str, cursor_col: usize, line_num: 
 
         if cursor_col + 1 < chars.len() {
             let after: String = chars[cursor_col + 1..].iter().collect();
-            spans.push(Span::styled(after, Style::default().fg(theme.text_normal)));
+            spans.push(Span::styled(
+                terminal_text(&after).into_owned(),
+                Style::default().fg(theme.text_normal),
+            ));
         }
     }
 
@@ -206,12 +214,18 @@ fn build_status_bar<'a>(
     let status_text = if let Some(msg) = flash_message {
         format!(
             "{} · {} · {} · {}",
-            repo_name, branch_str, state.operation_description, msg
+            terminal_path(repo_name),
+            terminal_text(branch_str),
+            terminal_text(&state.operation_description),
+            terminal_text(msg)
         )
     } else {
         format!(
             "{} · {} · {} · {} fichier(s) non résolu(s)",
-            repo_name, branch_str, state.operation_description, unresolved_count
+            terminal_path(repo_name),
+            terminal_text(branch_str),
+            terminal_text(&state.operation_description),
+            unresolved_count
         )
     };
 
@@ -242,7 +256,7 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
         )
     } else {
         let action_help = match state.resolution_mode {
-            ConflictResolutionMode::File => "Enter:Choisir  o:Ours  t:Theirs  Tab:Panneau  ↑↓:Nav",
+            ConflictResolutionMode::File => "Enter:Choisir  Tab:Panneau  ↑↓:Nav",
             ConflictResolutionMode::Block => {
                 "Espace:Choisir  Enter:Valider  b:Les deux  Tab:Panneau  ↑↓:Nav"
             }
@@ -259,4 +273,23 @@ fn build_help_bar<'a>(state: &'a ConflictsState) -> Paragraph<'a> {
     Paragraph::new(help_text)
         .style(Style::default().fg(theme.text_secondary))
         .alignment(Alignment::Center)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conflict_editor_renders_control_characters_as_inert_text() {
+        let source = "é界\u{1b}]52;c;secret\u{7}\u{202e}texte\r";
+        for cursor in 0..=source.chars().count() {
+            let rendered = render_edit_line_with_cursor(source, cursor, "1 │");
+            for span in rendered.spans {
+                assert!(!span
+                    .content
+                    .chars()
+                    .any(|character| character.is_control() || character == '\u{202e}'));
+            }
+        }
+    }
 }

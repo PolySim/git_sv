@@ -106,7 +106,11 @@ fn render_image(
     theme: &Theme,
 ) -> usize {
     let fullscreen_indicator = if is_fullscreen { " [ZOOM]" } else { "" };
-    let title = format!(" Image - {}{} ", diff.path, fullscreen_indicator);
+    let title = format!(
+        " Image - {}{} ",
+        crate::utils::terminal_path(&diff.path),
+        fullscreen_indicator
+    );
     let title = if is_focused {
         format!("▶ {}", title.trim_start())
     } else {
@@ -186,11 +190,19 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
             text_owned(
                 format!(
                     " Diff - {} (+{}/-{}){}{} ",
-                    d.path, d.additions, d.deletions, fullscreen_indicator, scroll_indicator
+                    crate::utils::terminal_path(&d.path),
+                    d.additions,
+                    d.deletions,
+                    fullscreen_indicator,
+                    scroll_indicator
                 ),
                 format!(
                     " Diff - {} (+{}/-{}){}{} ",
-                    d.path, d.additions, d.deletions, fullscreen_indicator, scroll_indicator
+                    crate::utils::terminal_path(&d.path),
+                    d.additions,
+                    d.deletions,
+                    fullscreen_indicator,
+                    scroll_indicator
                 ),
             )
         }
@@ -209,8 +221,14 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         title
     };
 
+    let content = visible_diff_lines(
+        content,
+        scroll_offset,
+        horizontal_offset,
+        area.width.saturating_sub(2),
+        area.height.saturating_sub(2),
+    );
     let paragraph = Paragraph::new(content)
-        .scroll((scroll_offset as u16, horizontal_offset as u16))
         .style(Style::default().fg(theme.text_normal).bg(theme.background))
         .block(
             Block::default()
@@ -248,11 +266,17 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
             text_owned(
                 format!(
                     " Diff (cote a cote) - {} (+{}/-{}){} ",
-                    d.path, d.additions, d.deletions, fullscreen_indicator
+                    crate::utils::terminal_path(&d.path),
+                    d.additions,
+                    d.deletions,
+                    fullscreen_indicator
                 ),
                 format!(
                     " Diff (side-by-side) - {} (+{}/-{}){} ",
-                    d.path, d.additions, d.deletions, fullscreen_indicator
+                    crate::utils::terminal_path(&d.path),
+                    d.additions,
+                    d.deletions,
+                    fullscreen_indicator
                 ),
             )
         }
@@ -289,15 +313,8 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         .border_style(border_style);
 
     // La bordure prend toute l'aire, mais on rend le contenu à l'intérieur.
+    let inner_area = block.inner(area);
     frame.render_widget(block, area);
-
-    // Ajuster les chunks pour tenir compte des bordures (marge de 1 de chaque côté).
-    let inner_area = Rect {
-        x: area.x + 1,
-        y: area.y + 1,
-        width: area.width.saturating_sub(2),
-        height: area.height.saturating_sub(2),
-    };
 
     let inner_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -314,9 +331,14 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         let total = left_lines.len().max(right_lines.len());
 
         // Colonne ancienne (suppressions + contexte).
-        let left_paragraph = Paragraph::new(left_lines)
-            .style(Style::default().fg(theme.text_normal).bg(theme.background))
-            .scroll((scroll_offset as u16, horizontal_offset as u16));
+        let left_paragraph = Paragraph::new(visible_diff_lines(
+            left_lines,
+            scroll_offset,
+            horizontal_offset,
+            inner_chunks[0].width,
+            inner_chunks[0].height,
+        ))
+        .style(Style::default().fg(theme.text_normal).bg(theme.background));
         frame.render_widget(left_paragraph, inner_chunks[0]);
 
         // Séparateur vertical.
@@ -328,9 +350,14 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         frame.render_widget(separator, inner_chunks[1]);
 
         // Colonne nouvelle (ajouts + contexte).
-        let right_paragraph = Paragraph::new(right_lines)
-            .style(Style::default().fg(theme.text_normal).bg(theme.background))
-            .scroll((scroll_offset as u16, horizontal_offset as u16));
+        let right_paragraph = Paragraph::new(visible_diff_lines(
+            right_lines,
+            scroll_offset,
+            horizontal_offset,
+            inner_chunks[2].width,
+            inner_chunks[2].height,
+        ))
+        .style(Style::default().fg(theme.text_normal).bg(theme.background));
         frame.render_widget(right_paragraph, inner_chunks[2]);
 
         total
@@ -345,6 +372,22 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     };
 
     total_lines
+}
+
+/// Conserve des offsets larges et découpe seulement les graphèmes effectivement affichés.
+fn visible_diff_lines(
+    lines: Vec<Line<'static>>,
+    top: usize,
+    left: usize,
+    width: u16,
+    height: u16,
+) -> Vec<Line<'static>> {
+    lines
+        .into_iter()
+        .skip(top)
+        .take(usize::from(height))
+        .map(|line| super::text_edit::clip_line(line, left, usize::from(width)))
+        .collect()
 }
 
 /// Construit les lignes de diff avec coloration (mode unifié).
@@ -366,7 +409,7 @@ fn build_diff_lines(diff: &FileDiff, selected_line: Option<usize>) -> Vec<Line<'
             if line.line_type == DiffLineType::HunkHeader {
                 // Header de hunk : pas de numéros de ligne, juste le contenu en cyan.
                 spans.push(Span::styled(
-                    line.content.clone(),
+                    crate::utils::terminal_text(&line.content).into_owned(),
                     Style::default()
                         .fg(theme.info)
                         .add_modifier(ratatui::style::Modifier::BOLD),
@@ -393,7 +436,10 @@ fn build_diff_lines(diff: &FileDiff, selected_line: Option<usize>) -> Vec<Line<'
                 } else {
                     style
                 };
-                spans.push(Span::styled(format!("{}{}", prefix, line.content), style));
+                spans.push(Span::styled(
+                    format!("{}{}", prefix, crate::utils::terminal_text(&line.content)),
+                    style,
+                ));
             }
 
             if selected_line == Some(line_index) {
@@ -460,7 +506,10 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
                 } else {
                     style
                 };
-                spans.push(Span::styled(format!("- {}", line.content), style));
+                spans.push(Span::styled(
+                    format!("- {}", crate::utils::terminal_text(&line.content)),
+                    style,
+                ));
 
                 Line::from(spans)
             }
@@ -500,7 +549,10 @@ fn build_side_by_side_lines(diff: &FileDiff) -> (Vec<Line<'static>>, Vec<Line<'s
                 } else {
                     style
                 };
-                spans.push(Span::styled(format!("+ {}", line.content), style));
+                spans.push(Span::styled(
+                    format!("+ {}", crate::utils::terminal_text(&line.content)),
+                    style,
+                ));
 
                 Line::from(spans)
             }
@@ -628,6 +680,80 @@ fn align_diff_lines(lines: &[crate::git::diff::DiffLine]) -> Vec<LinePair> {
 mod tests {
     use super::*;
     use crate::git::diff::{DiffLine, DiffLineType};
+
+    #[test]
+    fn horizontal_scroll_beyond_u16_keeps_the_correct_content() {
+        let diff = FileDiff {
+            path: "long.txt".to_string(),
+            status: crate::git::diff::DiffStatus::Modified,
+            lines: vec![create_test_line(
+                DiffLineType::Context,
+                &format!("{}VISIBLE", "x".repeat(70_000)),
+                Some(1),
+                Some(1),
+            )],
+            additions: 0,
+            deletions: 0,
+            image_preview: None,
+        };
+        for mode in [DiffViewMode::Unified, DiffViewMode::SideBySide] {
+            let backend = ratatui::backend::TestBackend::new(160, 8);
+            let mut terminal = ratatui::Terminal::new(backend).unwrap();
+            let mut image_state = ImagePreviewState::default();
+            terminal
+                .draw(|frame| {
+                    render(
+                        frame,
+                        DiffRenderContext {
+                            diff: Some(&diff),
+                            scroll_offset: 0,
+                            horizontal_offset: 70_000,
+                            area: frame.area(),
+                            is_focused: false,
+                            view_mode: mode,
+                            is_fullscreen: false,
+                            image_state: &mut image_state,
+                            selected_line: None,
+                        },
+                    );
+                })
+                .unwrap();
+            let content: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(content.contains("VISIBLE"), "mode {mode:?}");
+        }
+    }
+
+    #[test]
+    fn diff_controls_are_visible_without_changing_source_or_pairing() {
+        let source = "é\t\u{1b}[31m\u{202e}r\"a\\nb\"";
+        let diff = FileDiff {
+            path: "é\nfile.txt".to_string(),
+            status: crate::git::diff::DiffStatus::Modified,
+            lines: vec![create_test_line(
+                DiffLineType::Context,
+                source,
+                Some(1),
+                Some(1),
+            )],
+            additions: 0,
+            deletions: 0,
+            image_preview: None,
+        };
+        let lines = build_diff_lines(&diff, None);
+        let rendered = lines[0].to_string();
+        assert!(rendered.contains("é\\t\\x1b[31m\\u{202e}r\"a\\nb\""));
+        assert!(!rendered.chars().any(char::is_control));
+        let pairs = align_diff_lines(&diff.lines);
+        assert_eq!(pairs[0].left.as_ref().unwrap().content, source);
+        assert_eq!(pairs[0].right.as_ref().unwrap().content, source);
+        assert_eq!(diff.lines[0].content, source);
+    }
 
     fn create_test_line(
         line_type: DiffLineType,

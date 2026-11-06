@@ -99,6 +99,20 @@ fn handle_partial_change(state: &mut AppState, operation: PartialChange) -> Resu
         state.set_flash_message("Diff tronqué : actions partielles indisponibles. Indexez ou désindexez le fichier entier.");
         return Ok(());
     }
+    let current = match expected_focus {
+        crate::state::StagingFocus::Unstaged => {
+            crate::git::diff::working_dir_file_diff(&state.repo.repo, &diff.path)
+        }
+        _ => crate::git::diff::staged_file_diff(&state.repo.repo, &diff.path),
+    }?;
+    if !same_displayed_diff(&diff, &current) {
+        state.mark_dirty();
+        refresh_staging(state)?;
+        state.set_flash_message(
+            "Le diff a changé ; sélectionnez à nouveau la modification à indexer ou désindexer",
+        );
+        return Ok(());
+    }
     let selected_line = state.staging_state.diff_selected_line;
     let result = match operation {
         PartialChange::StageHunk => diff.hunk_at_line(selected_line).map_or_else(
@@ -146,6 +160,28 @@ fn handle_partial_change(state: &mut AppState, operation: PartialChange) -> Resu
         Err(error) => state.set_flash_message(error),
     }
     Ok(())
+}
+
+fn same_displayed_diff(
+    previous: &crate::git::diff::FileDiff,
+    current: &crate::git::diff::FileDiff,
+) -> bool {
+    previous.path == current.path
+        && previous.status == current.status
+        && !current.is_truncated()
+        && previous.additions == current.additions
+        && previous.deletions == current.deletions
+        && previous.lines.len() == current.lines.len()
+        && previous
+            .lines
+            .iter()
+            .zip(&current.lines)
+            .all(|(before, after)| {
+                before.line_type == after.line_type
+                    && before.content == after.content
+                    && before.old_lineno == after.old_lineno
+                    && before.new_lineno == after.new_lineno
+            })
 }
 
 pub(super) fn handle_discard_file(state: &mut AppState) -> Result<()> {

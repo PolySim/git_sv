@@ -8,41 +8,54 @@ use crate::error::Result;
 /// Discard les modifications d'un fichier spécifique (git checkout -- file).
 /// Cette opération restaure le fichier à son état dans l'index, sans modifier le staging.
 pub fn discard_file(repo: &Repository, file_path: &str) -> Result<()> {
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| git2::Error::from_str("Impossible de trouver le chemin du repository"))?;
+    let full_path = crate::git::helpers::worktree_path(repo, std::path::Path::new(file_path))?;
+    ensure_not_directory(&full_path)?;
     let status = repo.status_file(std::path::Path::new(file_path))?;
 
     if status.is_wt_new() && !status.is_index_new() {
-        let workdir = repo.workdir().ok_or_else(|| {
-            git2::Error::from_str("Impossible de trouver le chemin du repository")
-        })?;
-        let full_path = workdir.join(file_path);
-
-        let metadata = fs::symlink_metadata(&full_path)?;
-        if metadata.is_dir() {
-            fs::remove_dir_all(&full_path)?;
-        } else {
-            fs::remove_file(&full_path)?;
-        }
+        fs::remove_file(&full_path)?;
 
         return Ok(());
     }
 
     // Restaurer un chemin littéral, même pour un nom contenant des crochets.
-    let workdir = repo
-        .workdir()
-        .ok_or_else(|| git2::Error::from_str("Working tree introuvable"))?;
-    let output = std::process::Command::new("git")
-        .args([
+    run_git_discard(
+        workdir,
+        &[
             "--literal-pathspecs",
             "restore",
             "--worktree",
             "--",
             file_path,
-        ])
-        .current_dir(workdir)
-        .output()?;
+        ],
+    )
+}
+
+fn ensure_not_directory(path: &std::path::Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Err(crate::error::GitSvError::Other(
+            "Discard refusé : un dossier pourrait contenir des fichiers à conserver".into(),
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn run_git_discard(workdir: &std::path::Path, args: &[&str]) -> Result<()> {
+    let mut command = std::process::Command::new("git");
+    command.args(args).current_dir(workdir);
+    let output = crate::git::helpers::run_command_with_timeout(
+        command,
+        "discard",
+        std::time::Duration::from_secs(30),
+    )?;
     if !output.status.success() {
         return Err(crate::error::GitSvError::OperationFailed {
-            operation: "git restore",
+            operation: "discard",
             details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         });
     }
@@ -51,22 +64,142 @@ pub fn discard_file(repo: &Repository, file_path: &str) -> Result<()> {
 }
 
 /// Discard toutes les modifications non stagées (git checkout -- .).
-/// Cette opération restaure les fichiers depuis l'index et conserve le staging.
+/// Conserve le staging, les fichiers ignorés et les dépôts Git imbriqués.
 pub fn discard_all(repo: &Repository) -> Result<()> {
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| git2::Error::from_str("Working tree introuvable"))?;
+    let index = repo.index()?;
+    // Vérifier uniquement les fichiers modifiés avant de toucher au working tree.
+    let diff = repo.diff_index_to_workdir(Some(&index), None)?;
+    for delta in diff.deltas() {
+        if let Some(path) = delta.old_file().path() {
+            if index
+                .get_path(path, 0)
+                .is_some_and(|entry| entry.mode != 0o160000)
+            {
+                let full_path = crate::git::helpers::worktree_path(repo, path)?;
+                ensure_not_directory(&full_path)?;
+            }
+        }
+    }
     let mut checkout_builder = git2::build::CheckoutBuilder::new();
     checkout_builder.force();
     checkout_builder.update_index(false);
-    checkout_builder.remove_untracked(true);
 
     repo.checkout_index(None, Some(&mut checkout_builder))?;
-
-    Ok(())
+    // Un seul -f protège les dépôts imbriqués ; sans -x, Git conserve les ignorés.
+    run_git_discard(workdir, &["clean", "-f", "-d"])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::{commit_file, create_test_repo};
+
+    #[cfg(unix)]
+    #[test]
+    fn discard_does_not_modify_files_through_a_replaced_parent_symlink() {
+        for (tracked, sentinel) in [
+            (false, b"external sentinel\n".as_slice()),
+            (true, b"external sentinel\n".as_slice()),
+            (true, b"base\n".as_slice()),
+        ] {
+            for all in [false, true] {
+                let (temp, repo) = create_test_repo();
+                commit_file(&repo, "base.txt", "base\n", "base");
+                if tracked {
+                    commit_file(&repo, "folder/file.txt", "base\n", "tracked");
+                    fs::remove_dir_all(temp.path().join("folder")).unwrap();
+                }
+                let outside = tempfile::TempDir::new().unwrap();
+                fs::write(outside.path().join("file.txt"), sentinel).unwrap();
+                std::os::unix::fs::symlink(outside.path(), temp.path().join("folder")).unwrap();
+                let _ = if all {
+                    discard_all(&repo)
+                } else {
+                    discard_file(&repo, "folder/file.txt")
+                };
+                assert_eq!(
+                    fs::read(outside.path().join("file.txt")).ok(),
+                    Some(sentinel.to_vec()),
+                    "tracked={tracked}, all={all}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn discard_recreates_missing_tracked_parent_directories() {
+        let (temp, repo) = create_test_repo();
+        commit_file(&repo, "folder/nested/file.txt", "base\n", "base");
+        fs::remove_dir_all(temp.path().join("folder")).unwrap();
+        discard_file(&repo, "folder/nested/file.txt").unwrap();
+        assert_eq!(
+            fs::read(temp.path().join("folder/nested/file.txt")).unwrap(),
+            b"base\n"
+        );
+    }
+
+    #[test]
+    fn discard_all_preserves_ignored_files_inside_untracked_directories() {
+        let (directory, repo) = create_test_repo();
+        commit_file(&repo, ".gitignore", "*.ignored\n", "ignore");
+        fs::create_dir(directory.path().join("output")).unwrap();
+        fs::write(
+            directory.path().join("output/secret.ignored"),
+            b"private data",
+        )
+        .unwrap();
+        fs::write(directory.path().join("output/temporary.txt"), b"discard").unwrap();
+        discard_all(&repo).unwrap();
+        assert_eq!(
+            fs::read(directory.path().join("output/secret.ignored")).unwrap(),
+            b"private data"
+        );
+        assert!(!directory.path().join("output/temporary.txt").exists());
+    }
+
+    #[test]
+    fn discard_does_not_remove_an_embedded_git_repository() {
+        for all in [false, true] {
+            let (directory, repo) = create_test_repo();
+            commit_file(&repo, "tracked.txt", "tracked\n", "base");
+            let nested = git2::Repository::init(directory.path().join("nested")).unwrap();
+            fs::write(nested.workdir().unwrap().join("keep.txt"), b"nested data").unwrap();
+            let nested_head = fs::read(nested.path().join("HEAD")).unwrap();
+            if all {
+                discard_all(&repo).unwrap();
+            } else {
+                let _ = discard_file(&repo, "nested/");
+            }
+            assert_eq!(
+                fs::read(nested.workdir().unwrap().join("keep.txt")).unwrap(),
+                b"nested data"
+            );
+            assert_eq!(fs::read(nested.path().join("HEAD")).unwrap(), nested_head);
+        }
+    }
+
+    #[test]
+    fn discard_refuses_to_replace_a_directory_containing_ignored_data() {
+        for all in [false, true] {
+            let (directory, repo) = create_test_repo();
+            commit_file(&repo, ".gitignore", "*.ignored\n", "ignore");
+            commit_file(&repo, "tracked.txt", "base\n", "base");
+            fs::remove_file(directory.path().join("tracked.txt")).unwrap();
+            fs::create_dir(directory.path().join("tracked.txt")).unwrap();
+            let private_path = directory.path().join("tracked.txt/private.ignored");
+            fs::write(&private_path, b"private data").unwrap();
+            let result = if all {
+                discard_all(&repo)
+            } else {
+                discard_file(&repo, "tracked.txt")
+            };
+            assert_eq!(fs::read(private_path).unwrap(), b"private data");
+            assert!(result.is_err());
+        }
+    }
 
     #[test]
     fn discard_preserves_staged_content_and_index() {

@@ -76,7 +76,7 @@ pub fn list_stashes(repo: &mut Repository) -> Result<Vec<StashEntry>> {
     // Maintenant charger les fichiers pour chaque stash
     let mut entries = Vec::new();
     for (index, message, branch, oid) in temp_entries {
-        let files = stash_files(repo, oid).unwrap_or_default();
+        let files = stash_files(repo, oid)?;
         entries.push(StashEntry {
             index,
             message,
@@ -112,16 +112,16 @@ pub fn stash_files(repo: &Repository, stash_oid: Oid) -> Result<Vec<StashFile>> 
     let parent_tree = parent.tree()?;
 
     let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)?;
-    let mut files = collect_stash_files(&diff);
+    let mut files = collect_stash_files(&diff)?;
     if stash_commit.parent_count() > 2 {
         let untracked_tree = stash_commit.parent(2)?.tree()?;
         let untracked_diff = repo.diff_tree_to_tree(None, Some(&untracked_tree), None)?;
-        files.extend(collect_stash_files(&untracked_diff));
+        files.extend(collect_stash_files(&untracked_diff)?);
     }
     Ok(files)
 }
 
-fn collect_stash_files(diff: &git2::Diff<'_>) -> Vec<StashFile> {
+fn collect_stash_files(diff: &git2::Diff<'_>) -> Result<Vec<StashFile>> {
     let mut files = Vec::new();
     // Les métadonnées suffisent : foreach construirait aussi chaque patch.
     for delta in diff.deltas() {
@@ -136,11 +136,11 @@ fn collect_stash_files(diff: &git2::Diff<'_>) -> Vec<StashFile> {
             _ => continue,
         };
         files.push(StashFile {
-            path: path.to_string_lossy().to_string(),
+            path: crate::git::helpers::path_as_utf8(path)?.to_string(),
             status,
         });
     }
-    files
+    Ok(files)
 }
 
 /// Récupère le diff complet d'un fichier dans un stash.
@@ -220,14 +220,29 @@ pub fn save_stash(repo: &mut Repository, message: Option<&str>) -> Result<()> {
 pub fn apply_stash(repo: &mut Repository, index: usize) -> Result<()> {
     let mut opts = git2::StashApplyOptions::new();
     repo.stash_apply(index, Some(&mut opts))?;
+    // libgit2 peut réussir le checkout tout en laissant des entrées en conflit.
+    let mut updated_index = repo.index()?;
+    updated_index.read(true)?;
+    if updated_index.has_conflicts() {
+        return Err(crate::error::GitSvError::Other(
+            "Le stash a produit des conflits ; il est conservé jusqu'à leur résolution".into(),
+        ));
+    }
     Ok(())
 }
 
 /// Applique et supprime le stash à l'index donné.
 pub fn pop_stash(repo: &mut Repository, index: usize) -> Result<()> {
-    let mut opts = git2::StashApplyOptions::new();
-    repo.stash_pop(index, Some(&mut opts))?;
-    Ok(())
+    let reference = format!("stash@{{{index}}}");
+    let selected = repo.revparse_single(&reference)?.id();
+    apply_stash(repo, index)?;
+    // Une modification concurrente de la pile ne doit pas supprimer un autre stash.
+    if repo.revparse_single(&reference)?.id() != selected {
+        return Err(crate::error::GitSvError::Other(
+            "Stash appliqué mais conservé : la liste des stashes a changé".into(),
+        ));
+    }
+    drop_stash(repo, index)
 }
 
 /// Supprime le stash à l'index donné sans l'appliquer.
@@ -237,26 +252,29 @@ pub fn drop_stash(repo: &mut Repository, index: usize) -> Result<()> {
 }
 
 /// Exécute `git stash push` via la CLI et interprète le résultat.
-fn run_stash_push_command(repo_path: &str, args: &[&str]) -> Result<StashPushOutcome> {
+fn run_stash_push_command(
+    repo_path: &str,
+    args: &[&str],
+    literal_paths: bool,
+) -> Result<StashPushOutcome> {
     let repo = Repository::discover(repo_path)?;
     let previous = repo.refname_to_id("refs/stash").ok();
     let mut cmd = Command::new("git");
-    cmd.arg("stash").arg("push");
-    let mut paths = false;
-    for argument in args {
-        if paths {
-            cmd.arg(format!(":(literal){argument}"));
-        } else {
-            cmd.arg(argument);
-            paths = *argument == "--";
-        }
+    // Sans chemin, stash utilise lui-même :/ pour nettoyer les fichiers sauvés.
+    if literal_paths {
+        cmd.arg("--literal-pathspecs");
     }
+    cmd.args(["stash", "push"]).args(args);
     cmd.current_dir(
         repo.workdir()
             .ok_or_else(|| git2::Error::from_str("Working tree introuvable"))?,
     );
 
-    let output = cmd.output()?;
+    let output = crate::git::helpers::run_command_with_timeout(
+        cmd,
+        "stash_push",
+        std::time::Duration::from_secs(30),
+    )?;
     if !output.status.success() {
         return Err(crate::error::GitSvError::OperationFailed {
             operation: "stash_push",
@@ -278,6 +296,7 @@ pub fn stash_file(
     file_path: &str,
     message: Option<&str>,
 ) -> Result<StashPushOutcome> {
+    ensure_stash_path_has_no_unrelated_staging(repo_path, file_path)?;
     let mut args = vec!["--keep-index", "--include-untracked"];
     if let Some(msg) = message {
         args.push("-m");
@@ -286,7 +305,7 @@ pub fn stash_file(
     args.push("--");
     args.push(file_path);
 
-    run_stash_push_command(repo_path, &args)
+    run_stash_push_command(repo_path, &args, true)
 }
 
 pub fn stash_untracked_file(
@@ -294,6 +313,7 @@ pub fn stash_untracked_file(
     file_path: &str,
     message: Option<&str>,
 ) -> Result<StashPushOutcome> {
+    ensure_stash_path_has_no_unrelated_staging(repo_path, file_path)?;
     let mut args = vec!["--include-untracked"];
     if let Some(msg) = message {
         args.push("-m");
@@ -302,7 +322,31 @@ pub fn stash_untracked_file(
     args.push("--");
     args.push(file_path);
 
-    run_stash_push_command(repo_path, &args)
+    run_stash_push_command(repo_path, &args, true)
+}
+
+/// Refuse qu'un stash ciblé capture aussi l'index d'autres fichiers.
+fn ensure_stash_path_has_no_unrelated_staging(repo_path: &str, file_path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path)?;
+    let head = match repo.head() {
+        Ok(head) => Some(head.peel_to_tree()?),
+        Err(error) if error.code() == git2::ErrorCode::UnbornBranch => None,
+        Err(error) => return Err(error.into()),
+    };
+    let diff = repo.diff_tree_to_index(head.as_ref(), None, None)?;
+    let selected = std::path::Path::new(file_path);
+    for delta in diff.deltas() {
+        if [delta.old_file(), delta.new_file()]
+            .iter()
+            .filter_map(|file| file.path())
+            .any(|path| path != selected)
+        {
+            return Err(crate::error::GitSvError::Other(
+                "Stash ciblé refusé : désindexez d'abord les autres fichiers pour éviter de les inclure dans ce stash".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Stash tous les changements non stagés (unstaged + untracked) en conservant l'index.
@@ -328,13 +372,169 @@ pub fn stash_unstaged_files(repo_path: &str, message: Option<&str>) -> Result<St
     if let Some(message) = message {
         args.extend(["-m", message]);
     }
-    run_stash_push_command(repo_path, &args)
+    run_stash_push_command(repo_path, &args, false)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::git::tests::test_utils::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn stash_does_not_import_or_modify_files_through_a_replaced_parent_symlink() {
+        for all in [false, true] {
+            let (temp, mut repo) = create_test_repo();
+            commit_file(&repo, "folder/file.txt", "base\n", "base");
+            std::fs::remove_dir_all(temp.path().join("folder")).unwrap();
+            let outside = tempfile::TempDir::new().unwrap();
+            std::fs::write(outside.path().join("file.txt"), b"external secret\n").unwrap();
+            std::os::unix::fs::symlink(outside.path(), temp.path().join("folder")).unwrap();
+            let _ = if all {
+                stash_unstaged_files(temp.path().to_str().unwrap(), None)
+            } else {
+                stash_file(temp.path().to_str().unwrap(), "folder/file.txt", None)
+            };
+            assert_eq!(
+                std::fs::read(outside.path().join("file.txt")).unwrap(),
+                b"external secret\n"
+            );
+            for stash in list_stashes(&mut repo).unwrap() {
+                let tree = repo.find_commit(stash.oid).unwrap().tree().unwrap();
+                if let Ok(entry) = tree.get_path(std::path::Path::new("folder/file.txt")) {
+                    assert_ne!(
+                        repo.find_blob(entry.id()).unwrap().content(),
+                        b"external secret\n"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stash_files_reject_non_utf8_paths_without_lossy_aliases() {
+        let (_temp, repo) = create_test_repo();
+        let base = commit_file(&repo, "base.txt", "base\n", "base");
+        add_raw_index_file(&repo, b"invalid-\xff.txt", b"private content");
+        let tree_id = repo.index().unwrap().write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let parent = repo.find_commit(base).unwrap();
+        let signature = repo.signature().unwrap();
+        let stash = repo
+            .commit(None, &signature, &signature, "stash", &tree, &[&parent])
+            .unwrap();
+        assert!(matches!(
+            stash_files(&repo, stash),
+            Err(crate::error::GitSvError::UnsupportedPathEncoding)
+        ));
+    }
+
+    #[test]
+    fn successful_stash_pop_restores_bytes_and_drops_only_the_selected_stash() {
+        let (temp, mut repo) = create_test_repo();
+        repo.config()
+            .unwrap()
+            .set_bool("core.autocrlf", false)
+            .unwrap();
+        commit_file(&repo, "été 😀.txt", "base\r\n", "base");
+        create_file(&repo, "été 😀.txt", "précédent\r\n");
+        save_stash(&mut repo, Some("older")).unwrap();
+        let older = repo.refname_to_id("refs/stash").unwrap();
+        std::fs::write(temp.path().join("été 😀.txt"), b"binary\0\xff\r\n").unwrap();
+        save_stash(&mut repo, Some("binary")).unwrap();
+        pop_stash(&mut repo, 0).unwrap();
+        assert_eq!(
+            std::fs::read(temp.path().join("été 😀.txt")).unwrap(),
+            b"binary\0\xff\r\n"
+        );
+        let remaining = list_stashes(&mut repo).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].oid, older);
+    }
+
+    #[test]
+    fn stash_file_refuses_to_capture_an_unrelated_staged_file() {
+        let (temp, mut repo) = create_test_repo();
+        commit_file(&repo, "selected.txt", "base\n", "base");
+        commit_file(&repo, "other.txt", "base\n", "other");
+        create_file(&repo, "other.txt", "staged secret\n");
+        crate::git::commit::stage_file(&repo, "other.txt").unwrap();
+        create_file(&repo, "selected.txt", "selected change\n");
+        let index_before = repo.index().unwrap().write_tree().unwrap();
+        assert!(stash_file(
+            temp.path().to_str().unwrap(),
+            "selected.txt",
+            Some("scoped")
+        )
+        .is_err());
+        assert!(list_stashes(&mut repo).unwrap().is_empty());
+        assert_eq!(
+            std::fs::read(temp.path().join("selected.txt")).unwrap(),
+            b"selected change\n"
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("other.txt")).unwrap(),
+            b"staged secret\n"
+        );
+        assert_eq!(repo.index().unwrap().write_tree().unwrap(), index_before);
+    }
+
+    #[test]
+    fn stash_file_pathspec_is_literal_and_keeps_other_worktree_changes() {
+        let (temp, mut repo) = create_test_repo();
+        commit_file(&repo, "[a].txt", "selected base\n", "selected");
+        commit_file(&repo, "a.txt", "other base\n", "other");
+        create_file(&repo, "[a].txt", "selected change\n");
+        create_file(&repo, "a.txt", "other change\n");
+        stash_file(temp.path().to_str().unwrap(), "[a].txt", Some("--")).unwrap();
+        let stashes = list_stashes(&mut repo).unwrap();
+        assert_eq!(stashes[0].files.len(), 1);
+        assert_eq!(stashes[0].files[0].path, "[a].txt");
+        assert_eq!(
+            std::fs::read(temp.path().join("[a].txt")).unwrap(),
+            b"selected base\n"
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("a.txt")).unwrap(),
+            b"other change\n"
+        );
+    }
+
+    #[test]
+    fn failed_stash_application_keeps_the_stash_and_unrelated_edits() {
+        for pop in [true, false] {
+            let (temp, mut repo) = create_test_repo();
+            commit_file(&repo, "unrelated.txt", "base\n", "base");
+            commit_file(&repo, "conflict.txt", "base\n", "conflict base");
+            create_file(&repo, "conflict.txt", "stashed\n");
+            save_stash(&mut repo, Some("keep on conflict")).unwrap();
+            let saved = repo.refname_to_id("refs/stash").unwrap();
+            commit_file(
+                &repo,
+                "conflict.txt",
+                "current branch\n",
+                "conflicting change",
+            );
+            create_file(&repo, "unrelated.txt", "local edit\n");
+            let head_before = repo.head().unwrap().target();
+            let result = if pop {
+                pop_stash(&mut repo, 0)
+            } else {
+                apply_stash(&mut repo, 0)
+            };
+            assert_eq!(repo.refname_to_id("refs/stash").unwrap(), saved);
+            assert_eq!(repo.head().unwrap().target(), head_before);
+            assert_eq!(
+                std::fs::read(temp.path().join("unrelated.txt")).unwrap(),
+                b"local edit\n"
+            );
+            let conflict = std::fs::read_to_string(temp.path().join("conflict.txt")).unwrap();
+            assert!(conflict.contains("current branch"));
+            assert!(conflict.contains("stashed"));
+            assert!(repo.index().unwrap().has_conflicts());
+            assert!(result.is_err());
+        }
+    }
 
     #[test]
     fn unstaged_stash_does_not_pop_an_existing_stash_when_only_index_changed() {

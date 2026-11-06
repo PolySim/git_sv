@@ -37,7 +37,7 @@ fn run(repo: &Repository, arguments: &[&str]) -> Result<String> {
     let workdir = repo
         .workdir()
         .ok_or_else(|| GitSvError::Other("Working tree Git introuvable".into()))?;
-    let output = Command::new("git")
+    let output = super::helpers::clear_repository_environment(&mut Command::new("git"))
         .args(arguments)
         .current_dir(workdir)
         .output()?;

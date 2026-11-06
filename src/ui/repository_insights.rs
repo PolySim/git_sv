@@ -55,7 +55,7 @@ fn build_content(insights: &RepositoryInsights) -> Vec<Line<'static>> {
     };
     lines.push(Line::from(vec![
         Span::styled(format!("  {symbol} "), Style::default().fg(color)),
-        Span::raw(insights.signature.summary()),
+        Span::raw(crate::utils::terminal_text(&insights.signature.summary()).into_owned()),
     ]));
     lines.push(Line::from(""));
 
@@ -78,7 +78,7 @@ fn build_content(insights: &RepositoryInsights) -> Vec<Line<'static>> {
             };
             lines.push(Line::from(vec![
                 Span::styled(format!("  {symbol} "), Style::default().fg(color)),
-                Span::raw(hook.name.clone()),
+                Span::raw(crate::utils::terminal_text(&hook.name).into_owned()),
                 Span::styled(suffix, Style::default().fg(theme.text_secondary)),
             ]));
         }
@@ -106,14 +106,14 @@ fn build_content(insights: &RepositoryInsights) -> Vec<Line<'static>> {
             lines.push(Line::from(vec![
                 Span::styled(format!("  {symbol} "), Style::default().fg(color)),
                 Span::styled(
-                    submodule.path.clone(),
+                    crate::utils::terminal_path(&submodule.path).into_owned(),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(format!(" · {revision} · {}", submodule.state.label())),
             ]));
             if let Some(url) = &submodule.url {
                 lines.push(Line::from(Span::styled(
-                    format!("      {url}"),
+                    format!("      {}", crate::utils::terminal_text(url)),
                     Style::default().fg(theme.text_secondary),
                 )));
             }

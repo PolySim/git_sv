@@ -6,8 +6,8 @@
 
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
-        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -99,6 +99,13 @@ fn setup_terminal() -> Result<(Terminal<CrosstermBackend<Stdout>>, bool)> {
         )?;
     }
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    // Un collage doit arriver comme du texte, jamais comme une série de raccourcis.
+    // Les anciennes consoles Windows peuvent ne pas proposer ce protocole.
+    if let Err(error) = execute!(stdout, EnableBracketedPaste) {
+        if error.kind() != io::ErrorKind::Unsupported {
+            return Err(error.into());
+        }
+    }
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
     rollback.active = false;
@@ -118,6 +125,7 @@ fn restore_terminal(
     };
     let screen_result = execute!(
         terminal.backend_mut(),
+        DisableBracketedPaste,
         LeaveAlternateScreen,
         DisableMouseCapture
     );
@@ -145,6 +153,7 @@ impl Drop for SetupRollback {
             }
             let _ = execute!(
                 stdout,
+                DisableBracketedPaste,
                 LeaveAlternateScreen,
                 DisableMouseCapture,
                 crossterm::cursor::Show

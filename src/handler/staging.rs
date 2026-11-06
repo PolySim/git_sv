@@ -91,6 +91,71 @@ mod tests {
     }
 
     #[test]
+    fn partial_staging_refuses_a_diff_changed_since_it_was_displayed() {
+        for action in [
+            StagingAction::StageLine,
+            StagingAction::StageHunk,
+            StagingAction::UnstageLine,
+            StagingAction::UnstageHunk,
+        ] {
+            let unstaging = matches!(
+                action,
+                StagingAction::UnstageLine | StagingAction::UnstageHunk
+            );
+            let (dir, repo) = setup_test_repo();
+            crate::git::tests::test_utils::commit_file(
+                &repo.repo,
+                "file.txt",
+                "start\nend\n",
+                "base",
+            );
+            create_test_file(&dir, "file.txt", "start\nselected\nend\n");
+            if unstaging {
+                crate::git::commit::stage_file(&repo.repo, "file.txt").unwrap();
+            }
+            let mut state = AppState::new(repo, dir.path().display().to_string()).unwrap();
+            state.view_mode = ViewMode::Staging;
+            let focus = if unstaging {
+                StagingFocus::Staged
+            } else {
+                StagingFocus::Unstaged
+            };
+            state.staging_state.focus = focus;
+            state.staging_state.last_file_focus = focus;
+            refresh_staging(&mut state).unwrap();
+            state.staging_state.diff_selected_line = state
+                .staging_state
+                .current_diff
+                .as_ref()
+                .unwrap()
+                .lines
+                .iter()
+                .position(|line| line.content == "selected")
+                .unwrap();
+            create_test_file(&dir, "file.txt", "start\nunexpected\nend\n");
+            if unstaging {
+                crate::git::commit::stage_file(&state.repo.repo, "file.txt").unwrap();
+            }
+            let before = state.repo.repo.index().unwrap().write_tree().unwrap();
+            StagingHandler
+                .handle(&mut HandlerContext { state: &mut state }, action)
+                .unwrap();
+            assert_eq!(
+                state.repo.repo.index().unwrap().write_tree().unwrap(),
+                before
+            );
+            assert_eq!(
+                std::fs::read(dir.path().join("file.txt")).unwrap(),
+                b"start\nunexpected\nend\n"
+            );
+            assert!(state
+                .current_flash_message()
+                .unwrap()
+                .contains("diff a changé"));
+        }
+    }
+
+    #[test]
     fn test_truncated_diff_refuses_partial_staging_without_changing_index() {
         let (dir, repo) = setup_test_repo();
         crate::git::tests::test_utils::commit_file(&repo.repo, "large.txt", "base\n", "Base");

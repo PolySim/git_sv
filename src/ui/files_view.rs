@@ -144,7 +144,10 @@ fn build_commit_file_items<'a>(files: &'a [DiffFile], theme: &Theme) -> Vec<List
                     format!("-{:3} ", deletions),
                     Style::default().fg(theme.error),
                 ),
-                Span::styled(&file.path, Style::default().fg(theme.text_normal)),
+                Span::styled(
+                    crate::utils::terminal_path(&file.path),
+                    Style::default().fg(theme.text_normal),
+                ),
             ]);
 
             ListItem::new(line)
@@ -170,7 +173,10 @@ fn build_status_items<'a>(entries: &'a [StatusEntry], theme: &Theme) -> Vec<List
                     format!(" {:>18} ", entry.display_status()),
                     Style::default().fg(status_color),
                 ),
-                Span::styled(&entry.path, Style::default().fg(theme.text_normal)),
+                Span::styled(
+                    crate::utils::terminal_path(&entry.path),
+                    Style::default().fg(theme.text_normal),
+                ),
             ]);
             ListItem::new(line)
         })

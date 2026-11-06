@@ -1,12 +1,19 @@
+use std::path::Path;
+
 use git2::Repository;
 
 use crate::error::{GitSvError, Result};
 use crate::git::conflict::{ConflictFile, ConflictSection, ConflictType, LineLevelResolution};
 
 /// Parser les marqueurs de conflit dans un fichier.
-pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
+pub fn parse_conflict_file(path: impl AsRef<Path>) -> Result<Vec<ConflictSection>> {
+    let path = path.as_ref();
     let content = std::fs::read_to_string(path).map_err(|e| {
-        GitSvError::Other(format!("Impossible de lire le fichier '{}': {}", path, e))
+        GitSvError::Other(format!(
+            "Impossible de lire le fichier '{}': {}",
+            path.display(),
+            e
+        ))
     })?;
 
     let mut sections = Vec::new();
@@ -14,24 +21,33 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
     let mut context_before = Vec::new();
 
     while let Some(line) = lines.next() {
-        if !line.starts_with("<<<<<<<") {
+        let Some(marker_size) = marker_width(line, '<') else {
             context_before.push(line.to_string());
             continue;
-        }
+        };
 
         let mut ours = Vec::new();
         let mut theirs = Vec::new();
         let mut side = 0;
         let mut closed = false;
         for line in lines.by_ref() {
-            if line.trim_end_matches('\r') == "=======" {
+            let bare_line = line.trim_end_matches('\r');
+            if bare_line.len() == marker_size && bare_line.bytes().all(|byte| byte == b'=') {
+                if side == 2 {
+                    return Err(GitSvError::Other("Marqueurs de conflit ambigus".into()));
+                }
                 side = 2;
-            } else if line.starts_with("|||||||") {
+            } else if marker_width(line, '|') == Some(marker_size) {
                 // Les styles diff3 et zdiff3 incluent l'ancêtre, jamais une résolution.
+                if side != 0 {
+                    return Err(GitSvError::Other("Marqueurs de conflit ambigus".into()));
+                }
                 side = 1;
-            } else if line.starts_with(">>>>>>>") {
+            } else if marker_width(line, '>') == Some(marker_size) {
                 closed = side == 2;
                 break;
+            } else if marker_width(line, '<') == Some(marker_size) {
+                return Err(GitSvError::Other("Marqueurs de conflit imbriqués".into()));
             } else {
                 match side {
                     0 => ours.push(line.to_string()),
@@ -59,6 +75,17 @@ pub fn parse_conflict_file(path: &str) -> Result<Vec<ConflictSection>> {
     Ok(sections)
 }
 
+// Git peut agrandir les marqueurs via conflict-marker-size ; leur suffixe commence par un espace.
+fn marker_width(line: &str, marker: char) -> Option<usize> {
+    let line = line.trim_end_matches('\r');
+    let width = line
+        .bytes()
+        .take_while(|byte| *byte == marker as u8)
+        .count();
+    let suffix = &line[width..];
+    (width >= 7 && (suffix.is_empty() || suffix.starts_with([' ', '\t']))).then_some(width)
+}
+
 /// Liste tous les fichiers en conflit dans le repository.
 pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
     let mut index = repo
@@ -79,25 +106,25 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
         let (path, conflict_type) = match (&conflict.our, &conflict.their, &conflict.ancestor) {
             (Some(ours), Some(_theirs), Some(_ancestor)) => {
                 let p = std::str::from_utf8(&ours.path)
-                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .map_err(|_| GitSvError::UnsupportedPathEncoding)?
                     .to_string();
                 (p, ConflictType::BothModified)
             }
             (Some(ours), None, _) => {
                 let p = std::str::from_utf8(&ours.path)
-                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .map_err(|_| GitSvError::UnsupportedPathEncoding)?
                     .to_string();
                 (p, ConflictType::DeletedByThem)
             }
             (None, Some(theirs), _) => {
                 let p = std::str::from_utf8(&theirs.path)
-                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .map_err(|_| GitSvError::UnsupportedPathEncoding)?
                     .to_string();
                 (p, ConflictType::DeletedByUs)
             }
             (Some(ours), Some(_theirs), None) => {
                 let p = std::str::from_utf8(&ours.path)
-                    .map_err(|_| GitSvError::Other("Chemin de fichier invalide".into()))?
+                    .map_err(|_| GitSvError::UnsupportedPathEncoding)?
                     .to_string();
                 (p, ConflictType::BothAdded)
             }
@@ -107,7 +134,7 @@ pub fn list_conflict_files(repo: &Repository) -> Result<Vec<ConflictFile>> {
         let full_path = super::worktree_path(repo, &path)?;
         let sections = match conflict_type {
             ConflictType::BothModified | ConflictType::BothAdded => {
-                parse_conflict_file(full_path.to_string_lossy().as_ref())?
+                parse_conflict_file(&full_path)?
             }
             ConflictType::DeletedByUs => {
                 let theirs_content = if let Some(ref their_entry) = conflict.their {
@@ -161,7 +188,7 @@ fn read_blob_content(repo: &Repository, entry: &git2::IndexEntry) -> Result<Vec<
         .map_err(|e| GitSvError::Other(format!("Impossible de trouver le blob: {}", e)))?;
     let content = std::str::from_utf8(blob.content())
         .map_err(|_| GitSvError::Other("Contenu du blob invalide".into()))?;
-    Ok(content.lines().map(|l| l.to_string()).collect())
+    Ok(content.split('\n').map(str::to_string).collect())
 }
 
 #[cfg(test)]
@@ -194,6 +221,7 @@ mod tests {
                 assert_eq!(sections.len(), 1);
                 sections[0].resolution = Some(ConflictResolution::Ours);
                 let file = MergeFile {
+                    resolved_content: None,
                     path: "nested/file.txt".into(),
                     has_conflicts: true,
                     conflicts: sections,
@@ -221,5 +249,16 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), "prefix\n<<<<<<< HEAD\nours\n=======\ntheirs\n").unwrap();
         assert!(parse_conflict_file(file.path().to_str().unwrap()).is_err());
+    }
+    #[test]
+    fn audit_custom_marker_size_and_marker_like_content_are_preserved() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "<<<<<<<literal\r\n<<<<<<<<<< HEAD\r\né ours\r\n>>>>>>>>>>literal\r\n|||||||||| base\r\nbase\r\n==========\r\n界 theirs\r\n>>>>>>>>>> other\r\nfin").unwrap();
+        let sections = parse_conflict_file(file.path().to_str().unwrap()).unwrap();
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].context_before, ["<<<<<<<literal\r"]);
+        assert_eq!(sections[0].ours, ["é ours\r", ">>>>>>>>>>literal\r"]);
+        assert_eq!(sections[0].theirs, ["界 theirs\r"]);
+        assert_eq!(sections[0].context_after, ["fin"]);
     }
 }

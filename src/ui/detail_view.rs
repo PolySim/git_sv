@@ -35,10 +35,14 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         let node = &row.node;
         let date_str = format_absolute_time(node.timestamp);
         let oid_str = node.oid.to_string();
-        let author = node.author.clone();
+        let author = crate::utils::terminal_text(&node.author).into_owned();
         let message = node.message.clone();
 
-        let refs_display: Vec<String> = node.refs.iter().map(|r| r.name.clone()).collect();
+        let refs_display: Vec<String> = node
+            .refs
+            .iter()
+            .map(|r| crate::utils::terminal_text(&r.name).into_owned())
+            .collect();
         let refs_display = refs_display.join(", ");
         let has_refs = !node.refs.is_empty();
 
@@ -129,7 +133,10 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
                         .fg(theme.text_secondary)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(branch.clone(), Style::default().fg(theme.success)),
+                Span::styled(
+                    crate::utils::terminal_text(branch).into_owned(),
+                    Style::default().fg(theme.success),
+                ),
             ]));
         }
 
@@ -155,7 +162,7 @@ pub fn render(frame: &mut Frame, ctx: DetailRenderContext<'_>) {
         // Message (multi-ligne)
         for msg_line in message.lines() {
             lines.push(Line::from(Span::styled(
-                msg_line.to_string(),
+                crate::utils::terminal_text(msg_line).into_owned(),
                 Style::default().fg(theme.text_normal),
             )));
         }

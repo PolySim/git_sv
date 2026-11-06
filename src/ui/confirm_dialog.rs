@@ -56,16 +56,18 @@ impl ConfirmAction {
     pub fn message(&self) -> String {
         match self {
             ConfirmAction::BranchDelete(name) => {
+                let name = crate::utils::terminal_text(name);
                 text_owned(
                     format!("Etes-vous sur de vouloir supprimer la branche '{}' ?", name),
                     format!("Are you sure you want to delete branch '{}' ?", name),
                 )
             }
             ConfirmAction::TagDelete(name) => text_owned(
-                format!("Supprimer le tag '{}' ?", name),
-                format!("Delete tag '{}' ?", name),
+                format!("Supprimer le tag '{}' ?", crate::utils::terminal_text(name)),
+                format!("Delete tag '{}' ?", crate::utils::terminal_text(name)),
             ),
             ConfirmAction::WorktreeRemove(name) => {
+                let name = crate::utils::terminal_path(name);
                 text_owned(
                     format!("Etes-vous sur de vouloir supprimer le worktree '{}' ?", name),
                     format!("Are you sure you want to delete worktree '{}' ?", name),
@@ -78,6 +80,7 @@ impl ConfirmAction {
                 )
             }
             ConfirmAction::DiscardFile(path) => {
+                let path = crate::utils::terminal_path(path);
                 text_owned(
                     format!("Etes-vous sur de vouloir abandonner les modifications de '{}' ?", path),
                     format!("Are you sure you want to discard changes in '{}' ?", path),
@@ -136,11 +139,11 @@ impl ConfirmAction {
             ConfirmAction::UndoLastOperation(oid, description) => text_owned(
                 format!(
                     "Annuler '{}' et revenir a {oid:.7} ?\nLes differences seront conservees dans le working tree.",
-                    description
+                    crate::utils::terminal_text(description)
                 ),
                 format!(
                     "Undo '{}' and return to {oid:.7}?\nDifferences will remain in the working tree.",
-                    description
+                    crate::utils::terminal_text(description)
                 ),
             ),
             ConfirmAction::BisectStart { good, bad } => text_owned(
@@ -154,9 +157,9 @@ impl ConfirmAction {
             ConfirmAction::CustomCommand(command) => text_owned(
                 format!(
                     "Exécuter la commande '{}' ?\n\n{}",
-                    command.name, command.command
+                    crate::utils::terminal_text(&command.name), crate::utils::terminal_text(&command.command)
                 ),
-                format!("Run command '{}'?\n\n{}", command.name, command.command),
+                format!("Run command '{}'?\n\n{}", crate::utils::terminal_text(&command.name), crate::utils::terminal_text(&command.command)),
             ),
         }
     }
@@ -289,6 +292,20 @@ pub(crate) fn confirm_button_contains(area: Rect, x: u16, y: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn destructive_confirmation_distinguishes_control_characters_in_paths() {
+        let path = "é\n\\n\u{1b}]52;c;text\u{7}\u{202e}.txt";
+        let action = ConfirmAction::DiscardFile(path.to_string());
+        let message = action.message();
+        assert!(!message.chars().any(char::is_control));
+        assert!(message.contains("\\x1b]52;c;text\\u{7}\\u{202e}"));
+        assert_ne!(
+            ConfirmAction::DiscardFile("a\nb".to_string()).message(),
+            ConfirmAction::DiscardFile("a\\nb".to_string()).message()
+        );
+        assert_eq!(action, ConfirmAction::DiscardFile(path.to_string()));
+    }
     use crate::i18n::{with_language, Language};
 
     #[test]

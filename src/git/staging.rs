@@ -56,14 +56,7 @@ fn unstaged_diff_options(path: &str) -> DiffOptions {
 fn head_tree(repo: &Repository) -> Result<Option<git2::Tree<'_>>> {
     match repo.head() {
         Ok(head) => Ok(Some(head.peel_to_tree()?)),
-        Err(error)
-            if matches!(
-                error.code(),
-                git2::ErrorCode::UnbornBranch | git2::ErrorCode::NotFound
-            ) =>
-        {
-            Ok(None)
-        }
+        Err(error) if error.code() == git2::ErrorCode::UnbornBranch => Ok(None),
         Err(error) => Err(error.into()),
     }
 }
@@ -228,6 +221,105 @@ mod tests {
     use crate::git::diff::{staged_file_diff, working_dir_file_diff};
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn partial_staging_preserves_unicode_crlf_and_control_characters_in_paths() {
+        for path in ["été 😀 [a].txt", "tab\tquote\"newline\n.txt"] {
+            let (directory, repo) = repository_with_file("sibling\n");
+            repo.config()
+                .unwrap()
+                .set_bool("core.autocrlf", false)
+                .unwrap();
+            let original = "début\r\nfin\r\n";
+            let modified = "début\r\n新しい ligne\r\nfin\r\n";
+            crate::git::tests::test_utils::commit_file(&repo, path, original, "unicode");
+            fs::write(directory.path().join(path), modified).unwrap();
+            let before = repo.index().unwrap().write_tree().unwrap();
+            let selected = DiffLineSelection {
+                hunk_index: 0,
+                change_index: 0,
+            };
+            stage_line(&repo, path, selected).unwrap();
+            let entry = repo.index().unwrap().get_path(Path::new(path), 0).unwrap();
+            assert_eq!(
+                repo.find_blob(entry.id).unwrap().content(),
+                modified.as_bytes()
+            );
+            unstage_line(&repo, path, selected).unwrap();
+            assert_eq!(repo.index().unwrap().write_tree().unwrap(), before);
+            assert_eq!(
+                fs::read(directory.path().join(path)).unwrap(),
+                modified.as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn partial_binary_staging_refuses_without_changing_index_or_worktree() {
+        let (directory, repo) = repository_with_file("old\0binary");
+        fs::write(directory.path().join("file.txt"), b"new\0binary").unwrap();
+        let before = repo.index().unwrap().write_tree().unwrap();
+        assert!(stage_line(
+            &repo,
+            "file.txt",
+            DiffLineSelection {
+                hunk_index: 0,
+                change_index: 0
+            }
+        )
+        .is_err());
+        assert!(stage_hunk(&repo, "file.txt", 0).is_err());
+        assert_eq!(repo.index().unwrap().write_tree().unwrap(), before);
+        assert_eq!(
+            fs::read(directory.path().join("file.txt")).unwrap(),
+            b"new\0binary"
+        );
+    }
+
+    #[test]
+    fn partial_staging_with_a_locked_index_preserves_disk_and_cache() {
+        for by_line in [false, true] {
+            let (directory, repo) = repository_with_file("base\n");
+            fs::write(directory.path().join("file.txt"), "base\nadded\n").unwrap();
+            let before = repo.index().unwrap().write_tree().unwrap();
+            let before_bytes = fs::read(repo.path().join("index")).unwrap();
+            fs::write(repo.path().join("index.lock"), b"lock").unwrap();
+            let result = if by_line {
+                stage_line(
+                    &repo,
+                    "file.txt",
+                    DiffLineSelection {
+                        hunk_index: 0,
+                        change_index: 0,
+                    },
+                )
+            } else {
+                stage_hunk(&repo, "file.txt", 0)
+            };
+            assert!(result.is_err());
+            assert_eq!(fs::read(repo.path().join("index")).unwrap(), before_bytes);
+            assert_eq!(repo.index().unwrap().write_tree().unwrap(), before);
+            assert_eq!(
+                fs::read(directory.path().join("file.txt")).unwrap(),
+                b"base\nadded\n"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_head_does_not_discard_a_staged_file_as_an_initial_commit() {
+        let (directory, repo) = repository_with_file("base\n");
+        fs::write(directory.path().join("file.txt"), "staged\n").unwrap();
+        crate::git::commit::stage_file(&repo, "file.txt").unwrap();
+        let before = repo.index().unwrap().write_tree().unwrap();
+        fs::remove_file(repo.path().join("HEAD")).unwrap();
+        assert!(unstage_hunk(&repo, "file.txt", 0).is_err());
+        assert_eq!(repo.index().unwrap().write_tree().unwrap(), before);
+        assert_eq!(
+            fs::read(directory.path().join("file.txt")).unwrap(),
+            b"staged\n"
+        );
+    }
 
     #[test]
     fn invalid_hunk_does_not_remove_a_staged_file() {

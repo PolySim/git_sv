@@ -10,6 +10,7 @@ use crate::git::conflict::{
 /// Resout un fichier en appliquant les resolutions choisies.
 pub fn resolve_file(repo: &Repository, file: &ConflictFile) -> Result<()> {
     let merge_file = MergeFile {
+        resolved_content: None,
         path: file.path.clone(),
         has_conflicts: true,
         conflicts: file.conflicts.clone(),
@@ -26,7 +27,7 @@ pub fn resolve_file_with_strategy(
     strategy: ConflictResolution,
 ) -> Result<()> {
     let full_path = super::worktree_path(repo, path)?;
-    let mut sections = parse_conflict_file(full_path.to_string_lossy().as_ref())?;
+    let mut sections = parse_conflict_file(&full_path)?;
 
     for section in &mut sections {
         section.resolution = Some(strategy);
@@ -70,8 +71,7 @@ pub fn resolve_special_file(
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
-        index.remove_path(relative_path)?;
-        index.write()?;
+        super::stage_resolution(repo, relative_path, true)?;
         return Ok(true);
     }
 
@@ -108,7 +108,6 @@ pub fn resolve_special_file(
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(entry.mode & 0o777))?;
     }
-    index.add_path(relative_path)?;
-    index.write()?;
+    super::stage_resolution(repo, relative_path, false)?;
     Ok(false)
 }

@@ -65,3 +65,14 @@ pub fn commit_file(repo: &Repository, path: &str, content: &str, message: &str) 
     index.write().expect("Failed to write index");
     commit(repo, message)
 }
+
+/// Ajoute un nom brut à l'index, même sur un système de fichiers qui exige UTF-8.
+pub fn add_raw_index_file(repo: &Repository, path: &[u8], content: &[u8]) {
+    let mut index = repo.index().unwrap();
+    let mut entry = index.iter().next().expect("un fichier témoin est requis");
+    entry.path = path.to_vec();
+    entry.id = repo.blob(content).unwrap();
+    entry.file_size = content.len() as u32;
+    index.add(&entry).unwrap();
+    index.write().unwrap();
+}

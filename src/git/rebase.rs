@@ -52,7 +52,9 @@ fn interactive_rebase_from_with_editor(
         command.arg(first_commit.parent_id(0)?.to_string());
     }
 
-    let status = command.current_dir(repo_path).status()?;
+    let status = super::helpers::clear_repository_environment(&mut command)
+        .current_dir(repo_path)
+        .status()?;
     if status.success() {
         return Ok(InteractiveRebaseResult::Completed);
     }

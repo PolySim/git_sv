@@ -14,6 +14,8 @@ pub enum ConflictAction {
     NextSection,
     /// Changer de panneau
     SwitchPanel,
+    /// Revenir au panneau précédent.
+    PreviousPanel,
     /// Accepter notre version (fichier entier)
     AcceptOursFile,
     /// Accepter leur version (fichier entier)
@@ -58,6 +60,8 @@ pub enum ConflictAction {
     StopEditing,
     /// Insérer un caractère en mode édition
     EditInsertChar(char),
+    /// Coller du texte en une édition sans interpréter de raccourcis.
+    EditInsertText(String),
     /// Supprimer le caractère avant le curseur
     EditBackspace,
     /// Supprimer le caractère sous le curseur

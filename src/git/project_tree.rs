@@ -52,13 +52,16 @@ pub fn current_project_files(repo: &Repository) -> Result<Vec<String>> {
     let entries: Vec<_> = repo
         .statuses(Some(&mut options))?
         .iter()
-        .filter_map(|entry| {
-            entry.path().ok().map(|path| StatusEntry {
-                path: path.to_string(),
+        .map(|entry| {
+            Ok(StatusEntry {
+                path: entry
+                    .path()
+                    .map_err(|_| crate::error::GitSvError::UnsupportedPathEncoding)?
+                    .to_string(),
                 status: entry.status(),
             })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     current_project_files_from_status(repo, &entries)
 }
 
@@ -75,15 +78,15 @@ pub fn current_project_files_from_status(
     };
     let mut files = BTreeSet::new();
     for entry in repo.index()?.iter() {
-        let path = String::from_utf8_lossy(&entry.path);
+        let path = std::str::from_utf8(&entry.path)
+            .map_err(|_| crate::error::GitSvError::UnsupportedPathEncoding)?;
         // Ces entrées échappent au scan du status, même si le fichier a disparu.
         // Un sous-module absent peut aussi être considéré comme non initialisé.
         let needs_metadata = entry.flags & IndexEntryFlag::VALID.bits() != 0
             || entry.flags_extended & IndexEntryExtendedFlag::SKIP_WORKTREE.bits() != 0
-            || entry.mode == 0o160000
-            || matches!(path, std::borrow::Cow::Owned(_));
-        if !needs_metadata || std::fs::symlink_metadata(workdir.join(path.as_ref())).is_ok() {
-            files.insert(path.into_owned());
+            || entry.mode == 0o160000;
+        if !needs_metadata || std::fs::symlink_metadata(workdir.join(path)).is_ok() {
+            files.insert(path.to_string());
         }
     }
     for entry in entries {
@@ -458,16 +461,16 @@ fn renamed_from_path(
     let mut diff = repo.diff_tree_to_tree(parent_tree, Some(tree), None)?;
     diff.find_similar(None)?;
 
-    Ok(diff.deltas().find_map(|delta| {
-        (delta.status() == Delta::Renamed && path_matches(delta.new_file().path(), path, false))
-            .then(|| {
-                delta
-                    .old_file()
-                    .path()
-                    .map(|value| value.to_string_lossy().into_owned())
-            })
-            .flatten()
-    }))
+    for delta in diff.deltas() {
+        if delta.status() == Delta::Renamed && path_matches(delta.new_file().path(), path, false) {
+            return delta
+                .old_file()
+                .path()
+                .map(|value| super::helpers::path_as_utf8(value).map(str::to_owned))
+                .transpose();
+        }
+    }
+    Ok(None)
 }
 
 fn renamed_to_path(
@@ -479,16 +482,16 @@ fn renamed_to_path(
     let mut diff = repo.diff_tree_to_tree(Some(parent_tree), Some(tree), None)?;
     diff.find_similar(None)?;
 
-    Ok(diff.deltas().find_map(|delta| {
-        (delta.status() == Delta::Renamed && path_matches(delta.old_file().path(), path, false))
-            .then(|| {
-                delta
-                    .new_file()
-                    .path()
-                    .map(|value| value.to_string_lossy().into_owned())
-            })
-            .flatten()
-    }))
+    for delta in diff.deltas() {
+        if delta.status() == Delta::Renamed && path_matches(delta.old_file().path(), path, false) {
+            return delta
+                .new_file()
+                .path()
+                .map(|value| super::helpers::path_as_utf8(value).map(str::to_owned))
+                .transpose();
+        }
+    }
+    Ok(None)
 }
 
 /// Lit le contenu texte d'un fichier tel qu'il existe dans un commit.
@@ -541,6 +544,18 @@ fn path_matches(candidate: Option<&Path>, selected: &str, is_directory: bool) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn safety_project_files_reject_lossy_path_collisions() {
+        let (_temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo, "bad�.txt", "valid name", "initial");
+        crate::git::tests::test_utils::add_raw_index_file(&repo, b"bad\xff.txt", b"raw name");
+        assert!(matches!(
+            current_project_files_from_status(&repo, &[]),
+            Err(crate::error::GitSvError::UnsupportedPathEncoding)
+        ));
+    }
     use crate::git::tests::test_utils::{commit, commit_file, create_file, create_test_repo};
 
     #[test]
