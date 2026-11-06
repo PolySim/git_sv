@@ -246,23 +246,7 @@ impl FileDiff {
 ///
 /// Retourne la liste des fichiers modifiés avec leurs stats (+/-).
 pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
-    let commit = repo.find_commit(oid)?;
-    let commit_tree = commit.tree()?;
-
-    // Obtenir l'arbre du parent (si existe).
-    let parent_tree = if commit.parent_count() > 0 {
-        let parent = commit.parent(0)?;
-        Some(parent.tree()?)
-    } else {
-        None
-    };
-
-    // Calculer le diff.
-    let mut options = bounded_diff_options();
-    let mut diff =
-        repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut options))?;
-    diff.find_similar(None)?;
-
+    let diff = commit_tree_diff(repo, oid)?;
     let mut files = Vec::new();
 
     // Itérer sur les deltas avec leur index.
@@ -294,6 +278,40 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
     }
 
     Ok(files)
+}
+
+/// Retourne les chemins modifiés sans construire les patches ni compter leurs lignes.
+pub fn commit_changed_paths(repo: &Repository, oid: Oid) -> Result<Vec<String>> {
+    let diff = commit_tree_diff(repo, oid)?;
+    Ok(diff
+        .deltas()
+        .filter(|delta| {
+            matches!(
+                delta.status(),
+                git2::Delta::Added
+                    | git2::Delta::Modified
+                    | git2::Delta::Deleted
+                    | git2::Delta::Renamed
+            )
+        })
+        .map(|delta| diff_paths(&delta).0)
+        .collect())
+}
+
+fn commit_tree_diff(repo: &Repository, oid: Oid) -> Result<git2::Diff<'_>> {
+    let commit = repo.find_commit(oid)?;
+    let commit_tree = commit.tree()?;
+    let parent_tree = if commit.parent_count() > 0 {
+        Some(commit.parent(0)?.tree()?)
+    } else {
+        None
+    };
+    let mut options = bounded_diff_options();
+    let mut diff =
+        repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut options))?;
+    // Garder la même détection des renommages que pour les statistiques détaillées.
+    diff.find_similar(None)?;
+    Ok(diff)
 }
 
 /// Compte les lignes ajoutées et supprimées dans un patch.
@@ -1058,12 +1076,43 @@ mod tests {
         index.write().unwrap();
         let oid = commit(&repo, "Rename");
 
+        assert_eq!(commit_changed_paths(&repo, oid).unwrap(), vec!["after.txt"]);
+
         for path in ["before.txt", "after.txt"] {
             let diff = get_file_diff(&repo, oid, path).unwrap();
             assert_eq!(diff.status, DiffStatus::Renamed);
             assert_eq!((diff.additions, diff.deletions), (0, 0));
             assert_eq!(diff.path, "after.txt");
         }
+    }
+
+    #[test]
+    fn changed_paths_include_initial_modified_deleted_and_binary_files() {
+        let (_temp_dir, repo) = create_test_repo();
+        let initial = commit_file(&repo, "first.txt", "initial\n", "Initial");
+        assert_eq!(
+            commit_changed_paths(&repo, initial).unwrap(),
+            vec!["first.txt"]
+        );
+        create_file(&repo, "first.txt", "modified\n");
+        create_file(&repo, "binary.dat", "\0binary\0");
+        let mut index = repo.index().unwrap();
+        for path in ["first.txt", "binary.dat"] {
+            index.add_path(Path::new(path)).unwrap();
+        }
+        index.write().unwrap();
+        let modified = commit(&repo, "Text and binary");
+        assert_eq!(
+            commit_changed_paths(&repo, modified).unwrap(),
+            vec!["binary.dat", "first.txt"]
+        );
+
+        delete_file(&repo, "first.txt");
+        let deleted = commit(&repo, "Delete");
+        assert_eq!(
+            commit_changed_paths(&repo, deleted).unwrap(),
+            vec!["first.txt"]
+        );
     }
 
     #[test]

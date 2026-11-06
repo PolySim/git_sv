@@ -190,10 +190,16 @@ impl GitRepo {
         filter: &crate::state::GraphFilter,
     ) -> Result<(Vec<CommitInfo>, bool)> {
         let mut results = Vec::new();
+        let mut metadata_filter = filter.clone();
+        metadata_filter.path = None;
         for oid in self.all_commits_revwalk()? {
             let raw_commit = self.repo.find_commit(oid?)?;
             let mut commit = CommitInfo::from_git2_commit(&raw_commit);
             if filter.path.is_some() {
+                // Éviter de lire les arbres d'un commit déjà exclu par ses métadonnées.
+                if !metadata_filter.matches(&commit) {
+                    continue;
+                }
                 commit.load_changed_paths(&self.repo)?;
             }
             if filter.matches(&commit) {
@@ -433,6 +439,68 @@ mod tests {
     use crate::i18n::{with_language, Language};
 
     #[test]
+    #[ignore = "profilage en lecture seule via GIT_SV_PROFILE_REPO"]
+    fn profile_large_repository_history() {
+        use std::time::Instant;
+
+        let path = std::env::var("GIT_SV_PROFILE_REPO").expect("GIT_SV_PROFILE_REPO requis");
+        for pass in 0..3 {
+            let repo = GitRepo::open(&path).unwrap();
+            let start = Instant::now();
+            let walk = repo.all_commits_revwalk().unwrap();
+            let setup = start.elapsed();
+            let start = Instant::now();
+            let ids = walk
+                .take(201)
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap();
+            let walk_time = start.elapsed();
+            let start = Instant::now();
+            let commits = ids
+                .iter()
+                .map(|&oid| CommitInfo::from_git2_commit(&repo.repo.find_commit(oid).unwrap()))
+                .collect::<Vec<_>>();
+            let decode = start.elapsed();
+            let start = Instant::now();
+            let graph = super::super::graph::build_graph(&repo.repo, &commits).unwrap();
+            let layout = start.elapsed();
+            let start = Instant::now();
+            let count = repo.estimate_total_commits();
+            let count_time = start.elapsed();
+            let start = Instant::now();
+            let files = repo.commit_diff(ids[0]).unwrap();
+            let list_time = start.elapsed();
+            let start = Instant::now();
+            if let Some(file) = files.first() {
+                let _ = repo.file_diff(ids[0], &file.path).unwrap();
+            }
+            let diff_time = start.elapsed();
+            eprintln!("history pass={pass} refs={setup:?} walk={walk_time:?} decode={decode:?} layout={layout:?} count={count:?}/{count_time:?} files={}/{list_time:?} diff={diff_time:?} rows={}", files.len(), graph.len());
+            if pass == 0 {
+                let start = Instant::now();
+                let file_count = ids
+                    .iter()
+                    .take(20)
+                    .map(|&oid| repo.commit_diff(oid).unwrap().len())
+                    .sum::<usize>();
+                let stats_time = start.elapsed();
+                let start = Instant::now();
+                let paths_count = ids
+                    .iter()
+                    .take(20)
+                    .map(|&oid| {
+                        super::super::diff::commit_changed_paths(&repo.repo, oid)
+                            .unwrap()
+                            .len()
+                    })
+                    .sum::<usize>();
+                eprintln!("paths sample=20 files={file_count}/{paths_count} with_stats={stats_time:?} without_stats={:?}", start.elapsed());
+                assert_eq!(file_count, paths_count);
+            }
+        }
+    }
+
+    #[test]
     fn test_status_entry_is_staged() {
         // INDEX_NEW - fichier nouveau staged
         let entry_new = StatusEntry {
@@ -652,6 +720,38 @@ mod tests {
         assert_eq!(
             wrapper.search_commits("needle", 1).unwrap()[0].oid,
             expected
+        );
+    }
+
+    #[test]
+    fn path_and_message_filters_preserve_order_and_pagination() {
+        let (_temp, repo) = create_test_repo();
+        let first = commit_file(&repo, "src/keep.txt", "first", "selected first");
+        commit_file(&repo, "docs/readme.txt", "other path", "selected unrelated");
+        commit_file(&repo, "src/keep.txt", "ignored", "unrelated message");
+        let last = commit_file(&repo, "src/keep.txt", "last", "selected last");
+        let wrapper = GitRepo { repo };
+        let filter = crate::state::GraphFilter {
+            path: Some("SRC/KEEP".to_string()),
+            message: Some("selected".to_string()),
+            ..Default::default()
+        };
+
+        let (commits, has_more) = wrapper.log_filtered_with_more(1, &filter).unwrap();
+        assert_eq!(
+            commits.iter().map(|commit| commit.oid).collect::<Vec<_>>(),
+            vec![last]
+        );
+        assert!(has_more);
+        let (commits, has_more) = wrapper.log_filtered_with_more(2, &filter).unwrap();
+        assert_eq!(
+            commits.iter().map(|commit| commit.oid).collect::<Vec<_>>(),
+            vec![last, first]
+        );
+        assert!(!has_more);
+        assert_eq!(
+            commits[0].changed_paths.as_deref(),
+            Some(["src/keep.txt".to_string()].as_slice())
         );
     }
 

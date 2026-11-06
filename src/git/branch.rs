@@ -126,16 +126,7 @@ fn build_remote_branch_info(branch: &Branch) -> Result<BranchInfo> {
 
 /// Liste toutes les branches locales du repository.
 pub fn list_branches(repo: &Repository) -> Result<Vec<BranchInfo>> {
-    // Utilise list_all_branches et filtre pour ne garder que les locales
-    let (local_branches, _) = list_all_branches(repo)?;
-    Ok(local_branches)
-}
-
-/// Liste toutes les branches (locales et remote).
-pub fn list_all_branches(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<BranchInfo>)> {
     let mut local_branches = Vec::new();
-    let mut remote_branches = Vec::new();
-
     let head_ref = repo.head().ok();
     let head_name = head_ref
         .as_ref()
@@ -150,6 +141,13 @@ pub fn list_all_branches(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<Bran
         let branch_info = build_local_branch_info(repo, &branch, is_head)?;
         local_branches.push(branch_info);
     }
+    Ok(local_branches)
+}
+
+/// Liste toutes les branches (locales et remote).
+pub fn list_all_branches(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<BranchInfo>)> {
+    let local_branches = list_branches(repo)?;
+    let mut remote_branches = Vec::new();
 
     // Branches remote.
     for branch_result in repo.branches(Some(BranchType::Remote))? {

@@ -112,40 +112,35 @@ pub fn stash_files(repo: &Repository, stash_oid: Oid) -> Result<Vec<StashFile>> 
     let parent_tree = parent.tree()?;
 
     let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)?;
-    let mut files = collect_stash_files(&diff)?;
+    let mut files = collect_stash_files(&diff);
     if stash_commit.parent_count() > 2 {
         let untracked_tree = stash_commit.parent(2)?.tree()?;
         let untracked_diff = repo.diff_tree_to_tree(None, Some(&untracked_tree), None)?;
-        files.extend(collect_stash_files(&untracked_diff)?);
+        files.extend(collect_stash_files(&untracked_diff));
     }
     Ok(files)
 }
 
-fn collect_stash_files(diff: &git2::Diff<'_>) -> Result<Vec<StashFile>> {
+fn collect_stash_files(diff: &git2::Diff<'_>) -> Vec<StashFile> {
     let mut files = Vec::new();
-    diff.foreach(
-        &mut |delta, _| {
-            if let Some(path) = delta.new_file().path() {
-                let status = match delta.status() {
-                    git2::Delta::Added => DiffStatus::Added,
-                    git2::Delta::Modified => DiffStatus::Modified,
-                    git2::Delta::Deleted => DiffStatus::Deleted,
-                    git2::Delta::Renamed => DiffStatus::Renamed,
-                    _ => return true,
-                };
-                files.push(StashFile {
-                    path: path.to_string_lossy().to_string(),
-                    status,
-                });
-            }
-            true
-        },
-        None,
-        None,
-        None,
-    )?;
-
-    Ok(files)
+    // Les métadonnées suffisent : foreach construirait aussi chaque patch.
+    for delta in diff.deltas() {
+        let Some(path) = delta.new_file().path() else {
+            continue;
+        };
+        let status = match delta.status() {
+            git2::Delta::Added => DiffStatus::Added,
+            git2::Delta::Modified => DiffStatus::Modified,
+            git2::Delta::Deleted => DiffStatus::Deleted,
+            git2::Delta::Renamed => DiffStatus::Renamed,
+            _ => continue,
+        };
+        files.push(StashFile {
+            path: path.to_string_lossy().to_string(),
+            status,
+        });
+    }
+    files
 }
 
 /// Récupère le diff complet d'un fichier dans un stash.
@@ -380,6 +375,29 @@ mod tests {
             .any(|file| file.path == "untracked.txt"));
         let diff = stash_file_diff(&repo, stashes[0].oid, "untracked.txt").unwrap();
         assert!(diff.iter().any(|line| line == "+saved content"));
+    }
+
+    #[test]
+    fn stash_file_list_preserves_binary_modifications_and_deletions() {
+        let (directory, mut repo) = create_test_repo();
+        commit_file(&repo, "binary.dat", "old\0binary", "binary");
+        commit_file(&repo, "deleted.txt", "removed", "text");
+        create_file(&repo, "binary.dat", "new\0binary");
+        std::fs::remove_file(directory.path().join("deleted.txt")).unwrap();
+        save_stash(&mut repo, Some("binary and deletion")).unwrap();
+
+        let stashes = list_stashes(&mut repo).unwrap();
+
+        assert_eq!(stashes.len(), 1);
+        assert_eq!(stashes[0].files.len(), 2);
+        assert!(stashes[0]
+            .files
+            .iter()
+            .any(|file| file.path == "binary.dat" && file.status == DiffStatus::Modified));
+        assert!(stashes[0]
+            .files
+            .iter()
+            .any(|file| file.path == "deleted.txt" && file.status == DiffStatus::Deleted));
     }
 
     #[test]

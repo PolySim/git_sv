@@ -115,9 +115,7 @@ impl EventHandler {
             }
 
             // Vérifier les changements dans le repository git (auto-refresh)
-            if self.watcher.check_changed()? {
-                self.state.mark_dirty();
-            }
+            self.poll_repository_changes()?;
 
             // Vérifier si le message flash a expiré
             needs_redraw |= self.state.check_flash_expired();
@@ -127,6 +125,7 @@ impl EventHandler {
                 self.refresh()?;
                 needs_redraw = true;
             }
+            needs_redraw |= self.state.poll_project_history();
 
             // Le spinner est le seul élément nécessitant une animation continue.
             needs_redraw |= self.state.ui.loading_spinner.is_some();
@@ -140,10 +139,30 @@ impl EventHandler {
         }
 
         let mut timeout = self.watcher.next_check_in();
+        if self.state.project_history_pending() {
+            timeout = timeout.min(Duration::from_millis(50));
+        }
         if let Some(flash_delay) = self.state.ui.flash_expiry_in() {
             timeout = timeout.min(flash_delay);
         }
         timeout.max(Duration::from_millis(1))
+    }
+
+    /// Invalide les collectes précédant une action avant d'accepter un résultat du worker.
+    fn poll_repository_changes(&mut self) -> Result<()> {
+        if self.state.take_status_refresh_request() {
+            self.watcher.reset()?;
+        }
+        if self.watcher.check_changed()? {
+            self.state.mark_dirty();
+        }
+        if let Some(entries) = self.watcher.take_status_entries() {
+            self.state.accept_background_status(entries);
+        }
+        if let Some(error) = self.watcher.take_status_error() {
+            self.state.report_status_error(error);
+        }
+        Ok(())
     }
 
     fn run_interactive_rebase(
@@ -448,12 +467,10 @@ impl EventHandler {
     ///
     /// Utilise l'API unifiée de GraphViewState pour garantir la cohérence de l'état.
     fn refresh(&mut self) -> Result<()> {
-        self.state.refresh_from_repo()?;
-
-        // Réinitialiser le watcher pour éviter de redétecter les mêmes changements
-        self.watcher.reset()?;
-
-        Ok(())
+        if self.state.take_status_refresh_request() {
+            self.watcher.reset()?;
+        }
+        self.state.refresh_pending()
     }
 }
 
@@ -462,6 +479,34 @@ mod tests {
     use super::*;
     use crate::state::action::StagingAction;
     use crate::state::{AppAction, ViewMode};
+
+    #[test]
+    fn status_collected_before_staging_cannot_overwrite_the_action_result() {
+        let (temp, repo) = crate::git::tests::test_utils::create_test_repo();
+        crate::git::tests::test_utils::commit_file(&repo, "file.txt", "base\n", "initial");
+        std::fs::write(temp.path().join("file.txt"), "modified\n").unwrap();
+        let mut state = AppState::new(
+            crate::git::GitRepo { repo },
+            temp.path().display().to_string(),
+        )
+        .unwrap();
+        state.initialize_for_tui().unwrap();
+        state.enter_view(ViewMode::Staging);
+        state.apply_status_entries(state.repo.status().unwrap());
+        let mut handler = EventHandler::new(state).unwrap();
+        // Attendre la collecte initiale sans la consommer : elle décrit encore WT_MODIFIED.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while handler.watcher.next_check_in() != Duration::ZERO {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        handler.dispatch_action(AppAction::Staging(StagingAction::StageFile));
+        assert_eq!(handler.state.staging_state.staged_files().len(), 1);
+        handler.poll_repository_changes().unwrap();
+        assert!(handler.state.staging_state.unstaged_files().is_empty());
+        assert_eq!(handler.state.staging_state.staged_files().len(), 1);
+        assert!(handler.state.status_entries[0].status.is_index_modified());
+    }
 
     #[test]
     fn failed_staging_keeps_the_interface_alive() {

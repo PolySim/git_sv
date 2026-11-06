@@ -21,7 +21,7 @@ impl App {
     pub fn new(repo: GitRepo, repo_path: String) -> Result<Self> {
         let mut state = crate::state::AppState::new(repo, repo_path)?;
 
-        state.initialize_from_repo()?;
+        state.initialize_for_tui()?;
 
         Ok(Self { state })
     }

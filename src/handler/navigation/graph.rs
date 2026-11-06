@@ -33,7 +33,6 @@ pub(super) fn handle_page_up(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, -10);
-            state.schedule_refresh();
         }
         ViewMode::ProjectTree => {
             handle_project_tree_navigation(state, NavigationMove::PageUp);
@@ -50,7 +49,6 @@ pub(super) fn handle_page_down(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, 10);
-            state.schedule_refresh();
         }
         ViewMode::ProjectTree => {
             handle_project_tree_navigation(state, NavigationMove::PageDown);
@@ -68,7 +66,6 @@ pub(super) fn handle_go_top(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, -10000);
-            state.schedule_refresh();
         }
         ViewMode::ProjectTree => {
             handle_project_tree_navigation(state, NavigationMove::First);
@@ -83,7 +80,6 @@ pub(super) fn handle_go_bottom(state: &mut AppState) {
     match state.view_mode {
         ViewMode::Blame => {
             handle_blame_navigation(state, 10000);
-            state.schedule_refresh();
         }
         ViewMode::ProjectTree => {
             handle_project_tree_navigation(state, NavigationMove::Last);

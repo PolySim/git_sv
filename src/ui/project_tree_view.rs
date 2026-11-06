@@ -45,6 +45,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState, unresolved_conflicts: usi
         super::status_bar::StatusBarRenderContext {
             current_branch: state.current_branch.as_deref(),
             status_entries: &state.status_entries,
+            status_loading: state.status_loading(),
             flash_message: state.current_flash_message(),
             filter: &state.filters.graph_filter,
             is_merging: state.ui.is_merging,
@@ -144,7 +145,11 @@ fn render_tree(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect)
         text(" Arborescence ", " Project tree ").to_string()
     };
     let list = List::new(if items.is_empty() {
-        vec![ListItem::new(text("  Aucun fichier", "  No files"))]
+        vec![ListItem::new(if state.status_loading() {
+            text("  Chargement des fichiers…", "  Loading files…")
+        } else {
+            text("  Aucun fichier", "  No files")
+        })]
     } else {
         items
     })
@@ -293,7 +298,9 @@ fn render_history(frame: &mut Frame, state: &AppState, area: ratatui::layout::Re
         )
     };
     let list = List::new(if items.is_empty() {
-        let empty_message = if state.project_tree_state.history_loaded
+        let empty_message = if state.project_tree_state.history_loading {
+            text("  Chargement de l'historique…", "  Loading history…")
+        } else if state.project_tree_state.history_loaded
             && state.project_tree_state.comparison.is_some()
         {
             text(
@@ -530,6 +537,22 @@ mod tests {
             .collect();
         assert!(output.contains("Tab"));
         assert!(!output.contains("initial tree"));
+
+        state.project_tree_state.history_loading = true;
+        terminal
+            .draw(|frame| crate::ui::render(frame, &mut state))
+            .unwrap();
+        let loading_output: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(
+            loading_output.contains("Chargement de l'historique")
+                || loading_output.contains("Loading history")
+        );
     }
 
     #[test]

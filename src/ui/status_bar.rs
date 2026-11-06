@@ -17,6 +17,7 @@ use crate::ui::theme::current_theme;
 pub struct StatusBarRenderContext<'a> {
     pub current_branch: Option<&'a str>,
     pub status_entries: &'a [StatusEntry],
+    pub status_loading: bool,
     pub flash_message: Option<&'a str>,
     pub filter: &'a GraphFilter,
     pub is_merging: bool,
@@ -28,6 +29,7 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     let StatusBarRenderContext {
         current_branch,
         status_entries,
+        status_loading,
         flash_message,
         filter,
         is_merging,
@@ -41,7 +43,12 @@ pub fn render(frame: &mut Frame, ctx: StatusBarRenderContext<'_>) {
     let (modified, staged, untracked, conflicted) = count_status(status_entries);
 
     // Construire le statut.
-    let status_text = if modified == 0 && staged == 0 && untracked == 0 && conflicted == 0 {
+    let status_text = if status_loading {
+        Span::styled(
+            text("◌ vérification…", "◌ checking…"),
+            Style::default().fg(theme.text_secondary),
+        )
+    } else if modified == 0 && staged == 0 && untracked == 0 && conflicted == 0 {
         Span::styled(
             text("● propre", "● clean"),
             Style::default().fg(theme.success),

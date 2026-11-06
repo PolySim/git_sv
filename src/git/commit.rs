@@ -39,8 +39,7 @@ impl CommitInfo {
 
     /// Charge les chemins modifiés pour ce commit depuis le repository.
     pub fn load_changed_paths(&mut self, repo: &Repository) -> crate::error::Result<()> {
-        let files = super::diff::commit_diff(repo, self.oid)?;
-        self.changed_paths = Some(files.into_iter().map(|f| f.path).collect());
+        self.changed_paths = Some(super::diff::commit_changed_paths(repo, self.oid)?);
         Ok(())
     }
 

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.5.3 - 2026-11-06
+
+### Changed
+
+- premier écran sans attendre le scan des fichiers ; statut initial collecté en arrière-plan avec indication de chargement
+- changement d'onglet sans recharger le graphe ni rescanner le working tree ; vues invalidées après une mutation, un rafraîchissement manuel ou une notification du watcher
+- surveillance Git et historique par chemin sur des workers uniques, avec demandes regroupées et résultats bornés
+- arborescence construite depuis l'index et le statut déjà disponible, sans double scan ni vérification individuelle de tous les fichiers suivis
+- filtres par chemin et listes de fichiers des stashes sans calcul inutile des patches
+
+### Fixed
+
+- gels périodiques de l'interface pendant les scans du working tree sur les gros dépôts
+- résultats de fond périmés rejetés après une opération Git ou un changement de dépôt, chemin ou référence
+- données invalidées rechargées au retour de l'aide et du blame
+- erreurs de lecture du statut visibles pendant les nouvelles tentatives, puis effacées à la récupération
+
 ## 0.5.2 - 2026-11-06
 
 ### Fixed

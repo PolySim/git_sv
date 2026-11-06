@@ -232,6 +232,7 @@ fn render_graph_status_bar(
         status_bar::StatusBarRenderContext {
             current_branch: snap.current_branch.as_deref(),
             status_entries: &state.status_entries,
+            status_loading: state.status_loading(),
             flash_message: snap.flash_message.as_deref(),
             filter: &state.filters.graph_filter,
             is_merging: snap.is_merging,
@@ -403,6 +404,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             staging_view::render(
                 frame,
                 staging_view::StagingRenderContext {
+                    status_loading: state.status_loading(),
                     staging_state: &state.staging_state,
                     current_branch: state.current_branch.as_deref(),
                     repo_path: &state.repo_path,
@@ -425,6 +427,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     staging_view::render(
                         frame,
                         staging_view::StagingRenderContext {
+                            status_loading: state.status_loading(),
                             staging_state: &state.staging_state,
                             current_branch: state.current_branch.as_deref(),
                             repo_path: &state.repo_path,

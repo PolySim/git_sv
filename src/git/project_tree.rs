@@ -3,11 +3,12 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::Path;
 
-use git2::{Delta, ErrorCode, Oid, Repository, Sort, Tree};
+use git2::{Delta, ErrorCode, IndexEntryExtendedFlag, IndexEntryFlag, Oid, Repository, Sort, Tree};
 
 use crate::error::Result;
 
 use super::commit::CommitInfo;
+use super::repo::StatusEntry;
 
 /// Taille maximale d'un contenu destiné au presse-papier.
 const MAX_FILE_CONTENT_BYTES: usize = 20 * 1_048_576;
@@ -39,40 +40,62 @@ pub struct PathHistoryComparison {
 /// La liste combine l'index et les fichiers non suivis remontés par Git. Les
 /// fichiers ignorés et le répertoire `.git` ne sont donc pas inclus.
 pub fn current_project_files(repo: &Repository) -> Result<Vec<String>> {
-    let Some(workdir) = repo.workdir() else {
+    if repo.workdir().is_none() {
         return Ok(Vec::new());
-    };
-
-    let mut files = BTreeSet::new();
-    let index = repo.index()?;
-    for entry in index.iter() {
-        let path = String::from_utf8_lossy(&entry.path).into_owned();
-        if std::fs::symlink_metadata(workdir.join(&path)).is_ok() {
-            files.insert(path);
-        }
     }
-
     let mut options = git2::StatusOptions::new();
     options
         .include_untracked(true)
         .recurse_untracked_dirs(true)
         .include_ignored(false);
 
-    for entry in repo.statuses(Some(&mut options))?.iter() {
-        let Ok(path) = entry.path() else {
-            continue;
-        };
-        if entry.status().intersects(
-            git2::Status::WT_NEW
-                | git2::Status::INDEX_NEW
-                | git2::Status::WT_MODIFIED
-                | git2::Status::INDEX_MODIFIED,
-        ) && std::fs::symlink_metadata(workdir.join(path)).is_ok()
-        {
-            files.insert(path.to_string());
+    let entries: Vec<_> = repo
+        .statuses(Some(&mut options))?
+        .iter()
+        .filter_map(|entry| {
+            entry.path().ok().map(|path| StatusEntry {
+                path: path.to_string(),
+                status: entry.status(),
+            })
+        })
+        .collect();
+    current_project_files_from_status(repo, &entries)
+}
+
+/// Construit l'arborescence depuis un status complet déjà chargé pour ce worktree.
+///
+/// Le status doit inclure les fichiers non suivis récursivement, sans détection
+/// des renommages. Ses suppressions évitent de vérifier chaque fichier de l'index.
+pub fn current_project_files_from_status(
+    repo: &Repository,
+    entries: &[StatusEntry],
+) -> Result<Vec<String>> {
+    let Some(workdir) = repo.workdir() else {
+        return Ok(Vec::new());
+    };
+    let mut files = BTreeSet::new();
+    for entry in repo.index()?.iter() {
+        let path = String::from_utf8_lossy(&entry.path);
+        // Ces entrées échappent au scan du status, même si le fichier a disparu.
+        // Un sous-module absent peut aussi être considéré comme non initialisé.
+        let needs_metadata = entry.flags & IndexEntryFlag::VALID.bits() != 0
+            || entry.flags_extended & IndexEntryExtendedFlag::SKIP_WORKTREE.bits() != 0
+            || entry.mode == 0o160000
+            || matches!(path, std::borrow::Cow::Owned(_));
+        if !needs_metadata || std::fs::symlink_metadata(workdir.join(path.as_ref())).is_ok() {
+            files.insert(path.into_owned());
         }
     }
-
+    for entry in entries {
+        if entry.status.is_wt_deleted()
+            || (entry.status.is_conflicted()
+                && std::fs::symlink_metadata(workdir.join(&entry.path)).is_err())
+        {
+            files.remove(&entry.path);
+        } else if entry.status.is_wt_new() {
+            files.insert(entry.path.clone());
+        }
+    }
     Ok(files.into_iter().collect())
 }
 
@@ -95,7 +118,21 @@ pub fn path_history(
         Err(error) if error.code() == ErrorCode::UnbornBranch => return Ok(Vec::new()),
         Err(error) => return Err(error.into()),
     };
-    path_history_from(repo, head.id(), None, path, is_directory, max_count)
+    path_history_at(repo, head.id(), path, is_directory, max_count)
+}
+
+/// Lit un historique depuis un HEAD figé pendant un chargement asynchrone.
+pub(crate) fn path_history_at(
+    repo: &Repository,
+    head: Oid,
+    path: &str,
+    is_directory: bool,
+    max_count: usize,
+) -> Result<Vec<CommitInfo>> {
+    if path.is_empty() || max_count == 0 {
+        return Ok(Vec::new());
+    }
+    path_history_from(repo, head, None, path, is_directory, max_count)
 }
 
 /// Retourne les commits divergents qui ont modifié un chemin sur deux branches.
@@ -116,25 +153,31 @@ pub fn compare_path_history(
 
     let head = repo.head()?.peel_to_commit()?;
     let target = repo.revparse_single(target_branch)?.peel_to_commit()?;
-    let target_path = match repo.merge_base(head.id(), target.id()) {
+    compare_path_history_at(repo, head.id(), target.id(), path, is_directory, max_count)
+}
+
+/// Compare deux pointes figées pour ne pas mélanger les références pendant le calcul.
+pub(crate) fn compare_path_history_at(
+    repo: &Repository,
+    head: Oid,
+    target: Oid,
+    path: &str,
+    is_directory: bool,
+    max_count: usize,
+) -> Result<PathHistoryComparison> {
+    let target_path = match repo.merge_base(head, target) {
         Ok(merge_base) => {
-            let common_path = path_at_ancestor(repo, head.id(), merge_base, path, is_directory)?;
-            path_at_descendant(repo, target.id(), merge_base, &common_path, is_directory)?
+            let common_path = path_at_ancestor(repo, head, merge_base, path, is_directory)?;
+            path_at_descendant(repo, target, merge_base, &common_path, is_directory)?
         }
         Err(_) => path.to_string(),
     };
-    let current_history = path_history_from(
-        repo,
-        head.id(),
-        Some(target.id()),
-        path,
-        is_directory,
-        max_count,
-    )?;
+    let current_history =
+        path_history_from(repo, head, Some(target), path, is_directory, max_count)?;
     let target_history = path_history_from(
         repo,
-        target.id(),
-        Some(head.id()),
+        target,
+        Some(head),
         &target_path,
         is_directory,
         max_count,
@@ -195,15 +238,18 @@ fn path_history_from(
         } else {
             None
         };
-        let mut matched = false;
-        for tracked_path in &paths {
-            let current_entry = tree_entry_identity(Some(&tree), tracked_path)?;
-            let parent_entry = tree_entry_identity(parent_tree.as_ref(), tracked_path)?;
-            if current_entry != parent_entry {
-                matched = true;
-                break;
-            }
-        }
+        // Les mêmes identités servent à détecter les modifications et les renommages.
+        let paths = paths
+            .into_iter()
+            .map(|path| {
+                let current_entry = tree_entry_identity(Some(&tree), &path)?;
+                let parent_entry = tree_entry_identity(parent_tree.as_ref(), &path)?;
+                Ok((path, current_entry, parent_entry))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let matched = paths
+            .iter()
+            .any(|(_, current_entry, parent_entry)| current_entry != parent_entry);
 
         if matched {
             history.push(CommitInfo::from_git2_commit(&commit));
@@ -212,16 +258,23 @@ fn path_history_from(
             }
         }
 
-        for parent in commit.parents() {
+        for (parent_index, parent) in commit.parents().enumerate() {
             let parent_tree = parent.tree()?;
             let parent_paths = tracked_paths.entry(parent.id()).or_default();
-            for tracked_path in &paths {
-                parent_paths.insert(previous_path(
+            for (tracked_path, current_entry, first_parent_entry) in &paths {
+                let follow_rename = if is_directory || current_entry.is_none() {
+                    false
+                } else if parent_index == 0 {
+                    first_parent_entry.is_none()
+                } else {
+                    tree_entry_identity(Some(&parent_tree), tracked_path)?.is_none()
+                };
+                parent_paths.insert(resolve_previous_path(
                     repo,
                     &parent_tree,
                     &tree,
                     tracked_path,
-                    is_directory,
+                    follow_rename,
                 )?);
             }
         }
@@ -353,10 +406,20 @@ fn previous_path(
     path: &str,
     is_directory: bool,
 ) -> Result<String> {
-    if !is_directory
+    let follow_rename = !is_directory
         && tree_entry_identity(Some(tree), path)?.is_some()
-        && tree_entry_identity(Some(parent_tree), path)?.is_none()
-    {
+        && tree_entry_identity(Some(parent_tree), path)?.is_none();
+    resolve_previous_path(repo, parent_tree, tree, path, follow_rename)
+}
+
+fn resolve_previous_path(
+    repo: &Repository,
+    parent_tree: &Tree<'_>,
+    tree: &Tree<'_>,
+    path: &str,
+    follow_rename: bool,
+) -> Result<String> {
+    if follow_rename {
         if let Some(previous_path) = renamed_from_path(repo, Some(parent_tree), tree, path)? {
             return Ok(previous_path);
         }
@@ -481,6 +544,96 @@ mod tests {
     use crate::git::tests::test_utils::{commit, commit_file, create_file, create_test_repo};
 
     #[test]
+    #[ignore = "mesure manuelle en lecture seule via GIT_SV_PROFILE_REPO"]
+    fn profile_large_repository_views() {
+        let path = std::env::var("GIT_SV_PROFILE_REPO").expect("GIT_SV_PROFILE_REPO requis");
+        let mut repo = Repository::open(path).unwrap();
+        for pass in 1..=2 {
+            let started = std::time::Instant::now();
+            let (local, remote) = crate::git::branch::list_all_branches(&repo).unwrap();
+            eprintln!(
+                "pass={pass} branches_ms={} local={} remote={}",
+                started.elapsed().as_millis(),
+                local.len(),
+                remote.len()
+            );
+            let started = std::time::Instant::now();
+            let files = current_project_files(&repo).unwrap();
+            eprintln!(
+                "pass={pass} project_files_ms={} files={}",
+                started.elapsed().as_millis(),
+                files.len()
+            );
+            let mut options = git2::StatusOptions::new();
+            options.include_untracked(true).recurse_untracked_dirs(true);
+            let status: Vec<_> = repo
+                .statuses(Some(&mut options))
+                .unwrap()
+                .iter()
+                .filter_map(|entry| {
+                    entry.path().ok().map(|path| StatusEntry {
+                        path: path.to_string(),
+                        status: entry.status(),
+                    })
+                })
+                .collect();
+            let started = std::time::Instant::now();
+            let cached_files = current_project_files_from_status(&repo, &status).unwrap();
+            eprintln!(
+                "pass={pass} project_files_cached_status_ms={} files={}",
+                started.elapsed().as_millis(),
+                cached_files.len()
+            );
+            assert_eq!(files, cached_files);
+            let started = std::time::Instant::now();
+            let stashes = crate::git::stash::list_stashes(&mut repo).unwrap();
+            eprintln!(
+                "pass={pass} stashes_ms={} stashes={}",
+                started.elapsed().as_millis(),
+                stashes.len()
+            );
+            let started = std::time::Instant::now();
+            let worktrees = crate::git::worktree::list_worktrees(&repo).unwrap();
+            eprintln!(
+                "pass={pass} worktrees_ms={} worktrees={}",
+                started.elapsed().as_millis(),
+                worktrees.len()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "mesure manuelle en lecture seule via GIT_SV_PROFILE_REPO"]
+    fn profile_large_repository_path_history() {
+        let path = std::env::var("GIT_SV_PROFILE_REPO").expect("GIT_SV_PROFILE_REPO requis");
+        let repo = Repository::open(path).unwrap();
+        let index = repo.index().unwrap();
+        let files: Vec<_> = index
+            .iter()
+            .map(|entry| String::from_utf8_lossy(&entry.path).into_owned())
+            .collect();
+        let file = &files[files.len() / 2];
+        let directory = files
+            .iter()
+            .find_map(|path| path.split_once('/').map(|(directory, _)| directory))
+            .unwrap();
+        for pass in 1..=2 {
+            for (kind, path, is_directory) in [
+                ("file", file.as_str(), false),
+                ("directory", directory, true),
+            ] {
+                let started = std::time::Instant::now();
+                let history = path_history(&repo, path, is_directory, 100).unwrap();
+                eprintln!(
+                    "pass={pass} history_kind={kind} history_ms={} commits={}",
+                    started.elapsed().as_millis(),
+                    history.len()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn current_files_include_tracked_and_untracked_but_not_deleted() {
         let (_temp, repo) = create_test_repo();
         commit_file(&repo, "src/main.rs", "fn main() {}", "initial");
@@ -494,6 +647,90 @@ mod tests {
             files,
             vec!["notes/todo.txt".to_string(), "src/main.rs".to_string()]
         );
+    }
+
+    #[test]
+    fn current_files_handle_staged_renames_deletions_and_ignored_files() {
+        let (_temp, repo) = create_test_repo();
+        commit_file(&repo, "old.txt", "renamed", "initial");
+        commit_file(&repo, "recreated.txt", "original", "tracked");
+        commit_file(&repo, ".gitignore", "ignored/\n", "ignore");
+        let workdir = repo.workdir().unwrap();
+        std::fs::rename(workdir.join("old.txt"), workdir.join("new.txt")).unwrap();
+        create_file(&repo, "deleted-after-staging.txt", "new");
+        create_file(&repo, "ignored/output.txt", "ignored");
+
+        let mut index = repo.index().unwrap();
+        index.remove_path(Path::new("old.txt")).unwrap();
+        index.remove_path(Path::new("recreated.txt")).unwrap();
+        index.add_path(Path::new("new.txt")).unwrap();
+        index
+            .add_path(Path::new("deleted-after-staging.txt"))
+            .unwrap();
+        index.write().unwrap();
+        std::fs::remove_file(workdir.join("deleted-after-staging.txt")).unwrap();
+
+        assert_eq!(
+            current_project_files(&repo).unwrap(),
+            vec![".gitignore", "new.txt", "recreated.txt"]
+        );
+    }
+
+    #[test]
+    fn current_files_check_paths_hidden_from_status() {
+        let (_temp, repo) = create_test_repo();
+        commit_file(&repo, "assumed.txt", "valid", "initial");
+        commit_file(&repo, "sparse.txt", "sparse", "sparse");
+        commit_file(&repo, "submodule", "placeholder", "submodule");
+        commit_file(&repo, "present.txt", "present", "present");
+        let mut index = repo.index().unwrap();
+        let mut assumed = index.get_path(Path::new("assumed.txt"), 0).unwrap();
+        assumed.flags |= IndexEntryFlag::VALID.bits();
+        index.add(&assumed).unwrap();
+        let mut sparse = index.get_path(Path::new("sparse.txt"), 0).unwrap();
+        sparse.flags_extended |= IndexEntryExtendedFlag::SKIP_WORKTREE.bits();
+        index.add(&sparse).unwrap();
+        let mut submodule = index.get_path(Path::new("submodule"), 0).unwrap();
+        submodule.mode = 0o160000;
+        submodule.id = repo.head().unwrap().target().unwrap();
+        index.add(&submodule).unwrap();
+        index.write().unwrap();
+        std::fs::remove_file(repo.workdir().unwrap().join("assumed.txt")).unwrap();
+        std::fs::remove_file(repo.workdir().unwrap().join("sparse.txt")).unwrap();
+        std::fs::remove_file(repo.workdir().unwrap().join("submodule")).unwrap();
+
+        assert_eq!(
+            current_project_files_from_status(&repo, &[]).unwrap(),
+            vec!["present.txt"]
+        );
+        assert_eq!(current_project_files(&repo).unwrap(), vec!["present.txt"]);
+    }
+
+    #[test]
+    fn current_files_exclude_missing_conflicted_paths() {
+        let (_temp, repo) = create_test_repo();
+        commit_file(&repo, "conflict.txt", "conflict", "initial");
+        std::fs::remove_file(repo.workdir().unwrap().join("conflict.txt")).unwrap();
+        let status = vec![StatusEntry {
+            path: "conflict.txt".into(),
+            status: git2::Status::CONFLICTED,
+        }];
+
+        assert!(current_project_files_from_status(&repo, &status)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn current_files_include_dangling_symlinks() {
+        let (_temp, repo) = create_test_repo();
+        std::os::unix::fs::symlink("missing", repo.workdir().unwrap().join("link")).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("link")).unwrap();
+        index.write().unwrap();
+
+        assert_eq!(current_project_files(&repo).unwrap(), vec!["link"]);
     }
 
     #[test]

@@ -86,6 +86,8 @@ pub struct ProjectTreeState {
     pub entries: ListSelection<ProjectTreeEntry>,
     pub history: ListSelection<CommitInfo>,
     pub history_loaded: bool,
+    pub history_loading: bool,
+    pub history_generation: u64,
     pub comparison: Option<ProjectTreeComparison>,
     history_sides: HashMap<git2::Oid, PathHistorySide>,
     pub changed_files: ListSelection<DiffFile>,
@@ -111,6 +113,8 @@ impl Default for ProjectTreeState {
             entries: ListSelection::new(),
             history: ListSelection::new(),
             history_loaded: false,
+            history_loading: false,
+            history_generation: 0,
             comparison: None,
             history_sides: HashMap::new(),
             changed_files: ListSelection::new(),
@@ -254,6 +258,7 @@ impl ProjectTreeState {
         self.history.set_items(history);
         self.history.select_first();
         self.history_loaded = true;
+        self.history_loading = false;
         self.invalidate_commit_details();
     }
 
@@ -290,6 +295,7 @@ impl ProjectTreeState {
         );
         self.history.select_first();
         self.history_loaded = true;
+        self.history_loading = false;
         if let Some(active) = self.comparison.as_mut() {
             active.ahead = Some(comparison.ahead);
             active.behind = Some(comparison.behind);
@@ -349,6 +355,8 @@ impl ProjectTreeState {
     }
 
     pub fn invalidate_path_history(&mut self) {
+        self.history_generation = self.history_generation.wrapping_add(1);
+        self.history_loading = false;
         self.history.clear();
         self.history_sides.clear();
         self.history_loaded = false;

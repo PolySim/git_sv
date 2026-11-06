@@ -18,6 +18,7 @@ use crate::ui::theme::{current_theme, Theme};
 
 pub struct StagingRenderContext<'a> {
     pub staging_state: &'a StagingState,
+    pub status_loading: bool,
     pub current_branch: Option<&'a str>,
     pub repo_path: &'a str,
     pub flash_message: Option<&'a str>,
@@ -58,6 +59,7 @@ struct StagingHelpRenderContext<'a> {
 pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
     let StagingRenderContext {
         staging_state,
+        status_loading,
         current_branch,
         repo_path,
         flash_message,
@@ -76,7 +78,9 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
             view_title: text("staging", "staging"),
             branch: current_branch,
             repo_path,
-            flash_message,
+            flash_message: flash_message.or_else(|| {
+                status_loading.then_some(text("Vérification des fichiers…", "Checking files…"))
+            }),
             bg_color: None,
         },
         layout.status_bar,
@@ -96,7 +100,11 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         frame,
         FileListRenderContext {
             title: text("Non indexes", "Unstaged"),
-            empty_message: text("Aucun fichier non indexe", "No unstaged files"),
+            empty_message: if status_loading {
+                text("Chargement des fichiers…", "Loading files…")
+            } else {
+                text("Aucun fichier non indexe", "No unstaged files")
+            },
             files: staging_state.unstaged_files(),
             selected: staging_state.unstaged_selected(),
             is_focused: staging_state.focus == StagingFocus::Unstaged,
@@ -110,7 +118,11 @@ pub fn render(frame: &mut Frame, ctx: StagingRenderContext<'_>) {
         frame,
         FileListRenderContext {
             title: text("Indexes", "Staged"),
-            empty_message: text("Aucun fichier indexe", "No staged files"),
+            empty_message: if status_loading {
+                text("Chargement des fichiers…", "Loading files…")
+            } else {
+                text("Aucun fichier indexe", "No staged files")
+            },
             files: staging_state.staged_files(),
             selected: staging_state.staged_selected(),
             is_focused: staging_state.focus == StagingFocus::Staged,

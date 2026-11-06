@@ -14,6 +14,7 @@ fn test_snapshot_status_bar_basic() {
             crate::ui::status_bar::StatusBarRenderContext {
                 current_branch: Some("main"),
                 status_entries: &[],
+                status_loading: false,
                 flash_message: None,
                 filter: &GraphFilter::new(),
                 is_merging: false,

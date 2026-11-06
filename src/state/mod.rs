@@ -3,8 +3,10 @@
 pub mod action;
 pub mod cache;
 pub mod filter;
+mod project_history_loader;
 pub(crate) mod project_search;
 mod project_tree_loading;
+mod refresh;
 pub mod selection;
 pub mod text_edit;
 pub mod view;
@@ -202,6 +204,21 @@ pub struct AppState {
     /// État indiquant si un refresh est nécessaire.
     pub dirty: bool,
 
+    /// Données invalidées, rechargées uniquement lorsque leur vue est visible.
+    pending_refresh: refresh::PendingRefresh,
+
+    /// Le watcher fournit le statut sans bloquer la boucle du terminal.
+    background_status: bool,
+
+    /// Une invalidation explicite demande un nouveau scan au watcher.
+    status_refresh_requested: bool,
+
+    /// Un premier statut complet a été reçu pour ce dépôt.
+    pub status_loaded: bool,
+
+    /// Dernière erreur de collecte, visible jusqu'au prochain statut valide.
+    status_error: Option<String>,
+
     // ═══════════════════════════════════════════════════
     // Vue Graph (état unifié)
     // ═══════════════════════════════════════════════════
@@ -234,6 +251,9 @@ pub struct AppState {
 
     /// État de la vue arborescence du projet.
     pub project_tree_state: ProjectTreeState,
+
+    /// Worker unique de chargement des historiques de chemins.
+    project_history_loader: Option<project_history_loader::ProjectHistoryLoader>,
 
     /// État du blame (si actif).
     pub blame_state: Option<BlameState>,
@@ -291,6 +311,11 @@ impl AppState {
             view_mode: ViewMode::Graph,
             previous_view_mode: None,
             dirty: true,
+            pending_refresh: refresh::PendingRefresh::all(),
+            background_status: false,
+            status_refresh_requested: false,
+            status_loaded: false,
+            status_error: None,
             graph_view: GraphViewState::new(),
             bottom_left_mode: BottomLeftMode::Files,
             focus: FocusPanel::Graph,
@@ -299,6 +324,7 @@ impl AppState {
             staging_state: StagingState::new(),
             branches_view_state: BranchesViewState::new(),
             project_tree_state: ProjectTreeState::new(),
+            project_history_loader: None,
             blame_state: None,
             conflicts_state: None,
             search_state: SearchState::default(),
@@ -322,12 +348,15 @@ impl AppState {
     /// Marque l'état comme nécessitant un refresh.
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
+        self.pending_refresh = refresh::PendingRefresh::all();
+        self.status_refresh_requested = true;
         // Vider le cache des diffs du working directory car ils peuvent être invalidés
         self.diff_cache.clear_working_directory();
     }
 
-    /// Planifie un rafraîchissement sans invalider explicitement le cache diff.
+    /// Invalide le graphe après un changement de filtre, sans rescanner les fichiers.
     pub fn schedule_refresh(&mut self) {
+        self.pending_refresh.graph = true;
         self.dirty = true;
     }
 
@@ -336,10 +365,10 @@ impl AppState {
         self.screen_area = area;
     }
 
-    /// Bascule vers une vue et planifie un rafraîchissement.
+    /// Bascule vers une vue en réutilisant ses données tant que le dépôt est inchangé.
     pub fn enter_view(&mut self, view_mode: ViewMode) {
         self.view_mode = view_mode;
-        self.schedule_refresh();
+        self.dirty = true;
     }
 
     /// Bascule l'overlay d'aide en préservant la vue précédente.
@@ -354,7 +383,8 @@ impl AppState {
 
     /// Quitte la vue d'aide et restaure la vue précédente.
     pub fn leave_help(&mut self) {
-        self.view_mode = self.previous_view_mode.take().unwrap_or(ViewMode::Graph);
+        let view = self.previous_view_mode.take().unwrap_or(ViewMode::Graph);
+        self.enter_view(view);
     }
 
     /// Ouvre une confirmation modale.
@@ -391,7 +421,7 @@ impl AppState {
     /// Ferme la vue blame et revient au graphe.
     pub fn close_blame(&mut self) {
         self.blame_state = None;
-        self.view_mode = ViewMode::Graph;
+        self.enter_view(ViewMode::Graph);
     }
 
     /// Ouvre la vue conflits avec son état.
@@ -417,7 +447,9 @@ impl AppState {
 
     /// Retourne le message flash actuel s'il n'a pas expiré.
     pub fn current_flash_message(&self) -> Option<&str> {
-        self.ui.current_flash_message()
+        self.ui
+            .current_flash_message()
+            .or(self.status_error.as_deref())
     }
     /// Retourne le commit actuellement sélectionné.
     pub fn selected_commit(&self) -> Option<&crate::git::graph::CommitNode> {
@@ -464,7 +496,17 @@ impl AppState {
     /// - `status_entries` et `staging_state` sont synchronisés ;
     /// - le diff du commit ou du staging est cohérent avec la vue active ;
     pub fn initialize_from_repo(&mut self) -> crate::error::Result<()> {
-        self.refresh_with_commit_limit(INITIAL_COMMIT_COUNT)
+        self.pending_refresh = refresh::PendingRefresh::all();
+        self.refresh_with_commit_limit(INITIAL_COMMIT_COUNT, true)
+    }
+
+    /// Charge le graphe initial et laisse le watcher collecter le statut en arrière-plan.
+    pub fn initialize_for_tui(&mut self) -> crate::error::Result<()> {
+        self.background_status = true;
+        self.pending_refresh = refresh::PendingRefresh::all();
+        self.refresh_with_commit_limit(INITIAL_COMMIT_COUNT, false)?;
+        self.status_refresh_requested = false;
+        Ok(())
     }
 
     /// Ouvre un autre worktree et reinitialise les donnees dependantes du depot.
@@ -486,6 +528,8 @@ impl AppState {
         self.graph_view = GraphViewState::new();
         self.focus = FocusPanel::Graph;
         self.status_entries.clear();
+        self.status_loaded = false;
+        self.status_error = None;
         self.staging_state = StagingState::new();
         self.branches_view_state = BranchesViewState::new();
         self.branches_view_state.section = branches_section;
@@ -499,99 +543,19 @@ impl AppState {
         self.diff_cache = DiffCache::new(DIFF_CACHE_CAPACITY);
         self.image_preview.clear();
 
-        self.initialize_from_repo()
-    }
-
-    /// Rafraîchit l'état courant à partir du repository, en préservant
-    /// le niveau de pagination déjà chargé quand c'est possible.
-    pub fn refresh_from_repo(&mut self) -> crate::error::Result<()> {
-        let commit_limit = self.graph_view.loaded_count.max(INITIAL_COMMIT_COUNT);
-        self.refresh_with_commit_limit(commit_limit)
-    }
-
-    fn refresh_with_commit_limit(&mut self, commit_limit: usize) -> crate::error::Result<()> {
-        let previous_branch = self.current_branch.clone();
-        self.current_branch = match self.repo.current_branch() {
-            Ok(branch) => Some(branch),
-            Err(e) => {
-                self.set_flash_message(crate::utils::flash_error("branche courante", e));
-                None
-            }
-        };
-        if previous_branch.is_some() && previous_branch != self.current_branch {
-            self.project_tree_state.clear_comparison();
-        }
-
-        let (new_graph, can_load_more) = if self.filters.graph_filter.is_active() {
-            match self
-                .repo
-                .build_graph_filtered_with_more(commit_limit, &self.filters.graph_filter)
-            {
-                Ok((graph, has_more)) => (graph, has_more),
-                Err(e) => {
-                    self.set_flash_message(crate::utils::flash_error("chargement graphe", e));
-                    (
-                        self.graph_view.rows.items().to_vec(),
-                        self.graph_view.can_load_more,
-                    )
-                }
-            }
+        if self.background_status {
+            self.initialize_for_tui()
         } else {
-            match self.repo.build_graph_with_more(commit_limit) {
-                Ok((graph, has_more)) => (graph, has_more),
-                Err(e) => {
-                    self.set_flash_message(crate::utils::flash_error("chargement graphe", e));
-                    (
-                        self.graph_view.rows.items().to_vec(),
-                        self.graph_view.can_load_more,
-                    )
-                }
-            }
-        };
-
-        let graph_len = new_graph.len();
-        self.replace_graph(new_graph);
-
-        let total = if self.filters.graph_filter.is_active() {
-            None
-        } else {
-            self.repo.estimate_total_commits()
-        };
-        self.graph_view
-            .update_pagination_state(graph_len, total, can_load_more);
-
-        self.refresh_commit_files();
-        self.refresh_selected_commit_diff();
-
-        match self.repo.status() {
-            Ok(status_entries) => self.apply_status_entries(status_entries),
-            Err(e) => {
-                self.set_flash_message(crate::utils::flash_error("status", e));
-            }
+            self.initialize_from_repo()
         }
-
-        if self.view_mode == ViewMode::Branches {
-            self.refresh_branches_view_data();
-        }
-
-        if self.view_mode == ViewMode::Staging {
-            crate::handler::staging::load_staging_diff(self);
-        }
-
-        if self.view_mode == ViewMode::ProjectTree {
-            self.refresh_project_tree();
-            self.ensure_project_tree_focus_loaded();
-        }
-
-        self.ui.is_merging = crate::git::conflict::is_merging(&self.repo.repo);
-        self.ui.is_bisecting = crate::git::bisect::is_active(&self.repo.repo);
-        self.dirty = false;
-
-        Ok(())
     }
 
     /// Synchronise `status_entries` et la vue staging à partir d'une seule lecture.
     pub fn apply_status_entries(&mut self, status_entries: Vec<StatusEntry>) {
+        self.status_loaded = true;
+        self.status_error = None;
+        self.pending_refresh.status = false;
+        self.pending_refresh.project_tree = true;
         let staged_files = status_entries
             .iter()
             .filter(|entry| entry.is_staged())
