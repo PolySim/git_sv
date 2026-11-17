@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.5 - 2026-11-17
+
+### Fixed
+
+- mode clavier Kitty activé uniquement sur l’écran alternatif, pour rendre la saisie au shell après la fermeture de `git_sv`
+
 ## 0.5.4 - 2026-11-06
 
 ### Fixed

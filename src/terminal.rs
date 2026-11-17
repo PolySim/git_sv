@@ -88,6 +88,9 @@ fn setup_terminal() -> Result<(Terminal<CrosstermBackend<Stdout>>, bool)> {
         crossterm::terminal::supports_keyboard_enhancement(),
         Ok(true)
     );
+    // Chaque écran a sa propre pile de modes clavier. L'activation et la
+    // restauration doivent toutes deux se faire sur l'écran alternatif.
+    execute!(stdout, EnterAlternateScreen)?;
     if keyboard_enhancement_enabled {
         rollback.keyboard_enhancement_enabled = true;
         execute!(
@@ -98,7 +101,7 @@ fn setup_terminal() -> Result<(Terminal<CrosstermBackend<Stdout>>, bool)> {
             )
         )?;
     }
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnableMouseCapture)?;
     // Un collage doit arriver comme du texte, jamais comme une série de raccourcis.
     // Les anciennes consoles Windows peuvent ne pas proposer ce protocole.
     if let Err(error) = execute!(stdout, EnableBracketedPaste) {

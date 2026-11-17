@@ -262,11 +262,7 @@ pub fn maybe_load_more_history(state: &mut crate::state::AppState) -> Result<boo
     let mut ctx = HandlerContext { state };
     handle_load_more_history(&mut ctx)?;
 
-    if ctx.state.graph_view.loaded_count == previous_loaded {
-        return Ok(false);
-    }
-
-    Ok(true)
+    Ok(ctx.state.graph_view.loaded_count != previous_loaded)
 }
 
 /// Charge tout l'historique restant jusqu'à la fin.

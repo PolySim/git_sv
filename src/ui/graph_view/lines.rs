@@ -378,8 +378,8 @@ pub(super) fn find_horizontal_color_bounded(
         }
     }
 
-    for c in (col + 1)..connection.cells.len() {
-        match &connection.cells[c] {
+    for cell in connection.cells.iter().skip(col + 1) {
+        match cell {
             Some(cell) if cell.edge_type() == EdgeType::Horizontal => {
                 return Some(cell.color_index())
             }
