@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.6 - 2026-11-17
+
+### Fixed
+
+- caractères saisis avec Maj conservés, dont les chiffres servant à changer d’onglet sur un clavier AZERTY
+
 ## 0.5.5 - 2026-11-17
 
 ### Fixed

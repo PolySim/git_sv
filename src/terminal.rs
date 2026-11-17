@@ -93,12 +93,10 @@ fn setup_terminal() -> Result<(Terminal<CrosstermBackend<Stdout>>, bool)> {
     execute!(stdout, EnterAlternateScreen)?;
     if keyboard_enhancement_enabled {
         rollback.keyboard_enhancement_enabled = true;
+        // Laisser le terminal transmettre le texte selon la disposition du clavier.
         execute!(
             stdout,
-            PushKeyboardEnhancementFlags(
-                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-                    | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
-            )
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
         )?;
     }
     execute!(stdout, EnableMouseCapture)?;
