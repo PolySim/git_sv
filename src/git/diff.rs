@@ -11,6 +11,9 @@ use git2::{Oid, Repository};
 
 use crate::error::Result;
 
+mod compare;
+pub use compare::{compare_commit_file, compare_commit_files, ComparisonDelta, ComparisonDetail};
+
 /// Nombre maximum de lignes de diff matérialisées en mémoire.
 const MAX_DIFF_LINES: usize = 20_000;
 /// Budget de texte rendu, y compris l'expansion des tabulations et l'UTF-8 invalide.
@@ -23,6 +26,8 @@ const MAX_UNTRACKED_DIFF_BYTES: u64 = 1_048_576;
 const MAX_IMAGE_PREVIEW_BYTES: usize = 20 * 1_048_576;
 /// Marqueur réservé, distinct du contenu utilisateur par son type et ses coordonnées.
 const DIFF_TRUNCATION_MESSAGE: &str = "Diff tronqué pour protéger la mémoire";
+const DIFF_UNAVAILABLE_MESSAGE: &str =
+    "Diff non affichable (fichier binaire ou patch indisponible)";
 
 /// Format d'une image prévisualisable dans le terminal.
 #[cfg_attr(not(feature = "image-preview"), allow(dead_code))]
@@ -251,12 +256,8 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
 
     // Itérer sur les deltas avec leur index.
     for (idx, delta) in diff.deltas().enumerate() {
-        let status = match delta.status() {
-            git2::Delta::Added => DiffStatus::Added,
-            git2::Delta::Modified => DiffStatus::Modified,
-            git2::Delta::Deleted => DiffStatus::Deleted,
-            git2::Delta::Renamed => DiffStatus::Renamed,
-            _ => continue, // Ignorer les autres types.
+        let Some(status) = diff_status(delta.status()) else {
+            continue;
         };
 
         let (path, old_path) = diff_paths(&delta)?;
@@ -284,17 +285,19 @@ pub fn commit_diff(repo: &Repository, oid: Oid) -> Result<Vec<DiffFile>> {
 pub fn commit_changed_paths(repo: &Repository, oid: Oid) -> Result<Vec<String>> {
     let diff = commit_tree_diff(repo, oid)?;
     diff.deltas()
-        .filter(|delta| {
-            matches!(
-                delta.status(),
-                git2::Delta::Added
-                    | git2::Delta::Modified
-                    | git2::Delta::Deleted
-                    | git2::Delta::Renamed
-            )
-        })
+        .filter(|delta| diff_status(delta.status()).is_some())
         .map(|delta| diff_paths(&delta).map(|(path, _)| path))
         .collect()
+}
+
+fn diff_status(status: git2::Delta) -> Option<DiffStatus> {
+    match status {
+        git2::Delta::Added => Some(DiffStatus::Added),
+        git2::Delta::Modified => Some(DiffStatus::Modified),
+        git2::Delta::Deleted => Some(DiffStatus::Deleted),
+        git2::Delta::Renamed => Some(DiffStatus::Renamed),
+        _ => None,
+    }
 }
 
 fn commit_tree_diff(repo: &Repository, oid: Oid) -> Result<git2::Diff<'_>> {
@@ -538,12 +541,8 @@ fn find_and_extract_file_diff(
             continue;
         }
 
-        let status = match delta.status() {
-            git2::Delta::Added => DiffStatus::Added,
-            git2::Delta::Modified => DiffStatus::Modified,
-            git2::Delta::Deleted => DiffStatus::Deleted,
-            git2::Delta::Renamed => DiffStatus::Renamed,
-            _ => continue,
+        let Some(status) = diff_status(delta.status()) else {
+            continue;
         };
 
         // Extraire les lignes du patch en utilisant la fonction factorisée.
@@ -551,13 +550,7 @@ fn find_and_extract_file_diff(
             if let Ok(Some(patch)) = git2::Patch::from_diff(diff, idx) {
                 extract_diff_lines(&patch)
             } else {
-                (
-                    vec![limit_message_line(
-                        "Diff non affichable (fichier binaire ou patch indisponible)",
-                    )],
-                    0,
-                    0,
-                )
+                (vec![limit_message_line(DIFF_UNAVAILABLE_MESSAGE)], 0, 0)
             };
 
         return Ok(FileDiff {

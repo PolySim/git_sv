@@ -1,5 +1,9 @@
 //! État de la vue branches/worktrees/stashes.
 
+mod finder;
+
+pub(crate) use finder::BranchFinder;
+
 use crate::git::branch::BranchInfo;
 use crate::git::stash::StashEntry;
 use crate::git::worktree::WorktreeInfo;
@@ -25,12 +29,12 @@ pub enum BranchesFocus {
 }
 
 /// Action d'input en cours.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputAction {
-    CreateBranch,
+    CreateBranch { start_point: Option<String> },
     CreateTag(git2::Oid),
     CreateWorktree,
-    RenameBranch,
+    RenameBranch { old_name: String },
     SaveStash,
 }
 
@@ -61,6 +65,7 @@ pub struct BranchesViewState {
     pub show_remote: bool,
     /// Branche actuellement sélectionnée (explicite: locale ou distante).
     pub selected_branch: Option<SelectedBranch>,
+    finder: Option<BranchFinder>,
     pub worktrees: ListSelection<WorktreeInfo>,
     pub stashes: ListSelection<StashEntry>,
     pub stash_file_selected: usize,
@@ -91,10 +96,16 @@ impl BranchesViewState {
 
     /// Branche actuellement sélectionnée (retourne la référence et le type).
     pub fn selected_branch_info(&self) -> Option<(&BranchInfo, SelectedBranch)> {
-        self.selected_branch.and_then(|selected| match selected {
-            SelectedBranch::Local(idx) => self.local_branches.get(idx).map(|b| (b, selected)),
-            SelectedBranch::Remote(idx) => self.remote_branches.get(idx).map(|b| (b, selected)),
-        })
+        let selected = self.selected_branch?;
+        self.branch_at(selected).map(|branch| (branch, selected))
+    }
+
+    pub(crate) fn branch_at(&self, selected: SelectedBranch) -> Option<&BranchInfo> {
+        match selected {
+            SelectedBranch::Local(idx) => self.local_branches.get(idx),
+            SelectedBranch::Remote(idx) if self.show_remote => self.remote_branches.get(idx),
+            SelectedBranch::Remote(_) => None,
+        }
     }
 
     /// Retourne uniquement la branche sélectionnée.
@@ -107,8 +118,10 @@ impl BranchesViewState {
         let previous = self
             .selected_branch_info()
             .map(|(branch, selected)| (branch.name.clone(), selected.is_remote()));
+        let candidate = self.finder_candidate_key();
         self.local_branches.set_items(local);
         self.remote_branches.set_items(remote);
+        self.refresh_finder(candidate);
         self.selected_branch = previous
             .and_then(|(name, remote)| {
                 if remote && self.show_remote {
@@ -259,7 +272,9 @@ impl BranchesViewState {
 
     /// Bascule entre l'affichage des branches distantes.
     pub fn toggle_remote(&mut self) {
+        let candidate = self.finder_candidate_key();
         self.show_remote = !self.show_remote;
+        self.refresh_finder(candidate);
         // Si on cache les remotes et qu'une remote est sélectionnée,
         // revenir sur une branche locale
         if !self.show_remote {

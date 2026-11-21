@@ -16,6 +16,7 @@ use super::project_tree::ProjectTreeHandler;
 use super::search::SearchHandler;
 use super::staging::StagingHandler;
 mod clipboard;
+mod comparison;
 mod confirmations;
 mod pickers;
 #[cfg(test)]
@@ -54,6 +55,11 @@ impl ActionDispatcher {
 
     /// Dispatche une action vers le handler approprié.
     pub fn dispatch(&mut self, state: &mut AppState, action: AppAction) -> Result<()> {
+        if state.view_mode == ViewMode::Comparison
+            && !matches!(action, AppAction::Quit | AppAction::Comparison(_))
+        {
+            return Ok(());
+        }
         let mut ctx = HandlerContext { state };
 
         match action {
@@ -67,6 +73,10 @@ impl ActionDispatcher {
             AppAction::Edit(edit) => self.edit.handle(&mut ctx, edit),
             AppAction::Filter(filter) => self.filter.handle(&mut ctx, filter),
             AppAction::ProjectTree(action) => self.project_tree.handle(&mut ctx, action),
+            AppAction::Comparison(action) => {
+                comparison::handle(ctx.state, action);
+                Ok(())
+            }
 
             // Actions simples
             AppAction::Quit => {
@@ -81,6 +91,13 @@ impl ActionDispatcher {
 
             AppAction::ToggleHelp => {
                 ctx.state.toggle_help();
+                Ok(())
+            }
+
+            AppAction::Help(action) => {
+                if ctx.state.view_mode == ViewMode::Help {
+                    ctx.state.help.apply(action);
+                }
                 Ok(())
             }
 

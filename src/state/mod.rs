@@ -2,7 +2,9 @@
 
 pub mod action;
 pub mod cache;
+pub mod comparison;
 pub mod filter;
+pub mod help;
 mod project_history_loader;
 pub(crate) mod project_search;
 mod project_tree_loading;
@@ -200,6 +202,8 @@ pub struct AppState {
 
     /// Mode de vue précédent (pour retour depuis Help).
     pub previous_view_mode: Option<ViewMode>,
+    /// Recherche et défilement du popup d'aide.
+    pub help: help::HelpState,
 
     /// État indiquant si un refresh est nécessaire.
     pub dirty: bool,
@@ -224,6 +228,12 @@ pub struct AppState {
     // ═══════════════════════════════════════════════════
     /// État unifié de la vue graph (commits, sélections, diffs).
     pub graph_view: GraphViewState,
+
+    /// Commit A marqué pour le dépôt courant, indépendant du filtre et du rafraîchissement.
+    pub comparison_base: Option<git2::Oid>,
+
+    /// Session de lecture A → B, présente uniquement pendant la comparaison.
+    pub comparison: Option<comparison::ComparisonSession>,
 
     /// Mode d'affichage du panneau bottom-left.
     pub bottom_left_mode: BottomLeftMode,
@@ -310,6 +320,7 @@ impl AppState {
             current_branch,
             view_mode: ViewMode::Graph,
             previous_view_mode: None,
+            help: help::HelpState::default(),
             dirty: true,
             pending_refresh: refresh::PendingRefresh::all(),
             background_status: false,
@@ -317,6 +328,8 @@ impl AppState {
             status_loaded: false,
             status_error: None,
             graph_view: GraphViewState::new(),
+            comparison_base: None,
+            comparison: None,
             bottom_left_mode: BottomLeftMode::Files,
             focus: FocusPanel::Graph,
             screen_area: Rect::default(),
@@ -377,6 +390,7 @@ impl AppState {
             self.leave_help();
         } else {
             self.previous_view_mode = Some(self.view_mode);
+            self.help = help::HelpState::default();
             self.view_mode = ViewMode::Help;
         }
     }

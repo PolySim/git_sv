@@ -1,9 +1,11 @@
 //! Point d'entrée du rendu UI : dispatche vers les vues selon le `ViewMode`.
 
 pub mod blame_view;
+mod branch_finder;
 pub mod branches_layout;
 pub mod branches_view;
 pub mod common;
+mod comparison_view;
 pub mod confirm_dialog;
 pub mod conflicts_view;
 pub mod detail_view;
@@ -137,13 +139,6 @@ fn render_conflicts(frame: &mut Frame, state: &mut AppState) {
     }
 }
 
-fn render_conflicts_help_overlay(frame: &mut Frame) {
-    conflicts_view::render_help_overlay(
-        frame,
-        conflicts_view::ConflictsHelpOverlayRenderContext { area: frame.area() },
-    );
-}
-
 fn render_global_overlays(frame: &mut Frame, state: &AppState) {
     if let Some(ref pull_request) = state.ui.github_pull_request {
         github_pr::render(
@@ -227,6 +222,24 @@ fn render_graph_status_bar(
     state: &AppState,
     area: Rect,
 ) {
+    let area = if let Some(a) = state.comparison_base {
+        let [status, marker] = ratatui::layout::Layout::horizontal([
+            ratatui::layout::Constraint::Min(0),
+            ratatui::layout::Constraint::Length(12.min(area.width)),
+        ])
+        .areas(area);
+        frame.render_widget(
+            ratatui::widgets::Paragraph::new(format!(" A: {:.7}", a.to_string())).style(
+                Style::default()
+                    .fg(theme::current_theme().primary)
+                    .bg(theme::current_theme().surface),
+            ),
+            marker,
+        );
+        status
+    } else {
+        area
+    };
     status_bar::render(
         frame,
         status_bar::StatusBarRenderContext {
@@ -358,12 +371,28 @@ fn render_graph_diff_panel(
 }
 
 fn render_graph_help_bar(frame: &mut Frame, snap: &GraphViewSnapshot, area: Rect) {
+    if snap.is_search_active {
+        use crate::i18n::text;
+        use common::help_bar::KeyHint;
+        common::help_bar::render(
+            frame,
+            area,
+            &[
+                KeyHint::new("Esc", text("fermer", "close")),
+                KeyHint::new("↑↓", text("résultats", "results")),
+                KeyHint::new("Tab", text("type", "type")),
+                KeyHint::new("Enter", text("rechercher", "search")),
+            ],
+            None,
+        );
+        return;
+    }
     help_bar::render(
         frame,
         help_bar::HelpBarRenderContext {
             selected_index: snap.selected_index,
             total_commits: snap.graph_len,
-            bottom_left_mode: snap.bottom_left_mode,
+            focus: snap.focus,
             filter_active: snap.filter_active,
             is_merging: snap.is_merging,
             area,
@@ -384,8 +413,13 @@ fn render_graph_search_bar(frame: &mut Frame, state: &AppState, area: Rect) {
 /// Point d'entrée du rendu : dessine tous les panneaux.
 pub fn render(frame: &mut Frame, state: &mut AppState) {
     state.update_screen_area(frame.area());
+    let active_view = if state.view_mode == ViewMode::Help {
+        state.previous_view_mode.unwrap_or(ViewMode::Graph)
+    } else {
+        state.view_mode
+    };
     if matches!(
-        state.view_mode,
+        active_view,
         ViewMode::Branches | ViewMode::Blame | ViewMode::Conflicts
     ) {
         state.image_preview.clear();
@@ -394,9 +428,9 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         .style(Style::default().bg(theme::current_theme().background))
         .render(frame.area(), frame.buffer_mut());
 
-    // Dispatcher le rendu selon le mode de vue
-    match state.view_mode {
-        ViewMode::Graph => {
+    // L'aide conserve la vue active en arrière-plan.
+    match active_view {
+        ViewMode::Graph | ViewMode::Help => {
             render_graph_view(frame, state);
         }
         ViewMode::Staging => {
@@ -419,65 +453,6 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             let unresolved_conflicts = state.unresolved_conflict_count();
             project_tree_view::render(frame, state, unresolved_conflicts);
         }
-        ViewMode::Help => {
-            // Rendre la vue sous-jacente d'abord
-            match state.previous_view_mode {
-                Some(ViewMode::Staging) => {
-                    let flash_message = state.current_flash_message().map(str::to_string);
-                    staging_view::render(
-                        frame,
-                        staging_view::StagingRenderContext {
-                            status_loading: state.status_loading(),
-                            staging_state: &state.staging_state,
-                            current_branch: state.current_branch.as_deref(),
-                            repo_path: &state.repo_path,
-                            flash_message: flash_message.as_deref(),
-                            is_merging: state.ui.is_merging,
-                            unresolved_conflicts: state.unresolved_conflict_count(),
-                            image_state: &mut state.image_preview,
-                        },
-                    );
-                }
-                Some(ViewMode::Branches) => {
-                    branches_view::render(
-                        frame,
-                        branches_view::BranchesRenderContext {
-                            state: &state.branches_view_state,
-                            current_branch: state.current_branch.as_deref(),
-                            repo_path: &state.repo_path,
-                            flash_message: state.current_flash_message(),
-                            unresolved_conflicts: state.unresolved_conflict_count(),
-                        },
-                    );
-                }
-                Some(ViewMode::ProjectTree) => {
-                    let unresolved_conflicts = state.unresolved_conflict_count();
-                    project_tree_view::render(frame, state, unresolved_conflicts);
-                }
-                Some(ViewMode::Conflicts) => {
-                    render_conflicts(frame, state);
-                    render_conflicts_help_overlay(frame);
-                    return; // L'overlay de conflits est spécifique
-                }
-                _ => {
-                    if state.conflicts_state.is_some() {
-                        render_conflicts(frame, state);
-                        render_conflicts_help_overlay(frame);
-                        return;
-                    }
-
-                    render_graph_view(frame, state);
-                }
-            }
-            help_overlay::render(
-                frame,
-                help_overlay::HelpOverlayRenderContext {
-                    area: frame.area(),
-                    active_view: state.previous_view_mode.unwrap_or(ViewMode::Graph),
-                    custom_commands: &state.customization.custom_commands,
-                },
-            );
-        }
         ViewMode::Branches => {
             branches_view::render(
                 frame,
@@ -498,9 +473,40 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         ViewMode::Conflicts => {
             render_conflicts(frame, state);
         }
+        ViewMode::Comparison => {
+            comparison_view::render(frame, state);
+            return;
+        }
     }
 
+    if state.view_mode == ViewMode::Help {
+        help_overlay::render(
+            frame,
+            help_overlay::HelpOverlayRenderContext {
+                area: frame.area(),
+                active_view,
+                customization: &state.customization,
+                state: &mut state.help,
+            },
+        );
+    }
     render_global_overlays(frame, state);
+}
+
+pub(crate) fn restore_graph_diff_offsets(state: &mut AppState, scroll: usize, horizontal: usize) {
+    let graph = &mut state.graph_view;
+    let Some(diff) = &graph.selected_file_diff else {
+        return;
+    };
+    let layout = layout::build_layout_with_diff_mode(
+        state.screen_area,
+        state.search_state.is_active,
+        graph.diff_fullscreen,
+    );
+    let area = layout.diff_fullscreen.unwrap_or(layout.bottom_right);
+    let (max_scroll, max_horizontal) = diff_view::scroll_limits(diff, graph.diff_view_mode, area);
+    graph.diff_scroll_offset = scroll.min(max_scroll);
+    graph.diff_horizontal_offset = horizontal.min(max_horizontal);
 }
 
 fn render_graph_view(frame: &mut Frame, state: &mut AppState) {

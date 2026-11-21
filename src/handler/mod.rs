@@ -275,6 +275,10 @@ impl EventHandler {
     fn dispatch_with_background(&mut self, action: crate::state::AppAction) -> Result<()> {
         use crate::state::action::GitAction;
 
+        // La comparaison ne peut pas lancer d'opération Git en arrière-plan.
+        if self.state.view_mode == crate::state::ViewMode::Comparison {
+            return self.dispatcher.dispatch(&mut self.state, action);
+        }
         let previous_repo_path = self.state.repo_path.clone();
 
         match action {
@@ -299,6 +303,7 @@ impl EventHandler {
             }
         }
         if self.state.repo_path != previous_repo_path {
+            self.state.comparison_base = None;
             self.watcher = GitWatcher::new(&self.state.repo_path)?;
         }
         Ok(())

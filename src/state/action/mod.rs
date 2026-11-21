@@ -12,7 +12,7 @@ mod project_tree;
 mod search;
 mod staging;
 
-pub use branch::BranchAction;
+pub use branch::{BranchAction, BranchFinderAction};
 pub use conflict::ConflictAction;
 pub use edit::EditAction;
 pub use filter::FilterAction;
@@ -22,6 +22,8 @@ pub use project_tree::ProjectTreeAction;
 pub use search::SearchAction;
 pub use staging::StagingAction;
 
+pub use super::comparison::ComparisonAction;
+pub use super::help::HelpAction;
 use super::view::ViewMode;
 
 /// Action principale de l'application.
@@ -67,6 +69,12 @@ pub enum AppAction {
 
     /// Afficher/masquer l'aide
     ToggleHelp,
+
+    /// Rechercher et défiler dans l'aide sans agir sur le dépôt.
+    Help(HelpAction),
+
+    /// Marquer A et lire une comparaison de commits.
+    Comparison(ComparisonAction),
 
     /// Copier dans le presse-papier (nouvelle structure)
     CopyToClipboard,

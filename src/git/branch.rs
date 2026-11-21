@@ -172,7 +172,7 @@ pub fn create_branch_from_start_point(
     start_point: Option<&str>,
 ) -> Result<()> {
     let commit = match start_point {
-        Some(reference_name) => repo.revparse_single(reference_name)?.peel_to_commit()?,
+        Some(reference_name) => repo.find_reference(reference_name)?.peel_to_commit()?,
         None => repo.head()?.peel_to_commit()?,
     };
 

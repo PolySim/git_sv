@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::state::{AppState, ViewMode};
+use crate::state::{AppState, BranchesFocus, InputAction, ViewMode};
 use crate::utils::{flash_error, flash_error_message, flash_success};
 
 pub(super) fn handle_checkout(state: &mut AppState) -> Result<()> {
@@ -74,11 +74,12 @@ pub(super) fn handle_rename(state: &mut AppState) -> Result<()> {
                 return Ok(());
             }
 
-            let current_name = branch.name.clone();
-            state.branches_view_state.focus = crate::state::BranchesFocus::Input;
-            state.branches_view_state.input_action = Some(crate::state::InputAction::RenameBranch);
-            state.branches_view_state.input_text = current_name;
-            state.branches_view_state.reset_input_editing();
+            let old_name = branch.name.clone();
+            let view = &mut state.branches_view_state;
+            view.focus = BranchesFocus::Input;
+            view.input_text = old_name.clone();
+            view.input_action = Some(InputAction::RenameBranch { old_name });
+            view.reset_input_editing();
         }
     }
     Ok(())

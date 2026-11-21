@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::state::action::{
-    BranchAction, ConflictAction, EditAction, FilterAction, GitAction, NavigationAction,
-    SearchAction, StagingAction,
+    BranchAction, BranchFinderAction, ComparisonAction, ConflictAction, EditAction, FilterAction,
+    GitAction, HelpAction, NavigationAction, SearchAction, StagingAction,
 };
 use crate::state::{
     AppAction, AppState, BranchesFocus, BranchesSection, ConflictPanelFocus, FocusPanel,
@@ -26,6 +26,10 @@ fn map_pressed_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         return Some(action);
     }
 
+    if state.view_mode == ViewMode::Comparison {
+        return map_comparison_key(key);
+    }
+
     if has_blocking_modal(state) {
         return plain_modifiers(key)
             .then(|| map_modal_key(key, state))
@@ -33,17 +37,45 @@ fn map_pressed_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     }
 
     if state.view_mode == ViewMode::Help {
-        return plain_modifiers(key)
-            .then(|| map_help_key(key, state))
-            .flatten();
+        return map_help_key(key, state);
     }
 
     if has_blocking_text_input(state) {
         return map_text_input_key(key, state);
     }
 
+    if state.view_mode == ViewMode::Branches {
+        let branches = &state.branches_view_state;
+        if branches.section == BranchesSection::Branches
+            && key.code == KeyCode::Right
+            && key.modifiers.is_empty()
+        {
+            // Réserver → au sélecteur : même après sa fermeture, une répétition
+            // signalée comme Press ne doit pas déclencher un raccourci configuré.
+            return branches
+                .finder()
+                .is_some()
+                .then(|| branch_finder_action(BranchFinderAction::Accept));
+        }
+        if branches.finder().is_some() {
+            return map_branch_finder_key(key);
+        }
+    }
+
     if let Some(action) = map_configured_key(key, state) {
         return Some(action);
+    }
+
+    if state.view_mode == ViewMode::Graph {
+        let action = match (key.code, key.modifiers) {
+            (KeyCode::Char('a'), KeyModifiers::NONE) => Some(ComparisonAction::Mark),
+            (KeyCode::Char('a'), KeyModifiers::CONTROL) => Some(ComparisonAction::Clear),
+            (KeyCode::Char('D'), _) if plain_modifiers(key) => Some(ComparisonAction::Open),
+            _ => None,
+        };
+        if let Some(action) = action {
+            return Some(AppAction::Comparison(action));
+        }
     }
 
     if !plain_modifiers(key) {
@@ -54,6 +86,26 @@ fn map_pressed_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         };
     }
     map_view_switch_key(key, state).or_else(|| map_view_key(key, state))
+}
+
+fn map_comparison_key(key: KeyEvent) -> Option<AppAction> {
+    use ComparisonAction::*;
+
+    if !plain_modifiers(key) {
+        return None;
+    }
+    Some(AppAction::Comparison(match key.code {
+        KeyCode::Esc => Close,
+        KeyCode::Up => FileUp,
+        KeyCode::Down => FileDown,
+        KeyCode::Char('k') => LineUp,
+        KeyCode::Char('j') => LineDown,
+        KeyCode::PageUp => PageUp,
+        KeyCode::PageDown => PageDown,
+        KeyCode::Left | KeyCode::Char('h') => Left,
+        KeyCode::Right | KeyCode::Char('l') => Right,
+        _ => return None,
+    }))
 }
 
 fn plain_modifiers(key: KeyEvent) -> bool {
@@ -67,8 +119,17 @@ fn is_altgr(key: KeyEvent) -> bool {
 
 /// Un collage est une seule édition ; ses retours à la ligne ne sont jamais des touches Enter.
 pub(super) fn map_paste(text: String, state: &AppState) -> Option<AppAction> {
-    if has_blocking_modal(state) || state.view_mode == ViewMode::Help || text.is_empty() {
+    if state.view_mode == ViewMode::Comparison || has_blocking_modal(state) || text.is_empty() {
         return None;
+    }
+    if state.view_mode == ViewMode::Help {
+        return state
+            .help
+            .searching
+            .then_some(AppAction::Help(HelpAction::Insert(text)));
+    }
+    if state.view_mode == ViewMode::Branches && state.branches_view_state.finder().is_some() {
+        return Some(branch_finder_action(BranchFinderAction::Insert(text)));
     }
     let edit = EditAction::InsertText(text);
     if state.view_mode == ViewMode::ProjectTree && state.project_tree_state.search.is_active {
@@ -103,6 +164,26 @@ fn is_repeatable(action: &AppAction) -> bool {
     matches!(
         action,
         AppAction::Navigation(_)
+            | AppAction::Comparison(
+                ComparisonAction::FileUp
+                    | ComparisonAction::FileDown
+                    | ComparisonAction::LineUp
+                    | ComparisonAction::LineDown
+                    | ComparisonAction::PageUp
+                    | ComparisonAction::PageDown
+                    | ComparisonAction::Left
+                    | ComparisonAction::Right,
+            )
+            | AppAction::Help(
+                HelpAction::Up
+                    | HelpAction::Down
+                    | HelpAction::PageUp
+                    | HelpAction::PageDown
+                    | HelpAction::Top
+                    | HelpAction::Bottom
+                    | HelpAction::Insert(_)
+                    | HelpAction::Backspace,
+            )
             | AppAction::Edit(_)
             | AppAction::Search(
                 SearchAction::InsertChar(_)
@@ -121,7 +202,18 @@ fn is_repeatable(action: &AppAction) -> bool {
                     | ProjectTreeAction::ExpandSelected
                     | ProjectTreeAction::CollapseSelected,
             )
-            | AppAction::Branch(BranchAction::StashFileNext | BranchAction::StashFilePrev)
+            | AppAction::Branch(
+                BranchAction::StashFileNext
+                    | BranchAction::StashFilePrev
+                    | BranchAction::Finder(
+                        BranchFinderAction::Up
+                            | BranchFinderAction::Down
+                            | BranchFinderAction::First
+                            | BranchFinderAction::Last
+                            | BranchFinderAction::Insert(_)
+                            | BranchFinderAction::Backspace,
+                    ),
+            )
             | AppAction::Conflict(
                 ConflictAction::PreviousFile
                     | ConflictAction::NextFile
@@ -243,7 +335,7 @@ fn map_quit_shortcut(key: KeyEvent) -> Option<AppAction> {
         .then_some(AppAction::Quit)
 }
 
-fn has_blocking_modal(state: &AppState) -> bool {
+pub(super) fn has_blocking_modal(state: &AppState) -> bool {
     state
         .merge_picker
         .as_ref()
@@ -350,14 +442,36 @@ fn map_text_input_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 }
 
 fn map_help_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
-    if state.view_mode != ViewMode::Help {
+    let searching = state.help.searching;
+    if searching && key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('u') {
+        return Some(AppAction::Help(HelpAction::ClearQuery));
+    }
+    if let KeyCode::Char(c) = key.code {
+        if searching && (plain_modifiers(key) || is_altgr(key)) && !c.is_control() {
+            return Some(AppAction::Help(HelpAction::Insert(c.to_string())));
+        }
+    }
+    if !plain_modifiers(key) {
         return None;
     }
-
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('?') => Some(AppAction::ToggleHelp),
-        _ => None,
-    }
+    let action = match key.code {
+        KeyCode::Esc | KeyCode::Enter if searching => HelpAction::StopSearch,
+        KeyCode::Esc | KeyCode::Char('?') => return Some(AppAction::ToggleHelp),
+        KeyCode::Char('/') => HelpAction::StartSearch,
+        KeyCode::Backspace if searching => HelpAction::Backspace,
+        KeyCode::Up => HelpAction::Up,
+        KeyCode::Down => HelpAction::Down,
+        KeyCode::PageUp => HelpAction::PageUp,
+        KeyCode::PageDown => HelpAction::PageDown,
+        KeyCode::Home => HelpAction::Top,
+        KeyCode::End => HelpAction::Bottom,
+        KeyCode::Char('k') => HelpAction::Up,
+        KeyCode::Char('j') => HelpAction::Down,
+        KeyCode::Char('g') => HelpAction::Top,
+        KeyCode::Char('G') => HelpAction::Bottom,
+        _ => return None,
+    };
+    Some(AppAction::Help(action))
 }
 
 fn map_view_switch_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
@@ -382,7 +496,7 @@ fn map_view_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
         ViewMode::ProjectTree => map_project_tree_key(key, state),
         ViewMode::Conflicts => map_conflicts_key(key, state),
         ViewMode::Blame => map_blame_key(key),
-        ViewMode::Help => None,
+        ViewMode::Help | ViewMode::Comparison => None,
     }
 }
 
@@ -779,6 +893,29 @@ fn map_graph_root_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     }
 }
 
+fn branch_finder_action(action: BranchFinderAction) -> AppAction {
+    AppAction::Branch(BranchAction::Finder(action))
+}
+
+fn map_branch_finder_key(key: KeyEvent) -> Option<AppAction> {
+    use BranchFinderAction::*;
+    let action = match key.code {
+        KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => ClearQuery,
+        KeyCode::Char(c) if (plain_modifiers(key) || is_altgr(key)) && !c.is_control() => {
+            Insert(c.to_string())
+        }
+        _ if !plain_modifiers(key) => return None,
+        KeyCode::Up => Up,
+        KeyCode::Down => Down,
+        KeyCode::Home => First,
+        KeyCode::End => Last,
+        KeyCode::Backspace => Backspace,
+        KeyCode::Esc => Cancel,
+        _ => return None,
+    };
+    Some(branch_finder_action(action))
+}
+
 fn map_branches_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     map_branches_global_key(key).or_else(|| map_branches_section_key(key, state))
 }
@@ -798,6 +935,7 @@ fn map_branches_global_key(key: KeyEvent) -> Option<AppAction> {
 fn map_branches_section_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
     match state.branches_view_state.section {
         BranchesSection::Branches => match key.code {
+            KeyCode::Char('/') => Some(branch_finder_action(BranchFinderAction::Open)),
             KeyCode::Char('j') | KeyCode::Down => {
                 Some(AppAction::Navigation(NavigationAction::MoveDown))
             }
@@ -968,6 +1106,7 @@ fn map_staging_focus_key(key: KeyEvent, state: &AppState) -> Option<AppAction> {
 
 fn map_blame_key(key: KeyEvent) -> Option<AppAction> {
     match key.code {
+        KeyCode::Char('?') => Some(AppAction::ToggleHelp),
         KeyCode::Char('q') | KeyCode::Esc => Some(AppAction::Git(GitAction::CloseBlame)),
         KeyCode::Char('j') | KeyCode::Down => {
             Some(AppAction::Navigation(NavigationAction::MoveDown))

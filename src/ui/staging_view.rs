@@ -414,6 +414,7 @@ fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
         ],
     };
     if *focus != StagingFocus::CommitMessage {
+        hints.insert(1, KeyHint::new("?", text("aide", "help")));
         hints.push(if is_merging {
             KeyHint::new("A", text("annuler fusion", "abort merge"))
         } else {
@@ -421,7 +422,6 @@ fn render_staging_help(frame: &mut Frame, ctx: StagingHelpRenderContext<'_>) {
         });
         hints.extend([
             KeyHint::new("P", text("push", "push")),
-            KeyHint::new("?", text("aide", "help")),
             KeyHint::new("q", text("quitter", "quit")),
         ]);
     }

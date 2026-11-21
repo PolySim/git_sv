@@ -479,6 +479,7 @@ pub fn render(frame: &mut Frame, ctx: BranchesRenderContext<'_>) {
 
     // Help bar contextuelle.
     render_branches_help(frame, &state.section, &state.focus, layout.help_bar);
+    super::branch_finder::render(frame, state);
 }
 
 /// Rend les onglets de la vue branches.
@@ -706,7 +707,7 @@ fn render_branches_help(
     focus: &BranchesFocus,
     area: Rect,
 ) {
-    let hints = if *focus == BranchesFocus::Input {
+    let mut hints = if *focus == BranchesFocus::Input {
         vec![
             KeyHint::new("Entree", text("confirmer", "confirm")),
             KeyHint::new("Echap", text("annuler", "cancel")),
@@ -715,6 +716,7 @@ fn render_branches_help(
     } else {
         match section {
             BranchesSection::Branches => vec![
+                KeyHint::new(super::keybindings::branches::FIND, text("trouver", "find")),
                 KeyHint::new("j/k", text("naviguer", "navigate")),
                 KeyHint::new("Entree", text("checkout", "checkout")),
                 KeyHint::new("n", text("nouvelle", "new")),
@@ -745,6 +747,9 @@ fn render_branches_help(
         }
     };
 
+    if *focus != BranchesFocus::Input {
+        hints.insert(1, KeyHint::new("?", text("aide", "help")));
+    }
     crate::ui::common::help_bar::render(frame, area, &hints, None);
 }
 
@@ -754,10 +759,10 @@ pub fn render_input_overlay(frame: &mut Frame, state: &BranchesViewState, area: 
     let popup = centered_rect(50, 20, area);
     frame.render_widget(Clear, popup);
 
-    let title = match state.input_action {
-        Some(InputAction::CreateBranch) => text(" Nouvelle branche ", " New branch "),
+    let title = match state.input_action.as_ref() {
+        Some(InputAction::CreateBranch { .. }) => text(" Nouvelle branche ", " New branch "),
         Some(InputAction::CreateTag(_)) => text(" Nouveau tag ", " New tag "),
-        Some(InputAction::RenameBranch) => text(" Renommer la branche ", " Rename branch "),
+        Some(InputAction::RenameBranch { .. }) => text(" Renommer la branche ", " Rename branch "),
         Some(InputAction::CreateWorktree) => text(
             " Nouveau worktree: nom chemin [branche] ",
             " New worktree: name path [branch] ",

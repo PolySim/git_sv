@@ -4,6 +4,8 @@
 pub enum BranchAction {
     /// Ouvrir directement le selecteur de worktrees
     OpenWorktrees,
+    /// Sélection temporaire d'une branche, sans opération Git.
+    Finder(BranchFinderAction),
     /// Checkout une branche
     Checkout,
     /// Créer une branche
@@ -54,4 +56,18 @@ pub enum BranchAction {
     FocusList,
     /// Donner le focus au détail.
     FocusDetail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchFinderAction {
+    Open,
+    Insert(String),
+    Backspace,
+    ClearQuery,
+    Up,
+    Down,
+    First,
+    Last,
+    Accept,
+    Cancel,
 }

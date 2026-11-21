@@ -1,78 +1,60 @@
-//! Barre d'aide contextuelle en bas de l'écran (raccourcis clavier).
+//! Barre de raccourcis du graphe : les gestes de lecture du panneau actif d'abord.
 
 use ratatui::{layout::Rect, Frame};
 
 use crate::i18n::text;
-use crate::state::BottomLeftMode;
+use crate::state::FocusPanel;
 use crate::ui::common::help_bar::KeyHint;
 
 pub struct HelpBarRenderContext {
     pub selected_index: usize,
     pub total_commits: usize,
-    pub bottom_left_mode: BottomLeftMode,
+    pub focus: FocusPanel,
     pub filter_active: bool,
     pub is_merging: bool,
     pub area: Rect,
 }
 
-/// Rend la barre d'aide persistante en bas de l'écran.
 pub fn render(frame: &mut Frame, ctx: HelpBarRenderContext) {
-    let HelpBarRenderContext {
-        selected_index,
-        total_commits,
-        bottom_left_mode,
-        filter_active,
-        is_merging,
-        area,
-    } = ctx;
-
-    // Déterminer les touches à afficher.
     let mut keys = vec![
-        KeyHint::new("j/k", text("naviguer", "navigate")),
-        KeyHint::new("Enter", text("detail", "details")),
-        KeyHint::new("b", text("branches", "branches")),
-        KeyHint::new("c", text("commit", "commit")),
-        KeyHint::new("s", text("stash", "stash")),
-        KeyHint::new("m", text("fusion", "merge")),
-        KeyHint::new("R", text("reset", "reset")),
-        KeyHint::new("P", text("push", "push")),
-        KeyHint::new("Ctrl+P", text("push force", "force push")),
+        KeyHint::new("?", text("aide", "help")),
+        KeyHint::new("a", text("marquer A", "mark A")),
+        KeyHint::new("D", "A → B"),
+        KeyHint::new("Ctrl+A", text("effacer A", "clear A")),
     ];
-
-    // Ajouter abort merge si un merge est en cours.
-    if is_merging {
-        keys.push(KeyHint::new("A", text("annuler fusion", "abort merge")));
-    }
-
-    // Ajouter le contexte du panneau bas.
-    match bottom_left_mode {
-        BottomLeftMode::Files => {
-            keys.push(KeyHint::new("Tab", text("fichiers", "files")));
-            keys.push(KeyHint::new("Espace", text("diff", "diff")));
-            keys.push(KeyHint::new("Enter", text("plein ecran", "fullscreen")));
-        }
-        BottomLeftMode::Parents => keys.push(KeyHint::new("Tab", text("commit", "commit"))),
-    }
-
-    // Ajouter le raccourci pour effacer les filtres s'ils sont actifs
-    if filter_active {
+    if ctx.filter_active {
         keys.push(KeyHint::new(
             "Ctrl+R",
             text("effacer filtres", "clear filters"),
         ));
     }
-
+    if ctx.is_merging {
+        keys.push(KeyHint::new("A", text("annuler fusion", "abort merge")));
+    }
+    match ctx.focus {
+        FocusPanel::Graph => keys.extend([
+            KeyHint::new("j/k", text("commits", "commits")),
+            KeyHint::new("Enter", text("fichiers", "files")),
+            KeyHint::new("/", text("rechercher", "search")),
+            KeyHint::new("F", text("filtres", "filters")),
+        ]),
+        FocusPanel::BottomLeft => keys.extend([
+            KeyHint::new("j/k", text("fichiers", "files")),
+            KeyHint::new(text("Espace", "Space"), "diff"),
+            KeyHint::new("z", text("plein écran", "fullscreen")),
+        ]),
+        FocusPanel::BottomRight => keys.extend([
+            KeyHint::new("j/k", text("défiler", "scroll")),
+            KeyHint::new("n/N", text("hunks", "hunks")),
+            KeyHint::new("v", text("présentation", "layout")),
+            KeyHint::new("z", text("plein écran", "fullscreen")),
+        ]),
+    }
     keys.extend([
-        KeyHint::new("r", text("rafraichir", "refresh")),
-        KeyHint::new("?", text("aide", "help")),
+        KeyHint::new("Tab", text("panneau", "panel")),
         KeyHint::new("q", text("quitter", "quit")),
     ]);
-
-    let position = if total_commits == 0 {
-        0
-    } else {
-        selected_index.min(total_commits - 1) + 1
-    };
-    let counter = format!("{position}/{total_commits}");
-    crate::ui::common::help_bar::render(frame, area, &keys, Some(&counter));
+    let position = ctx.selected_index.saturating_add(1).min(ctx.total_commits);
+    let counter = format!("{position}/{}", ctx.total_commits);
+    crate::ui::common::help_bar::render(frame, ctx.area, &keys, Some(&counter));
 }

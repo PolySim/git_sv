@@ -332,9 +332,11 @@ La variable `GIT_SV_REPO` contient le chemin du dépôt.
 | `3` | Vue branches |
 | `4` | Vue arborescence |
 | `5` | Vue conflits si active |
-| `?` | Aide |
+| `?` | Aide de la vue active, consultable et recherchable |
 | `q` | Quitter |
 | `Ctrl+c` | Quitter |
+
+**Retrouver un raccourci sans l’exécuter.** Ouvrez `?`, puis `/` et tapez un mot ou une touche : par exemple `bisect` dans le graphe. `↑`/`↓`, `PgUp`/`PgDn` ou la molette parcourent l’aide. Pendant la saisie, `Ctrl+U` efface la recherche ; `Entrée` ou `Esc` revient aux résultats. `Esc` ou `?` ferme ensuite l’aide et restitue la vue précédente.
 
 ### Vue Graph
 
@@ -362,12 +364,17 @@ La variable `GIT_SV_REPO` contient le chemin du dépôt.
 | `Z` | Annuler la dernière transition de `HEAD` via le reflog (changements conservés) |
 | `t` / `T` | Créer / supprimer un tag sur le commit sélectionné |
 | `C` | Comparer le commit sélectionné à `HEAD` (commits et statistiques du diff) |
+| `a` | Marquer le commit sélectionné comme point de départ A |
+| `D` | Comparer A au commit sélectionné B |
+| `Ctrl+A` | Effacer la marque A |
 | `X` | Démarrer un bisect avec le commit sélectionné comme commit connu bon |
 | `[` / `]` / `\` | Pendant un bisect : marquer bon / mauvais / terminer |
 | `i` | Inspecter la signature du commit, les hooks et les sous-modules |
 | `O` | Charger le statut, les reviews et les checks de la PR GitHub courante |
 | `e` | Depuis un fichier ou son diff, ouvrir `git difftool` (la TUI est suspendue proprement) |
 | `n` / `N` | Depuis le diff, aller au hunk suivant / précédent |
+
+**Comparer deux commits sans checkout.** Marquez A avec `a`, déplacez-vous jusqu’à B, puis appuyez sur `D`. La vue affiche les fichiers modifiés de A vers B, même si les commits sont sur des branches divergentes. `↑`/`↓` change de fichier ; `j`/`k` et `PgUp`/`PgDn` font défiler le diff ; `←`/`→` le déplacent horizontalement. `Esc` revient au graphe en gardant la marque A. La comparaison ne touche ni à `HEAD`, ni à l’index, ni aux fichiers de travail.
 
 Le statut de PR utilise `gh pr view` en arrière-plan, avec un délai maximal de
 20 secondes. Il nécessite que [GitHub CLI](https://cli.github.com/) soit installé
@@ -399,7 +406,8 @@ sélectionné et `S`/`U` applique uniquement la ligne ajoutée ou supprimée.
 |--------|--------|
 | `j` / `k` | Naviguer |
 | `Tab` / `Shift+Tab` | Changer de section |
-| `Enter` | Checkout |
+| `/` | Dans la section Branches, trouver une branche sans changer de branche courante |
+| `Enter` | Checkout de la branche locale dans la liste principale |
 | `n` | Creer branche ou worktree |
 | `d` | Supprimer l'element courant |
 | `r` | Renommer la branche |
@@ -408,6 +416,8 @@ sélectionné et `S`/`U` applique uniquement la ligne ajoutée ou supprimée.
 | `s` | Sauver un stash |
 | `a` | Appliquer un stash |
 | `p` | Pop un stash |
+
+**Inspecter une branche sans checkout.** Faites `3` → `/`, tapez une partie du nom, puis parcourez les résultats avec `↑`/`↓`. `→` sélectionne la branche dans la liste complète pour lire son détail ; `Esc` annule. `Entrée` ne change rien dans le sélecteur. Pour inclure les branches distantes, affichez-les d’abord avec `R`.
 
 ### Vue Arborescence
 
@@ -441,6 +451,8 @@ En mode CLI humain, `git_sv status` rend également les chemins cliquables dans
 les terminaux compatibles OSC 8. Définissez `NO_HYPERLINK=1` pour les désactiver.
 
 ---
+
+Le [comparatif des clients Git en terminal](docs/COMPARATIF-TUI.md) détaille les inspirations de ces parcours et les prochaines fonctionnalités proposées.
 
 ## Architecture
 

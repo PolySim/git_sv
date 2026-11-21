@@ -1,6 +1,5 @@
 //! Vue de résolution de conflits (style GitKraken).
 
-mod help;
 mod panels;
 
 use ratatui::{
@@ -16,7 +15,6 @@ use crate::state::{ConflictPanelFocus, ConflictsState};
 use crate::ui::theme::current_theme;
 use crate::utils::{terminal_path, terminal_text};
 
-pub use help::{render_help_overlay, ConflictsHelpOverlayRenderContext};
 use panels::{render_files_panel, render_ours_panel, render_result_panel, render_theirs_panel};
 
 pub struct ConflictsRenderContext<'a> {

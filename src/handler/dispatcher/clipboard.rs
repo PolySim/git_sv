@@ -220,7 +220,7 @@ pub(super) fn handle_copy_to_clipboard(ctx: &mut HandlerContext) -> Result<()> {
                 }
             }
         }
-        ViewMode::Help => {
+        ViewMode::Help | ViewMode::Comparison => {
             // Pas de contenu à copier en mode aide
         }
     }

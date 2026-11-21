@@ -651,7 +651,8 @@ mod tests {
         // Configurer le contexte Branches Input
         state.view_mode = ViewMode::Branches;
         state.branches_view_state.focus = BranchesFocus::Input;
-        state.branches_view_state.input_action = Some(InputAction::CreateBranch);
+        state.branches_view_state.input_action =
+            Some(InputAction::CreateBranch { start_point: None });
         state.branches_view_state.input_text.clear();
         state.branches_view_state.input_cursor = 0;
 
@@ -767,7 +768,8 @@ mod tests {
         // Configurer les DEUX contextes actifs
         state.view_mode = ViewMode::Branches;
         state.branches_view_state.focus = BranchesFocus::Input;
-        state.branches_view_state.input_action = Some(InputAction::CreateBranch);
+        state.branches_view_state.input_action =
+            Some(InputAction::CreateBranch { start_point: None });
         state.staging_state.is_committing = true;
 
         // Initialiser les buffers

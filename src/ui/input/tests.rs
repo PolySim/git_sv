@@ -1,9 +1,9 @@
-use super::keyboard::map_key;
+use super::keyboard::{map_key, map_paste};
 use super::mouse::map_mouse;
 use crate::git::repo::GitRepo;
 use crate::git::tests::test_utils::create_test_repo;
 use crate::state::action::{
-    FilterAction, GitAction, NavigationAction, SearchAction, StagingAction,
+    FilterAction, GitAction, HelpAction, NavigationAction, SearchAction, StagingAction,
 };
 use crate::state::{AppAction, AppState, FocusPanel, ResetPickerState, StagingFocus, ViewMode};
 use crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
@@ -15,6 +15,131 @@ fn create_test_state() -> AppState {
     let mut state = AppState::new(git_repo, temp_dir.path().to_string_lossy().to_string()).unwrap();
     state.screen_area = Rect::new(0, 0, 120, 40);
     state
+}
+
+#[test]
+fn comparison_graph_shortcuts_yield_to_configuration_but_comparison_stays_local() {
+    use crate::state::action::ComparisonAction;
+
+    let mut state = create_test_state();
+    state.customization = crate::config::AppConfig {
+        keybindings: [
+            ("git.push".into(), "a".into()),
+            ("git.pull".into(), "ctrl+a".into()),
+            ("git.fetch".into(), "j".into()),
+        ]
+        .into(),
+        custom_commands: vec![crate::config::CustomCommandConfig {
+            name: "Local".into(),
+            key: "shift+d".into(),
+            command: "exit 1".into(),
+            confirm: false,
+            pause: false,
+        }],
+        ..Default::default()
+    }
+    .runtime_customization();
+    let cases = [
+        (
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+            AppAction::Git(GitAction::Push),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL),
+            AppAction::Git(GitAction::Pull),
+        ),
+        (
+            KeyEvent::new(KeyCode::Char('D'), KeyModifiers::SHIFT),
+            AppAction::RunCustomCommand(0),
+        ),
+    ];
+    for (key, action) in &cases {
+        assert_eq!(map_key(*key, &state).as_ref(), Some(action));
+    }
+    state.view_mode = ViewMode::Comparison;
+    for (key, _) in cases {
+        assert_eq!(map_key(key, &state), None);
+    }
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            &state
+        ),
+        Some(AppAction::Comparison(ComparisonAction::LineDown))
+    );
+}
+
+#[test]
+fn comparison_input_is_local_and_does_not_shadow_head_or_text_inputs() {
+    use crate::state::action::ComparisonAction;
+
+    let mut state = create_test_state();
+    let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+    assert_eq!(
+        map_key(key('C'), &state),
+        Some(AppAction::Git(GitAction::CompareSelectedWithHead))
+    );
+    assert_eq!(
+        map_key(key('D'), &state),
+        Some(AppAction::Comparison(ComparisonAction::Open))
+    );
+    state.search_state.is_active = true;
+    assert_eq!(
+        map_key(key('a'), &state),
+        Some(AppAction::Search(SearchAction::InsertChar('a')))
+    );
+    state.search_state.is_active = false;
+    state.customization = crate::config::AppConfig {
+        keybindings: [("git.push".into(), "x".into())].into(),
+        custom_commands: vec![crate::config::CustomCommandConfig {
+            name: "Local".into(),
+            key: "z".into(),
+            command: "exit 1".into(),
+            confirm: false,
+            pause: false,
+        }],
+        ..Default::default()
+    }
+    .runtime_customization();
+    assert_eq!(
+        map_key(key('x'), &state),
+        Some(AppAction::Git(GitAction::Push))
+    );
+    assert_eq!(
+        map_key(key('z'), &state),
+        Some(AppAction::RunCustomCommand(0))
+    );
+    state.view_mode = ViewMode::Comparison;
+    for c in ['x', 'z', 'p', 'P', 'f', '1', '2', 'C', 'D', 'r', '?'] {
+        assert_eq!(map_key(key(c), &state), None, "touche {c}");
+    }
+    assert_eq!(map_paste("p".into(), &state), None);
+    for kind in [
+        MouseEventKind::Down(event::MouseButton::Left),
+        MouseEventKind::ScrollDown,
+    ] {
+        assert_eq!(
+            map_mouse(
+                MouseEvent {
+                    kind,
+                    column: 15,
+                    row: 1,
+                    modifiers: KeyModifiers::NONE
+                },
+                &state
+            ),
+            None
+        );
+    }
+    let mut dispatcher = crate::handler::dispatcher::ActionDispatcher::new();
+    dispatcher
+        .dispatch(&mut state, AppAction::SwitchView(ViewMode::Staging))
+        .unwrap();
+    dispatcher
+        .dispatch(&mut state, AppAction::RunCustomCommand(0))
+        .unwrap();
+    assert_eq!(state.view_mode, ViewMode::Comparison);
+    assert!(state.ui.pending_custom_command.is_none());
 }
 
 #[test]
@@ -61,6 +186,109 @@ fn test_help_mode_esc_closes_help() {
 }
 
 #[test]
+fn help_input_is_local_and_restores_the_previous_view() {
+    use crate::handler::dispatcher::ActionDispatcher;
+
+    let mut state = create_test_state();
+    let mut dispatcher = ActionDispatcher::new();
+    state.view_mode = ViewMode::Staging;
+    state.dirty = false;
+    state.customization = crate::config::AppConfig {
+        keybindings: [
+            ("git.push".into(), "x".into()),
+            ("global.help".into(), "alt+h".into()),
+        ]
+        .into(),
+        custom_commands: vec![crate::config::CustomCommandConfig {
+            name: "Local".into(),
+            key: "z".into(),
+            command: "exit 1".into(),
+            confirm: false,
+            pause: false,
+        }],
+        ..Default::default()
+    }
+    .runtime_customization();
+    let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+    let dispatch_key = |dispatcher: &mut ActionDispatcher, state: &mut AppState, code| {
+        let action = map_key(key(code), state).unwrap();
+        dispatcher.dispatch(state, action).unwrap();
+    };
+    let open = map_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT), &state).unwrap();
+    assert_eq!(open, AppAction::ToggleHelp);
+    dispatcher.dispatch(&mut state, open).unwrap();
+    for c in ['x', 'y', 'z'] {
+        assert_eq!(map_key(key(KeyCode::Char(c)), &state), None);
+    }
+    assert_eq!(
+        map_key(key(KeyCode::PageDown), &state),
+        Some(AppAction::Help(HelpAction::PageDown))
+    );
+    assert_eq!(map_paste("x".into(), &state), None);
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Char('/'));
+    for c in ['x', 'y', 'z', '?', 'j', '/'] {
+        assert_eq!(
+            map_key(key(KeyCode::Char(c)), &state),
+            Some(AppAction::Help(HelpAction::Insert(c.to_string())))
+        );
+        dispatch_key(&mut dispatcher, &mut state, KeyCode::Char(c));
+    }
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Backspace);
+    let paste = map_paste("\nP\tq\u{1b}".into(), &state).unwrap();
+    dispatcher.dispatch(&mut state, paste).unwrap();
+    assert_eq!(state.help.query, "xyz?j P q");
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Enter);
+    assert!(!state.help.searching);
+    assert_eq!(state.view_mode, ViewMode::Help);
+    assert!(!state.dirty);
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Char('/'));
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Esc);
+    assert_eq!(state.help.query, "xyz?j P q");
+    assert_eq!(state.view_mode, ViewMode::Help);
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Esc);
+    assert_eq!(state.view_mode, ViewMode::Staging);
+    dispatch_key(&mut dispatcher, &mut state, KeyCode::Char('?'));
+    assert!(state.help.query.is_empty());
+}
+
+#[test]
+fn help_wheel_is_scoped_to_the_popup_and_yields_to_a_modal() {
+    let mut state = create_test_state();
+    state.toggle_help();
+    state.help.searching = true;
+    let popup = crate::ui::help_overlay::popup_area(state.screen_area);
+    let mouse = |kind, column, row| MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    };
+    let wheel = mouse(MouseEventKind::ScrollDown, popup.x + 1, popup.y + 2);
+    assert_eq!(
+        map_mouse(wheel, &state),
+        Some(AppAction::Help(HelpAction::Down))
+    );
+    assert_eq!(
+        map_mouse(mouse(MouseEventKind::ScrollDown, 0, 0), &state),
+        None
+    );
+    assert_eq!(
+        map_mouse(
+            mouse(MouseEventKind::Down(event::MouseButton::Left), 0, 0),
+            &state
+        ),
+        None
+    );
+    state.open_confirmation(crate::ui::confirm_dialog::ConfirmAction::DiscardAll);
+    assert_eq!(map_mouse(wheel, &state), None);
+    assert_eq!(map_paste("y".into(), &state), None);
+    assert_eq!(
+        map_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state),
+        Some(AppAction::CancelAction)
+    );
+}
+
+#[test]
 fn test_branches_tab_switches_section() {
     let mut state = create_test_state();
     state.view_mode = ViewMode::Branches;
@@ -72,6 +300,281 @@ fn test_branches_tab_switches_section() {
         Some(AppAction::Branch(
             crate::state::action::BranchAction::NextSection
         ))
+    );
+}
+
+#[test]
+fn branch_finder_routes_text_and_mouse_without_leaking_shortcuts() {
+    use crate::state::action::{BranchAction, BranchFinderAction};
+    use crate::state::{BranchesFocus, BranchesSection};
+    use crate::test_utils::ui_driver::UiTestHarness;
+    use crossterm::event::KeyEventKind;
+
+    let mut harness = UiTestHarness::new();
+    harness.state.view_mode = ViewMode::Branches;
+    harness.state.branches_view_state.section = BranchesSection::Worktrees;
+    assert_eq!(
+        map_key(
+            KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE),
+            &harness.state
+        ),
+        None
+    );
+    harness.state.branches_view_state.section = BranchesSection::Branches;
+    harness.state.branches_view_state.focus = BranchesFocus::Detail;
+    harness.state.customization = crate::config::AppConfig {
+        keybindings: [("git.push".into(), "z".into())].into(),
+        ..Default::default()
+    }
+    .runtime_customization();
+    harness.send_char('/');
+    harness.send_text("qdR3?z/");
+    assert_eq!(
+        harness.state.branches_view_state.finder().unwrap().query,
+        "qdR3?z/"
+    );
+    let key = |code, modifiers, kind| KeyEvent::new_with_kind(code, modifiers, kind);
+    let map = |event| map_key(event, &harness.state);
+    assert_eq!(
+        map(key(KeyCode::Tab, KeyModifiers::NONE, KeyEventKind::Press)),
+        None
+    );
+    assert_eq!(
+        map(key(
+            KeyCode::Right,
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat
+        )),
+        None
+    );
+    assert_eq!(
+        map(key(KeyCode::Esc, KeyModifiers::NONE, KeyEventKind::Release)),
+        None
+    );
+    assert_eq!(
+        map(key(
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Press
+        )),
+        Some(AppAction::Quit)
+    );
+    assert_eq!(
+        map(key(KeyCode::Down, KeyModifiers::NONE, KeyEventKind::Repeat)),
+        Some(AppAction::Branch(BranchAction::Finder(
+            BranchFinderAction::Down
+        )))
+    );
+
+    let popup = super::super::branch_finder::popup_area(harness.state.screen_area);
+    let mouse = |kind, column, row| MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    };
+    let click = MouseEventKind::Down(event::MouseButton::Left);
+    assert_eq!(
+        map_mouse(mouse(click, popup.x + 1, popup.y + 3), &harness.state),
+        None
+    );
+    assert_eq!(map_mouse(mouse(click, 2, 7), &harness.state), None);
+    assert_eq!(
+        map_mouse(mouse(MouseEventKind::ScrollDown, 2, 7), &harness.state),
+        None
+    );
+    assert_eq!(
+        map_mouse(
+            mouse(MouseEventKind::ScrollDown, popup.x + 1, popup.y + 3),
+            &harness.state
+        ),
+        Some(AppAction::Branch(BranchAction::Finder(
+            BranchFinderAction::Down
+        )))
+    );
+    harness.send_esc();
+    assert_eq!(
+        harness.state.branches_view_state.focus,
+        BranchesFocus::Detail
+    );
+    assert!(harness.state.branches_view_state.finder().is_none());
+    assert_eq!(map_paste("main".into(), &harness.state), None);
+    harness.send_char('/');
+    assert!(harness
+        .state
+        .branches_view_state
+        .finder()
+        .unwrap()
+        .query
+        .is_empty());
+}
+
+#[test]
+fn branch_finder_selects_without_checkout_and_refresh_keeps_action_target() {
+    use crate::state::BranchesFocus;
+    use crate::test_utils::ui_driver::UiTestHarness;
+
+    let mut harness = UiTestHarness::new();
+    let add_branch = |state: &AppState, name| {
+        let repo = &state.repo.repo;
+        let tip = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch(name, &tip, false).unwrap();
+    };
+    add_branch(&harness.state, "topic/release");
+    harness.state.enter_view(ViewMode::Branches);
+    harness.state.refresh_from_repo().unwrap();
+    harness.state.branches_view_state.focus = BranchesFocus::Detail;
+    harness.send_char('/');
+    let paste = map_paste("\nTOPIC/release\r\n".into(), &harness.state).unwrap();
+    harness.dispatch(paste);
+    assert_eq!(
+        harness
+            .state
+            .branches_view_state
+            .finder()
+            .unwrap()
+            .matches
+            .len(),
+        1
+    );
+    assert_eq!(
+        harness
+            .state
+            .branches_view_state
+            .selected_branch()
+            .unwrap()
+            .name,
+        "main"
+    );
+    assert!(!harness.state.dirty);
+    // Certains terminaux ne distinguent pas les répétitions des Press.
+    for _ in 0..3 {
+        harness.send_enter();
+    }
+    assert!(harness.state.branches_view_state.finder().is_some());
+    for _ in 0..3 {
+        harness.send_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    }
+    assert!(!harness.state.dirty);
+    assert_eq!(
+        harness.state.repo.repo.head().unwrap().shorthand(),
+        Ok("main")
+    );
+    assert!(harness.state.branches_view_state.finder().is_none());
+    assert_eq!(harness.state.branches_view_state.focus, BranchesFocus::List);
+    assert_eq!(
+        harness
+            .state
+            .branches_view_state
+            .selected_branch()
+            .unwrap()
+            .name,
+        "topic/release"
+    );
+    add_branch(&harness.state, "a-new-branch");
+    harness.state.refresh_from_repo().unwrap();
+    assert_eq!(harness.state.branches_view_state.local_branches.len(), 3);
+    harness.send_char('r');
+    assert_eq!(
+        harness.state.branches_view_state.focus,
+        BranchesFocus::Input
+    );
+    assert_eq!(
+        harness.state.branches_view_state.input_text,
+        "topic/release"
+    );
+    harness.send_esc();
+    harness.send_enter();
+    assert_eq!(
+        harness.state.repo.repo.head().unwrap().shorthand(),
+        Ok("topic/release")
+    );
+}
+
+#[test]
+fn branch_finder_accept_key_cannot_leak_to_a_configured_checkout() {
+    use crate::test_utils::ui_driver::UiTestHarness;
+
+    let mut harness = UiTestHarness::new();
+    harness.state.enter_view(ViewMode::Branches);
+    harness.state.refresh_from_repo().unwrap();
+    harness.state.customization = crate::config::AppConfig {
+        keybindings: [("branches.checkout".into(), "right".into())].into(),
+        ..Default::default()
+    }
+    .runtime_customization();
+    let right = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+    harness.send_char('/');
+    harness.send_key(right);
+    assert!(harness.state.branches_view_state.finder().is_none());
+    assert_eq!(map_key(right, &harness.state), None);
+}
+
+#[test]
+fn branch_finder_restores_click_targets_in_the_scrolled_branch_list() {
+    use crate::git::branch::BranchInfo;
+    use crate::state::action::BranchAction;
+    use crate::state::SelectedBranch;
+    use crate::test_utils::ui_driver::UiTestHarness;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    let mut harness = UiTestHarness::new();
+    harness.state.view_mode = ViewMode::Branches;
+    let branches = &mut harness.state.branches_view_state;
+    branches.toggle_remote();
+    branches.replace_branches(
+        (0..24)
+            .map(|i| BranchInfo::simple(format!("topic/{i:02}"), false, false))
+            .collect(),
+        vec![BranchInfo::simple("origin/topic/24".into(), false, true)],
+    );
+    harness.send_char('/');
+    harness.send_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+    harness.send_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert_eq!(
+        harness.state.branches_view_state.selected_branch,
+        Some(SelectedBranch::Remote(0))
+    );
+
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal
+        .draw(|frame| crate::ui::render(frame, &mut harness.state))
+        .unwrap();
+    let panel =
+        crate::ui::branches_layout::build_branches_layout(harness.state.screen_area).list_panel;
+    let buffer = terminal.backend().buffer();
+    let rendered_row = |y| {
+        (panel.x..panel.right())
+            .map(|x| buffer[(x, y)].symbol())
+            .collect::<String>()
+    };
+    let local = (panel.y..panel.bottom())
+        .find(|&y| rendered_row(y).contains("topic/23"))
+        .unwrap();
+    let remote = (panel.y..panel.bottom())
+        .find(|&y| rendered_row(y).contains("origin/topic/24"))
+        .unwrap();
+    let click = |column, row| {
+        map_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(event::MouseButton::Left),
+                column,
+                row,
+                modifiers: KeyModifiers::NONE,
+            },
+            &harness.state,
+        )
+    };
+    assert_eq!(
+        click(panel.x + 3, remote),
+        Some(AppAction::Branch(BranchAction::SelectRemoteBranch(0)))
+    );
+    assert_eq!(click(panel.x, local), None);
+    let target = click(panel.x + 3, local).unwrap();
+    harness.dispatch(target);
+    assert_eq!(
+        harness.state.branches_view_state.selected_branch,
+        Some(SelectedBranch::Local(23))
     );
 }
 

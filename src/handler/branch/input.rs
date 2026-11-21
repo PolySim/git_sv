@@ -6,10 +6,25 @@ use crate::utils::{flash_error, flash_error_message, flash_success};
 
 pub(super) fn handle_create(state: &mut AppState) -> Result<()> {
     if state.view_mode == ViewMode::Branches {
-        state.branches_view_state.focus = BranchesFocus::Input;
-        state.branches_view_state.input_action = Some(InputAction::CreateBranch);
-        state.branches_view_state.input_text = default_branch_name(state);
-        state.branches_view_state.reset_input_editing();
+        let view = &mut state.branches_view_state;
+        let (start_point, default_name) = match view.selected_branch_info() {
+            Some((branch, SelectedBranch::Remote(_))) => (
+                Some(format!("refs/remotes/{}", branch.name)),
+                branch
+                    .name
+                    .split_once('/')
+                    .map_or(branch.name.as_str(), |(_, name)| name)
+                    .to_owned(),
+            ),
+            Some((branch, SelectedBranch::Local(_))) => {
+                (Some(format!("refs/heads/{}", branch.name)), String::new())
+            }
+            None => (None, String::new()),
+        };
+        view.focus = BranchesFocus::Input;
+        view.input_action = Some(InputAction::CreateBranch { start_point });
+        view.input_text = default_name;
+        view.reset_input_editing();
     }
     Ok(())
 }
@@ -58,14 +73,8 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
         return handle_cancel_input(state);
     }
 
-    match state.branches_view_state.input_action {
-        Some(InputAction::CreateBranch) => {
-            let start_point = selected_branch_start_point(state);
-            let selected_remote = matches!(
-                state.branches_view_state.selected_branch,
-                Some(SelectedBranch::Remote(_))
-            );
-
+    match state.branches_view_state.input_action.take() {
+        Some(InputAction::CreateBranch { start_point }) => {
             match crate::git::branch::create_branch_from_start_point(
                 &state.repo.repo,
                 &input,
@@ -74,7 +83,9 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                 Ok(_) => {
                     refresh_branches_after_create(state, &input);
 
-                    let message = if selected_remote {
+                    let from_remote =
+                        start_point.is_some_and(|name| name.starts_with("refs/remotes/"));
+                    let message = if from_remote {
                         format!("Branche locale '{}' créée depuis la remote", input)
                     } else {
                         format!("Branche '{}' créée", input)
@@ -94,19 +105,16 @@ pub(super) fn handle_confirm_input(state: &mut AppState) -> Result<()> {
                 Err(error) => state.set_flash_message(flash_error("création tag", error)),
             }
         }
-        Some(InputAction::RenameBranch) => {
-            if let Some(branch) = state.branches_view_state.selected_branch() {
-                let old_name = branch.name.clone();
-                match crate::git::branch::rename_branch(&state.repo.repo, &old_name, &input) {
-                    Ok(_) => {
-                        state.set_flash_message(flash_success(format!(
-                            "Branche renommée → '{}'",
-                            input
-                        )));
-                        state.mark_dirty();
-                    }
-                    Err(e) => state.set_flash_message(flash_error_message(e)),
+        Some(InputAction::RenameBranch { old_name }) => {
+            match crate::git::branch::rename_branch(&state.repo.repo, &old_name, &input) {
+                Ok(_) => {
+                    state.set_flash_message(flash_success(format!(
+                        "Branche renommée → '{}'",
+                        input
+                    )));
+                    state.mark_dirty();
                 }
+                Err(e) => state.set_flash_message(flash_error_message(e)),
             }
         }
         Some(InputAction::SaveStash) => {
@@ -217,35 +225,6 @@ pub(super) fn handle_cancel_input(state: &mut AppState) -> Result<()> {
     state.branches_view_state.input_text.clear();
     state.branches_view_state.reset_input_editing();
     Ok(())
-}
-
-fn default_branch_name(state: &AppState) -> String {
-    let Some((branch, selected)) = state.branches_view_state.selected_branch_info() else {
-        return String::new();
-    };
-
-    if selected.is_remote() {
-        branch
-            .name
-            .split_once('/')
-            .map(|(_, name)| name.to_string())
-            .unwrap_or_else(|| branch.name.clone())
-    } else {
-        String::new()
-    }
-}
-
-fn selected_branch_start_point(state: &AppState) -> Option<String> {
-    state
-        .branches_view_state
-        .selected_branch_info()
-        .map(|(branch, selected)| {
-            if selected.is_remote() {
-                format!("refs/remotes/{}", branch.name)
-            } else {
-                format!("refs/heads/{}", branch.name)
-            }
-        })
 }
 
 fn refresh_branches_after_create(state: &mut AppState, branch_name: &str) {

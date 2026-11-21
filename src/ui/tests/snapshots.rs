@@ -4,7 +4,7 @@ use insta::assert_snapshot;
 use ratatui::layout::Rect;
 
 use super::render_to_string;
-use crate::state::{BottomLeftMode, GraphFilter, ViewMode};
+use crate::state::{FocusPanel, GraphFilter, ViewMode};
 
 #[test]
 fn test_snapshot_status_bar_basic() {
@@ -34,7 +34,7 @@ fn test_snapshot_help_bar_graph_view() {
             crate::ui::help_bar::HelpBarRenderContext {
                 selected_index: 0,
                 total_commits: 42,
-                bottom_left_mode: BottomLeftMode::Files,
+                focus: FocusPanel::Graph,
                 filter_active: false,
                 is_merging: false,
                 area: Rect::new(0, 0, 100, 2),

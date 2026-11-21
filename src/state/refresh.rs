@@ -5,6 +5,7 @@ use super::{AppState, ViewMode, INITIAL_COMMIT_COUNT};
 pub(super) struct PendingRefresh {
     pub metadata: bool,
     pub graph: bool,
+    restore_comparison_diff: bool,
     pub status: bool,
     pub branches: bool,
     pub project_tree: bool,
@@ -15,6 +16,7 @@ impl PendingRefresh {
         Self {
             metadata: true,
             graph: true,
+            restore_comparison_diff: false,
             status: true,
             branches: true,
             project_tree: true,
@@ -29,6 +31,11 @@ impl AppState {
         self.mark_dirty();
         let commit_limit = self.graph_view.loaded_count.max(INITIAL_COMMIT_COUNT);
         self.refresh_with_commit_limit(commit_limit, true)
+    }
+
+    pub(crate) fn return_from_comparison(&mut self) {
+        self.pending_refresh.restore_comparison_diff = self.pending_refresh.graph;
+        self.enter_view(ViewMode::Graph);
     }
 
     /// Recharge uniquement les données invalidées nécessaires à la vue visible.
@@ -69,7 +76,10 @@ impl AppState {
         if self.pending_refresh.metadata {
             self.refresh_repository_metadata();
         }
-        if self.pending_refresh.graph && (synchronous || self.view_mode == ViewMode::Graph) {
+        if self.pending_refresh.graph
+            && self.view_mode != ViewMode::Comparison
+            && (synchronous || self.view_mode == ViewMode::Graph)
+        {
             self.refresh_graph(commit_limit);
         }
         if self.pending_refresh.status && (synchronous || !self.background_status) {
@@ -132,6 +142,14 @@ impl AppState {
                 return;
             }
         };
+        let previous_diff = std::mem::take(&mut self.pending_refresh.restore_comparison_diff)
+            .then(|| self.graph_view.selected_file_diff.clone())
+            .flatten()
+            .zip(self.selected_commit().map(|commit| commit.oid));
+        let (scroll, horizontal) = (
+            self.graph_view.diff_scroll_offset,
+            self.graph_view.diff_horizontal_offset,
+        );
         let graph_len = graph.len();
         self.replace_graph(graph);
         let total = if filtered {
@@ -143,6 +161,19 @@ impl AppState {
             .update_pagination_state(graph_len, total, can_load_more);
         self.refresh_commit_files();
         self.refresh_selected_commit_diff();
+        if let Some((diff, oid)) = previous_diff {
+            if self
+                .selected_commit()
+                .is_some_and(|commit| commit.oid == oid)
+                && self
+                    .graph_view
+                    .selected_file_diff
+                    .as_ref()
+                    .is_some_and(|current| current.path == diff.path)
+            {
+                crate::ui::restore_graph_diff_offsets(self, scroll, horizontal);
+            }
+        }
         self.pending_refresh.graph = false;
     }
 }

@@ -1,6 +1,9 @@
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
-use crate::state::action::{BranchAction, NavigationAction, StagingAction};
+use super::keyboard::has_blocking_modal;
+use crate::state::action::{
+    BranchAction, BranchFinderAction, HelpAction, NavigationAction, StagingAction,
+};
 use crate::state::{AppAction, AppState, FocusPanel, ProjectTreeAction, ViewMode};
 
 pub(crate) fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction> {
@@ -12,6 +15,40 @@ pub(crate) fn map_mouse(mouse: MouseEvent, state: &AppState) -> Option<AppAction
     // Détecter la zone cliquée
     let hit_result = hit_test(state, x, y)?;
     if hit_result.zone == crate::ui::hit_test::ClickableZone::Modal {
+        if state.view_mode == ViewMode::Branches
+            && state.branches_view_state.finder().is_some()
+            && !has_blocking_modal(state)
+            && state.ui.loading_spinner.is_none()
+        {
+            // Les clics ne valident jamais le sélecteur ni la liste derrière lui.
+            let popup = crate::ui::branch_finder::popup_area(state.screen_area);
+            if !popup.contains((x, y).into()) {
+                return None;
+            }
+            let action = match mouse.kind {
+                MouseEventKind::ScrollUp => BranchFinderAction::Up,
+                MouseEventKind::ScrollDown => BranchFinderAction::Down,
+                _ => return None,
+            };
+            return Some(AppAction::Branch(BranchAction::Finder(action)));
+        }
+        if state.view_mode == ViewMode::Help
+            && !has_blocking_modal(state)
+            && !state.filters.filter_popup.is_open
+            && state.ui.loading_spinner.is_none()
+            && state.branches_view_state.focus != crate::state::BranchesFocus::Input
+        {
+            let popup = crate::ui::help_overlay::popup_area(state.screen_area);
+            return match mouse.kind {
+                MouseEventKind::ScrollUp if popup.contains((x, y).into()) => {
+                    Some(AppAction::Help(HelpAction::Up))
+                }
+                MouseEventKind::ScrollDown if popup.contains((x, y).into()) => {
+                    Some(AppAction::Help(HelpAction::Down))
+                }
+                _ => None,
+            };
+        }
         return match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => handle_modal_click(state, &hit_result),
             _ => None,
@@ -307,6 +344,11 @@ fn handle_branches_mouse_click(
     }
 
     if hit.rect == layout.list_panel {
+        if state.branches_view_state.section == BranchesSection::Branches
+            && (hit.relative_x == 0 || hit.relative_x + 1 >= hit.rect.width)
+        {
+            return None;
+        }
         let selected = match state.branches_view_state.section {
             BranchesSection::Branches => match state.branches_view_state.selected_branch {
                 Some(crate::state::SelectedBranch::Local(index)) => index + 1,

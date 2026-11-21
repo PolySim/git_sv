@@ -29,7 +29,7 @@ pub enum ClickableZone {
     HelpBar,
     /// Zone de la status bar
     StatusBar,
-    /// Zone d'un popup modal (merge picker, reset picker, confirmation)
+    /// Zone d'un popup modal (sélecteur, confirmation, aide…)
     Modal,
     /// Zone en dehors des éléments interactifs
     Outside,
@@ -53,6 +53,9 @@ pub struct HitTestResult {
 /// Cette fonction calcule le layout et retourne la zone correspondante
 /// à la position donnée.
 pub fn hit_test(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
+    if state.view_mode == ViewMode::Comparison {
+        return None;
+    }
     // Vérifier d'abord les modals et popups qui ont la priorité
     if let Some(zone) = hit_test_modals(state, x, y) {
         return Some(zone);
@@ -294,6 +297,7 @@ fn hit_test_modals(state: &AppState, x: u16, y: u16) -> Option<HitTestResult> {
         || state.ui.loading_spinner.is_some()
         || state.branches_view_state.focus == crate::state::BranchesFocus::Input
         || state.view_mode == ViewMode::Help
+        || (state.view_mode == ViewMode::Branches && state.branches_view_state.finder().is_some())
         || (state.view_mode == ViewMode::Conflicts
             && state
                 .conflicts_state

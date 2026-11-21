@@ -1,7 +1,6 @@
 ---
 source: src/ui/tests/snapshots.rs
-assertion_line: 45
 expression: output
 ---
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-j/k:navigate  Enter:details  b:branches  c:commit  s:stash  m:merge  R:reset  P:push            1/42
+?:help  a:mark A  D:A → B  Ctrl+A:clear A  j/k:commits  Enter:files  /:search  F:filters        1/42

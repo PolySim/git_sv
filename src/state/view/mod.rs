@@ -32,6 +32,7 @@ pub enum ViewMode {
     ProjectTree,
     Conflicts,
     Blame,
+    Comparison,
     Help,
 }
 

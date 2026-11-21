@@ -132,6 +132,8 @@ pub mod search {
 
 /// Vue Branches.
 pub mod branches {
+    /// Trouver une branche dans la liste.
+    pub const FIND: &str = "/";
     /// Checkout la branche sélectionnée.
     pub const CHECKOUT: &str = "Enter";
     /// Créer une nouvelle branche.

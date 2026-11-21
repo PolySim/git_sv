@@ -1,14 +1,14 @@
 //! Rendu des diffs de fichiers (mode unifié et side-by-side).
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-use crate::git::diff::{DiffLineType, DiffViewMode, FileDiff};
+use crate::git::diff::{DiffLine, DiffLineType, DiffViewMode, FileDiff};
 use crate::i18n::{text, text_owned};
 use crate::ui::image_preview::ImagePreviewState;
 use crate::ui::theme::{current_theme, Theme};
@@ -69,14 +69,10 @@ pub fn render(frame: &mut Frame, ctx: DiffRenderContext<'_>) -> usize {
     }
     image_state.clear();
 
-    // Déterminer si on peut utiliser le mode side-by-side.
-    let can_side_by_side = area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3; // 2 colonnes + séparateur
     let effective_mode = if selected_line.is_some() && is_focused {
         DiffViewMode::Unified
-    } else if can_side_by_side {
-        view_mode
     } else {
-        DiffViewMode::Unified
+        effective_mode(view_mode, area)
     };
 
     let panel_ctx = DiffPanelContext {
@@ -148,6 +144,67 @@ fn render_image(
     1
 }
 
+fn effective_mode(mode: DiffViewMode, area: Rect) -> DiffViewMode {
+    if area.width >= MIN_SIDE_BY_SIDE_WIDTH * 2 + 3 {
+        mode
+    } else {
+        DiffViewMode::Unified
+    }
+}
+
+/// Bornes du défilement lors de la restauration d’un diff du graphe.
+pub(super) fn scroll_limits(diff: &FileDiff, mode: DiffViewMode, area: Rect) -> (usize, usize) {
+    if diff.image_preview.is_some() {
+        return (0, 0);
+    }
+    let inner = Block::bordered().inner(area);
+    let (rows, max_horizontal) = match effective_mode(mode, area) {
+        DiffViewMode::Unified => (
+            diff.lines.len(),
+            unified_content_width(diff).saturating_sub(usize::from(inner.width)),
+        ),
+        DiffViewMode::SideBySide => {
+            let (left, right) = build_side_by_side_lines(diff);
+            let [left_area, _, right_area] = side_by_side_columns(inner);
+            let overflow = |lines: &[Line<'_>], column: Rect| {
+                lines
+                    .iter()
+                    .map(Line::width)
+                    .max()
+                    .unwrap_or_default()
+                    .saturating_sub(usize::from(column.width))
+            };
+            (
+                left.len().max(right.len()),
+                overflow(&left, left_area).max(overflow(&right, right_area)),
+            )
+        }
+    };
+    (
+        rows.saturating_sub(usize::from(inner.height).max(1)),
+        max_horizontal,
+    )
+}
+
+pub(crate) fn unified_content_width(diff: &FileDiff) -> usize {
+    diff.lines
+        .iter()
+        .map(|line| {
+            let width = Span::raw(crate::utils::terminal_text(&line.content)).width();
+            if line.line_type == DiffLineType::HunkHeader {
+                width
+            } else {
+                // Deux numéros de ligne, deux espaces et un signe.
+                let digits = |number: Option<u32>| {
+                    number.map_or(4, |n| (n.max(1).ilog10() as usize + 1).max(4))
+                };
+                width + digits(line.old_lineno) + digits(line.new_lineno) + 3
+            }
+        })
+        .max()
+        .unwrap_or_default()
+}
+
 /// Rend le diff en mode unifié.
 fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     let DiffPanelContext {
@@ -161,15 +218,7 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         selected_line,
     } = ctx;
 
-    let content = match diff {
-        Some(d) => build_diff_lines(d, selected_line),
-        None => vec![Line::from(text(
-            "Selectionnez un fichier pour voir le diff",
-            "Select a file to view the diff",
-        ))],
-    };
-
-    let total_lines = content.len();
+    let total_lines = diff.map_or(1, |d| d.lines.len());
     let visible_height = area.height.saturating_sub(2) as usize; // -2 pour les bordures
     let max_scroll = total_lines.saturating_sub(visible_height);
 
@@ -221,13 +270,33 @@ fn render_unified(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         title
     };
 
-    let content = visible_diff_lines(
-        content,
-        scroll_offset,
-        horizontal_offset,
-        area.width.saturating_sub(2),
-        area.height.saturating_sub(2),
-    );
+    let content = if let Some(d) = diff {
+        d.lines
+            .iter()
+            .enumerate()
+            .skip(scroll_offset)
+            .take(visible_height)
+            .map(|(index, line)| format_diff_line(line, selected_line == Some(index), theme))
+            .map(|line| {
+                super::text_edit::clip_line(
+                    line,
+                    horizontal_offset,
+                    usize::from(area.width.saturating_sub(2)),
+                )
+            })
+            .collect()
+    } else {
+        visible_diff_lines(
+            vec![Line::from(text(
+                "Selectionnez un fichier pour voir le diff",
+                "Select a file to view the diff",
+            ))],
+            scroll_offset,
+            horizontal_offset,
+            area.width.saturating_sub(2),
+            area.height.saturating_sub(2),
+        )
+    };
     let paragraph = Paragraph::new(content)
         .style(Style::default().fg(theme.text_normal).bg(theme.background))
         .block(
@@ -295,17 +364,6 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
         title
     };
 
-    // Diviser l'aire en deux colonnes avec un séparateur au milieu.
-    let _chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(50),
-            Constraint::Length(1), // Séparateur
-            Constraint::Percentage(50),
-        ])
-        .margin(0)
-        .split(area);
-
     // Rendre le bloc principal avec bordure.
     let block = Block::default()
         .title(title)
@@ -316,14 +374,7 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     let inner_area = block.inner(area);
     frame.render_widget(block, area);
 
-    let inner_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(50),
-            Constraint::Length(1),
-            Constraint::Percentage(50),
-        ])
-        .split(inner_area);
+    let inner_chunks = side_by_side_columns(inner_area);
 
     // Rendre le contenu si disponible.
     let total_lines = if let Some(d) = diff {
@@ -374,6 +425,15 @@ fn render_side_by_side(frame: &mut Frame, ctx: DiffPanelContext<'_>) -> usize {
     total_lines
 }
 
+fn side_by_side_columns(area: Rect) -> [Rect; 3] {
+    Layout::horizontal([
+        Constraint::Percentage(50),
+        Constraint::Length(1),
+        Constraint::Percentage(50),
+    ])
+    .areas(area)
+}
+
 /// Conserve des offsets larges et découpe seulement les graphèmes effectivement affichés.
 fn visible_diff_lines(
     lines: Vec<Line<'static>>,
@@ -390,70 +450,63 @@ fn visible_diff_lines(
         .collect()
 }
 
-/// Construit les lignes de diff avec coloration (mode unifié).
-fn build_diff_lines(diff: &FileDiff, selected_line: Option<usize>) -> Vec<Line<'static>> {
-    let theme = current_theme();
-    diff.lines
-        .iter()
-        .enumerate()
-        .map(|(line_index, line)| {
-            let (prefix, fg_color, bg_color) = match line.line_type {
-                DiffLineType::Addition => ("+", theme.success, Some(theme.ours_bg)),
-                DiffLineType::Deletion => ("-", theme.error, Some(theme.theirs_bg)),
-                DiffLineType::Context => (" ", theme.text_normal, None),
-                DiffLineType::HunkHeader => ("", theme.info, None),
-            };
+/// Formate une ligne visible du diff unifié.
+fn format_diff_line(line: &DiffLine, selected: bool, theme: &Theme) -> Line<'static> {
+    let (prefix, fg_color, bg_color) = match line.line_type {
+        DiffLineType::Addition => ("+", theme.success, Some(theme.ours_bg)),
+        DiffLineType::Deletion => ("-", theme.error, Some(theme.theirs_bg)),
+        DiffLineType::Context => (" ", theme.text_normal, None),
+        DiffLineType::HunkHeader => ("", theme.info, None),
+    };
 
-            let mut spans = Vec::new();
+    let mut spans = Vec::new();
 
-            if line.line_type == DiffLineType::HunkHeader {
-                // Header de hunk : pas de numéros de ligne, juste le contenu en cyan.
-                spans.push(Span::styled(
-                    crate::utils::terminal_text(&line.content).into_owned(),
-                    Style::default()
-                        .fg(theme.info)
-                        .add_modifier(ratatui::style::Modifier::BOLD),
-                ));
-            } else {
-                // Numéros de lignes.
-                let old_no = line
-                    .old_lineno
-                    .map(|n| format!("{:4}", n))
-                    .unwrap_or_else(|| "    ".to_string());
-                let new_no = line
-                    .new_lineno
-                    .map(|n| format!("{:4}", n))
-                    .unwrap_or_else(|| "    ".to_string());
-                spans.push(Span::styled(
-                    format!("{} {} ", old_no, new_no),
-                    Style::default().fg(theme.text_secondary),
-                ));
+    if line.line_type == DiffLineType::HunkHeader {
+        // Header de hunk : pas de numéros de ligne, juste le contenu en cyan.
+        spans.push(Span::styled(
+            crate::utils::terminal_text(&line.content).into_owned(),
+            Style::default()
+                .fg(theme.info)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        ));
+    } else {
+        // Numéros de lignes.
+        let old_no = line
+            .old_lineno
+            .map(|n| format!("{:4}", n))
+            .unwrap_or_else(|| "    ".to_string());
+        let new_no = line
+            .new_lineno
+            .map(|n| format!("{:4}", n))
+            .unwrap_or_else(|| "    ".to_string());
+        spans.push(Span::styled(
+            format!("{} {} ", old_no, new_no),
+            Style::default().fg(theme.text_secondary),
+        ));
 
-                // Préfixe et contenu avec coloration.
-                let style = Style::default().fg(fg_color);
-                let style = if let Some(bg) = bg_color {
-                    style.bg(bg)
-                } else {
-                    style
-                };
-                spans.push(Span::styled(
-                    format!("{}{}", prefix, crate::utils::terminal_text(&line.content)),
-                    style,
-                ));
-            }
+        // Préfixe et contenu avec coloration.
+        let style = Style::default().fg(fg_color);
+        let style = if let Some(bg) = bg_color {
+            style.bg(bg)
+        } else {
+            style
+        };
+        spans.push(Span::styled(
+            format!("{}{}", prefix, crate::utils::terminal_text(&line.content)),
+            style,
+        ));
+    }
 
-            if selected_line == Some(line_index) {
-                for span in &mut spans {
-                    span.style = span
-                        .style
-                        .bg(theme.selection_bg)
-                        .add_modifier(ratatui::style::Modifier::BOLD);
-                }
-            }
+    if selected {
+        for span in &mut spans {
+            span.style = span
+                .style
+                .bg(theme.selection_bg)
+                .add_modifier(ratatui::style::Modifier::BOLD);
+        }
+    }
 
-            Line::from(spans)
-        })
-        .collect()
+    Line::from(spans)
 }
 
 /// Une ligne pour l'affichage side-by-side.
@@ -730,6 +783,64 @@ mod tests {
     }
 
     #[test]
+    fn unified_viewport_keeps_absolute_selection_and_total_line_count() {
+        let diff = FileDiff {
+            path: "file.txt".into(),
+            status: crate::git::diff::DiffStatus::Modified,
+            lines: (1..=1000)
+                .map(|n| {
+                    create_test_line(
+                        DiffLineType::Context,
+                        &format!("row-{n:04}"),
+                        Some(n),
+                        Some(n),
+                    )
+                })
+                .collect(),
+            additions: 0,
+            deletions: 0,
+            image_preview: None,
+        };
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(48, 4)).unwrap();
+        let mut image_state = ImagePreviewState::default();
+        terminal
+            .draw(|frame| {
+                assert_eq!(
+                    render(
+                        frame,
+                        DiffRenderContext {
+                            diff: Some(&diff),
+                            scroll_offset: 500,
+                            horizontal_offset: 11,
+                            area: frame.area(),
+                            is_focused: true,
+                            view_mode: DiffViewMode::Unified,
+                            is_fullscreen: false,
+                            image_state: &mut image_state,
+                            selected_line: Some(501),
+                        }
+                    ),
+                    1000
+                );
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let row = |y| (0..48).map(|x| buffer[(x, y)].symbol()).collect::<String>();
+        assert!(row(0).contains("[501/1000]"));
+        assert!(row(1).contains("row-0501"));
+        assert!(row(2).contains("row-0502"));
+        assert!(!row(3).contains("row-0503"));
+        let selected = |y| {
+            buffer[(1, y)]
+                .modifier
+                .contains(ratatui::style::Modifier::BOLD)
+        };
+        assert!(!selected(1));
+        assert!(selected(2));
+    }
+
+    #[test]
     fn diff_controls_are_visible_without_changing_source_or_pairing() {
         let source = "é\t\u{1b}[31m\u{202e}r\"a\\nb\"";
         let diff = FileDiff {
@@ -745,8 +856,7 @@ mod tests {
             deletions: 0,
             image_preview: None,
         };
-        let lines = build_diff_lines(&diff, None);
-        let rendered = lines[0].to_string();
+        let rendered = format_diff_line(&diff.lines[0], false, current_theme()).to_string();
         assert!(rendered.contains("é\\t\\x1b[31m\\u{202e}r\"a\\nb\""));
         assert!(!rendered.chars().any(char::is_control));
         let pairs = align_diff_lines(&diff.lines);

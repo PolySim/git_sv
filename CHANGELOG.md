@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-11-21
+
+### Added
+
+- Comparaison A → B dans le graphe : marquer un commit, choisir le second et parcourir les fichiers et leurs diffs en lecture seule, sans checkout.
+- Aide `?` défilante et recherchable par touche ou libellé, avec les commandes de la vue active en premier. Le graphe affiche les gestes du panneau focalisé.
+- Sélecteur de branches `/` : recherche locale ou distante et consultation du détail sans checkout.
+
+### Fixed
+
+- La création depuis une branche et le renommage conservent la référence choisie à l’ouverture du dialogue même si la liste est rafraîchie.
+
 ## 0.5.6 - 2026-11-17
 
 ### Fixed

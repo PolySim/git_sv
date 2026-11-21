@@ -37,6 +37,12 @@ impl ActionHandler for BranchHandler {
     fn handle(&mut self, ctx: &mut HandlerContext, action: BranchAction) -> Result<()> {
         match action {
             BranchAction::OpenWorktrees => handle_open_worktrees(ctx.state),
+            BranchAction::Finder(action) => {
+                if ctx.state.view_mode == crate::state::ViewMode::Branches {
+                    ctx.state.branches_view_state.apply_finder(action);
+                }
+                Ok(())
+            }
             BranchAction::Checkout => handle_checkout(ctx.state),
             BranchAction::Create => handle_create(ctx.state),
             BranchAction::Delete => handle_delete(ctx.state),
@@ -76,6 +82,7 @@ mod tests {
     use crate::state::{
         AppState, BranchesFocus, BranchesSection, InputAction, SelectedBranch, ViewMode,
     };
+    use crate::test_utils::ui_driver::UiTestHarness;
     use tempfile::TempDir;
 
     fn setup_test_repo() -> (TempDir, GitRepo) {
@@ -197,7 +204,7 @@ mod tests {
         assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
         assert_eq!(
             state.branches_view_state.input_action,
-            Some(InputAction::CreateBranch)
+            Some(InputAction::CreateBranch { start_point: None })
         );
         assert!(state.branches_view_state.input_text.is_empty());
         assert_eq!(state.branches_view_state.input_cursor, 0);
@@ -232,10 +239,95 @@ mod tests {
         assert_eq!(state.branches_view_state.focus, BranchesFocus::Input);
         assert_eq!(
             state.branches_view_state.input_action,
-            Some(InputAction::CreateBranch)
+            Some(InputAction::CreateBranch {
+                start_point: Some("refs/remotes/origin/feature/test".into()),
+            })
         );
         assert_eq!(state.branches_view_state.input_text, "feature/test");
         assert_eq!(state.branches_view_state.input_cursor, "feature/test".len());
+    }
+
+    #[test]
+    fn rename_does_not_target_the_fallback_after_the_original_branch_disappears() {
+        let mut harness = UiTestHarness::new();
+        crate::git::branch::create_branch(&harness.state.repo.repo, "topic").unwrap();
+        harness.state.enter_view(ViewMode::Branches);
+        harness.state.refresh_from_repo().unwrap();
+        harness.state.branches_view_state.select_next();
+        harness.send_char('r');
+        assert_eq!(harness.state.branches_view_state.input_text, "topic");
+        harness.state.branches_view_state.input_text = "renamed".into();
+
+        crate::git::branch::delete_branch(&harness.state.repo.repo, "topic").unwrap();
+        harness.state.refresh_from_repo().unwrap();
+        let view = &harness.state.branches_view_state;
+        assert_eq!(view.selected_branch().unwrap().name, "main");
+        harness.send_enter();
+
+        let state = &harness.state;
+        let repo = &state.repo.repo;
+        assert!(repo.find_reference("refs/heads/main").is_ok());
+        assert!(repo.find_reference("refs/heads/renamed").is_err());
+        assert!(state
+            .current_flash_message()
+            .unwrap()
+            .starts_with("Erreur:"));
+        assert!(harness.state.branches_view_state.input_action.is_none());
+    }
+
+    fn open_create_dialog_from_remote() -> (UiTestHarness, git2::Oid) {
+        let mut harness = UiTestHarness::new();
+        let repo = &harness.state.repo.repo;
+        let remote_tip = repo.head().unwrap().target().unwrap();
+        repo.remote("origin", ".").unwrap();
+        repo.reference("refs/remotes/origin/topic", remote_tip, false, "test")
+            .unwrap();
+        harness.commit_file("local.txt", "content", "Advance main");
+        harness.state.enter_view(ViewMode::Branches);
+        harness.state.refresh_from_repo().unwrap();
+        harness.send_char('R');
+        harness.state.branches_view_state.select_next();
+        harness.send_char('n');
+        assert_eq!(harness.state.branches_view_state.input_text, "topic");
+        (harness, remote_tip)
+    }
+
+    #[test]
+    fn create_branch_keeps_the_original_remote_start_point_and_upstream() {
+        let (mut harness, remote_tip) = open_create_dialog_from_remote();
+        let view = &mut harness.state.branches_view_state;
+        view.toggle_remote();
+        assert_eq!(view.selected_branch().unwrap().name, "main");
+        harness.send_enter();
+
+        let repo = &harness.state.repo.repo;
+        let branch = repo.find_branch("topic", git2::BranchType::Local).unwrap();
+        assert_eq!(branch.get().target(), Some(remote_tip));
+        assert_eq!(
+            branch.upstream().unwrap().name().unwrap(),
+            Some("origin/topic")
+        );
+    }
+
+    #[test]
+    fn create_branch_fails_if_the_original_remote_disappears() {
+        let (mut harness, _) = open_create_dialog_from_remote();
+        let repo = &harness.state.repo.repo;
+        repo.find_reference("refs/remotes/origin/topic")
+            .unwrap()
+            .delete()
+            .unwrap();
+        harness.state.refresh_from_repo().unwrap();
+        let view = &harness.state.branches_view_state;
+        assert_eq!(view.selected_branch().unwrap().name, "main");
+        harness.send_enter();
+
+        let state = &harness.state;
+        assert!(state.repo.repo.find_reference("refs/heads/topic").is_err());
+        assert!(state
+            .current_flash_message()
+            .unwrap()
+            .starts_with("Erreur:"));
     }
 
     #[test]
@@ -243,7 +335,8 @@ mod tests {
         let (dir, repo) = setup_test_repo();
         let mut state = AppState::new(repo, dir.path().to_string_lossy().to_string()).unwrap();
         state.branches_view_state.focus = BranchesFocus::Input;
-        state.branches_view_state.input_action = Some(InputAction::CreateBranch);
+        state.branches_view_state.input_action =
+            Some(InputAction::CreateBranch { start_point: None });
         state.branches_view_state.input_text = "test-branch".to_string();
         state.branches_view_state.input_cursor = 5;
         let mut handler = BranchHandler;

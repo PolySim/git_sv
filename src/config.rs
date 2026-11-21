@@ -81,6 +81,7 @@ pub struct RuntimeCustomization {
 #[derive(Debug, Clone)]
 pub struct ResolvedKeyBinding {
     pub action: String,
+    pub key: String,
     pub chord: KeyChord,
 }
 
@@ -166,6 +167,7 @@ impl AppConfig {
                 .filter_map(|(action, key)| {
                     KeyChord::parse(key).map(|chord| ResolvedKeyBinding {
                         action: action.clone(),
+                        key: key.clone(),
                         chord,
                     })
                 })
